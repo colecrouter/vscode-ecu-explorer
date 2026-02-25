@@ -1,0 +1,11 @@
+src/
+test/
+*.config.ts
+*.config.js
+tsconfig*.json
+.prettierrc
+biome.json
+node_modules/
+assets/
+!dist/
+!icon.png

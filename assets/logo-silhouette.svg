@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 363.4 337.91">
+  <!-- Generator: Adobe Illustrator 29.3.1, SVG Export Plug-In . SVG Version: 2.1.0 Build 151)  -->
+  <defs>
+    <style>
+      .st0 {
+        stroke: #006838;
+      }
+
+      .st0, .st1 {
+        fill: none;
+        stroke-width: 12px;
+      }
+
+      .st0, .st1, .st2 {
+        stroke-miterlimit: 10;
+      }
+
+      .st1 {
+        stroke: #000;
+      }
+
+      .st3 {
+        mask: url(#mask);
+      }
+
+      .st4 {
+        fill: url(#radial-gradient);
+      }
+
+      .st5 {
+        fill: #006838;
+      }
+
+      .st6, .st2 {
+        fill: #231f20;
+      }
+
+      .st7 {
+        display: none;
+      }
+
+      .st2 {
+        stroke: #231f20;
+      }
+
+      .st8 {
+        filter: url(#luminosity-noclip);
+      }
+    </style>
+    <filter id="luminosity-noclip" x="-20.8" y="11.76" width="367.2" height="338.97" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+      <feFlood flood-color="#fff" result="bg"/>
+      <feBlend in="SourceGraphic" in2="bg"/>
+    </filter>
+    <mask id="mask" x="-20.8" y="11.76" width="367.2" height="338.97" maskUnits="userSpaceOnUse">
+      <g class="st8">
+        <g>
+          <g id="Layer_4">
+            <rect class="st2" x="76.75" y="67.04" width="60.13" height="30.07" transform="translate(-27.46 71.27) rotate(-32.94)"/>
+            <path class="st2" d="M76.91,136.88c-13.63,8.83-31.84,4.94-40.68-8.69-8.83-13.63-4.94-31.84,8.69-40.68,13.63-8.83,31.84-4.94,40.68,8.69s4.94,31.84-8.69,40.68ZM78.93,100.52l-19.12-9.77-18.02,11.68,1.1,21.44,19.12,9.77,18.02-11.68s-1.1-21.44-1.1-21.44Z"/>
+            <path class="st2" d="M161.62,67.09l-8.78,5.69-16.79-9.27-1.6-19.11,8.78-5.69,12.46-8.07c-8.52-3.49-18.54-2.89-26.85,2.5-13.48,8.73-17.33,26.74-8.59,40.22s26.74,17.33,40.22,8.59c8.07-5.23,12.68-13.78,13.22-22.69l-12.07,7.82h0Z"/>
+          </g>
+          <g>
+            <path class="st1" d="M266.78,247.98v41.83c0,.29.25-.2,0,0l-48.59,57.03"/>
+            <line class="st1" x1="207.47" y1="346.83" x2="203.55" y2="210.23"/>
+            <circle class="st1" cx="266.78" cy="232.13" r="16.18"/>
+            <circle class="st1" cx="203.55" cy="194.05" r="16.18"/>
+            <path class="st1" d="M175.93,336.54l-46.43-46.43c-.2-.2-.46-.31-.74-.31H-20.8"/>
+          </g>
+        </g>
+      </g>
+    </mask>
+    <radialGradient id="radial-gradient" cx="164.05" cy="167.97" fx="164.05" fy="167.97" r="152.66" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#c9cacc"/>
+      <stop offset="1" stop-color="#a3a5a8"/>
+    </radialGradient>
+  </defs>
+  <g class="st3">
+    <g id="Layer_11" data-name="Layer_1">
+      <rect class="st6" x="313.07" y="39.22" width="33.33" height="135.29"/>
+      <rect class="st6" x="313.07" y="185.62" width="33.33" height="107.19"/>
+      <rect class="st4" x="15.03" y="11.76" width="298.04" height="312.42" rx="20" ry="20"/>
+    </g>
+  </g>
+  <g id="Layer_41" data-name="Layer_4" class="st7">
+    <rect class="st5" x="75.98" y="66.45" width="60.13" height="30.07" transform="translate(-27.26 70.76) rotate(-32.94)"/>
+    <path class="st5" d="M76.14,136.29c-13.63,8.83-31.84,4.94-40.68-8.69-8.83-13.63-4.94-31.84,8.69-40.68,13.63-8.83,31.84-4.94,40.68,8.69s4.94,31.84-8.69,40.68ZM78.16,99.93l-19.12-9.77-18.02,11.68,1.1,21.44,19.12,9.77,18.02-11.68s-1.1-21.44-1.1-21.44Z"/>
+    <path class="st5" d="M160.85,66.5l-8.78,5.69-16.79-9.27-1.6-19.11,8.78-5.69,12.46-8.07c-8.52-3.49-18.54-2.89-26.85,2.5-13.48,8.73-17.33,26.74-8.59,40.22s26.74,17.33,40.22,8.59c8.07-5.23,12.68-13.78,13.22-22.69l-12.07,7.82h0Z"/>
+  </g>
+  <g class="st7">
+    <path class="st0" d="M266.01,247.39v41.83c0,.29.25-.2,0,0l-48.59,57.03"/>
+    <line class="st0" x1="206.7" y1="346.24" x2="202.78" y2="209.64"/>
+    <circle class="st0" cx="266.01" cy="231.54" r="16.18"/>
+    <circle class="st0" cx="202.78" cy="193.46" r="16.18"/>
+    <path class="st0" d="M175.16,335.95l-46.43-46.43c-.2-.2-.46-.31-.74-.31H-21.57"/>
+  </g>
+</svg>

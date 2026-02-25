@@ -1,0 +1,8 @@
+{
+	"extends": [
+		"./tsconfig.base.json",
+		"./tsconfig.test.browser.json",
+		"./tsconfig.test.node.json",
+		"./tsconfig.test.vscode.json"
+	]
+}

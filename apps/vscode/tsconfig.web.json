@@ -1,0 +1,40 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"baseUrl": ".",
+		"types": [
+			"svelte",
+			"vite/client",
+			"@types/vscode",
+			"@types/vscode-webview"
+		],
+		"skipLibCheck": true,
+		"lib": ["ESNext", "DOM"]
+	},
+	"include": [
+		"src/extension.ts",
+		"src/extension.web.ts",
+		"src/config.ts",
+		"src/device-manager.ts",
+		"src/device-status-bar.ts",
+		"src/graph-panel-manager.ts",
+		"src/graph-panel-serializer.ts",
+		"src/live-data-panel-manager.ts",
+		"src/logging-manager.ts",
+		"src/open-context-tracker.ts",
+		"src/rom-definition-resolver.ts",
+		"src/rom-document.ts",
+		"src/rom-editor-provider.ts",
+		"src/rom-save-manager.ts",
+		"src/rom-symbol-provider.ts",
+		"src/table-document.ts",
+		"src/table-fs-provider.ts",
+		"src/table-fs-uri.ts",
+		"src/table-uri.ts",
+		"src/theme-colors.ts",
+		"src/undo-redo-manager.ts",
+		"src/workspace-state.ts",
+		"src/tree/**/*"
+	],
+	"exclude": ["src/mcp-provider.ts", "src/extension.desktop.ts"]
+}

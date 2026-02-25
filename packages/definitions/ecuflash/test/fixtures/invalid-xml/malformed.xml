@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ROM>
+	<ROMExtensions>
+		<ROMExtension name="Malformed Definition">
+			<Tables>
+				<!-- Missing closing tag -->
+				<Table name="Broken Table" address="0x1000" type="2d">
+					<XAxis name="X" address="0x2000" length="16" />
+					<!-- Missing closing YAxis tag -->
+					<YAxis name="Y" address="0x2100" length="16" />
+				</Table>
+				<!-- Nothing else -->
+			</Tables>
+		</ROMExtension>
+	</ROMExtensions>
+</ROM>

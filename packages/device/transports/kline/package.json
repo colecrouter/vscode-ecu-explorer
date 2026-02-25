@@ -1,0 +1,21 @@
+{
+	"name": "@ecu-explorer/device-transport-kline",
+	"version": "0.0.1",
+	"type": "module",
+	"exports": {
+		".": {
+			"import": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		}
+	},
+	"scripts": {
+		"build": "tsc",
+		"check": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@ecu-explorer/device": "*"
+	},
+	"devDependencies": {
+		"typescript": "*"
+	}
+}

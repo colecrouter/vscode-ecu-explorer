@@ -1,0 +1,31 @@
+{
+	"name": "@ecu-explorer/mcp",
+	"version": "0.0.1",
+	"type": "module",
+	"bin": {
+		"ecu-mcp": "./dist/index.js"
+	},
+	"exports": {
+		".": {
+			"import": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		}
+	},
+	"scripts": {
+		"build": "tsc",
+		"check": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@modelcontextprotocol/sdk": "^1.12.1",
+		"@ecu-explorer/core": "*",
+		"@ecu-explorer/definitions-ecuflash": "*",
+		"filtrex": "^3.1.0",
+		"js-yaml": "^4.1.0",
+		"zod": "^3.25.67"
+	},
+	"devDependencies": {
+		"@types/js-yaml": "^4.0.9",
+		"@types/node": "^24.10.1",
+		"typescript": "*"
+	}
+}
