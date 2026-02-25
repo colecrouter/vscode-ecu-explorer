@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ROM>
+	<ROMExtensions>
+		<ROMExtension name="2011 USDM Lancer Evolution X 5MT">
+			<Fingerprints>
+				<Fingerprint offset="0x0" bytes="4D5A9000" />
+				<Fingerprint offset="0x100" bytes="12345678" />
+			</Fingerprints>
+			<Tables>
+				<Table name="Fuel Map" address="0x3000" type="2d" columns="16" rows="16">
+					<XAxis name="Load" address="0x4000" length="16" type="u8" />
+					<YAxis name="RPM" address="0x4100" length="16" type="u16" />
+				</Table>
+				<Table name="Ignition Map" address="0x5000" type="3d" columns="16" rows="16" layers="8">
+					<XAxis name="Load" address="0x6000" length="16" type="u8" />
+					<YAxis name="RPM" address="0x6100" length="16" type="u16" />
+					<ZAxis name="Gear" address="0x6200" length="8" type="u8" />
+				</Table>
+				<Table name="Boost Map" address="0x7000" type="2d" columns="12" rows="12">
+					<XAxis name="Load" address="0x8000" length="12" type="u8" />
+					<YAxis name="RPM" address="0x8100" length="12" type="u16" />
+				</Table>
+			</Tables>
+		</ROMExtension>
+	</ROMExtensions>
+</ROM>

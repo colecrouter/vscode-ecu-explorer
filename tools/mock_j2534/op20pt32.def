@@ -1,0 +1,14 @@
+LIBRARY op20pt32
+EXPORTS
+    PassThruOpen@8          @1
+    PassThruClose@4         @2
+    PassThruConnect@20      @3
+    PassThruDisconnect@4    @4
+    PassThruReadMsgs@16     @5
+    PassThruWriteMsgs@16    @6
+    PassThruStartMsgFilter@24 @7
+    PassThruStopMsgFilter@8 @8
+    PassThruSetProgrammingVoltage@12 @9
+    PassThruReadVersion@16  @10
+    PassThruGetLastError@4  @11
+    PassThruIoctl@16        @12

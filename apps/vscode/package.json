@@ -1,0 +1,392 @@
+{
+	"name": "@ecu-explorer/app-vscode",
+	"displayName": "ECU Explorer",
+	"description": "ECU ROM tuning file viewer with XML definition support",
+	"publisher": "colecrouter",
+	"version": "0.0.0",
+	"icon": "icon.png",
+	"type": "module",
+	"license": "GPL-3.0",
+	"author": "Cole Router",
+	"keywords": [
+		"ecu",
+		"rom",
+		"tuning",
+		"vscode",
+		"extension",
+		"calibration",
+		"obd2",
+		"can",
+		"bootloader"
+	],
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/colecrouter/vscode-ecu-explorer.git",
+		"directory": "apps/vscode"
+	},
+	"homepage": "https://github.com/colecrouter/vscode-ecu-explorer#readme",
+	"engines": {
+		"vscode": "^1.99.0"
+	},
+	"activationEvents": [
+		"onWebviewPanel:ecuExplorerGraph"
+	],
+	"main": "./dist/extension.desktop.cjs",
+	"browser": "./dist/extension.web.js",
+	"contributes": {
+		"commands": [
+			{
+				"command": "rom.open",
+				"title": "ECU Explorer: Open ROM"
+			},
+			{
+				"command": "rom.openTable",
+				"title": "ECU Explorer: Open Table"
+			},
+			{
+				"command": "rom.exportTableCsv",
+				"title": "ECU Explorer: Export Table to CSV"
+			},
+			{
+				"command": "rom.importTableCsv",
+				"title": "ECU Explorer: Import Table from CSV"
+			},
+			{
+				"command": "rom.mathOpAdd",
+				"title": "ECU Explorer: Add Constant to Selection",
+				"enablement": "activeCustomEditorId == 'romViewer.editor'"
+			},
+			{
+				"command": "rom.mathOpMultiply",
+				"title": "ECU Explorer: Multiply Selection by Factor",
+				"enablement": "activeCustomEditorId == 'romViewer.editor'"
+			},
+			{
+				"command": "rom.mathOpClamp",
+				"title": "ECU Explorer: Clamp Selection to Range",
+				"enablement": "activeCustomEditorId == 'romViewer.editor'"
+			},
+			{
+				"command": "rom.mathOpSmooth",
+				"title": "ECU Explorer: Smooth Selection (2D/3D only)",
+				"enablement": "activeCustomEditorId == 'romViewer.editor'"
+			},
+			{
+				"command": "ecuExplorer.open2DGraph",
+				"title": "Open 2D Graph",
+				"category": "ECU Explorer"
+			},
+			{
+				"command": "ecuExplorer.open3DGraph",
+				"title": "Open 3D Graph",
+				"category": "ECU Explorer"
+			},
+			{
+				"command": "ecuExplorer.open2DGraphForActiveTable",
+				"title": "Open 2D Graph for Active Table",
+				"category": "ECU Explorer",
+				"enablement": "activeCustomEditorId == 'romViewer.tableEditor' && ecuExplorer.activeTableIs1D"
+			},
+			{
+				"command": "ecuExplorer.open3DGraphForActiveTable",
+				"title": "Open 3D Graph for Active Table",
+				"category": "ECU Explorer",
+				"enablement": "activeCustomEditorId == 'romViewer.tableEditor' && ecuExplorer.activeTableIs2D"
+			},
+			{
+				"command": "ecuExplorer.openTable",
+				"title": "Open Table",
+				"category": "ECU Explorer"
+			},
+			{
+				"command": "ecuExplorer.removeRom",
+				"title": "Remove ROM from Explorer",
+				"category": "ECU Explorer",
+				"icon": "$(close)"
+			},
+			{
+				"command": "ecuExplorer.readRomFromDevice",
+				"title": "Read ROM from Device",
+				"category": "ECU Explorer"
+			},
+			{
+				"command": "ecuExplorer.writeRomToDevice",
+				"title": "Write ROM to Device",
+				"category": "ECU Explorer"
+			},
+			{
+				"command": "ecuExplorer.selectDevice",
+				"title": "Select Device",
+				"category": "ECU Explorer"
+			},
+			{
+				"command": "ecuExplorer.startLiveData",
+				"title": "Start Live Data",
+				"category": "ECU Explorer"
+			},
+			{
+				"command": "ecuExplorer.connectDevice",
+				"title": "Connect to Device",
+				"category": "ECU Explorer",
+				"enablement": "!ecuExplorer.deviceConnected"
+			},
+			{
+				"command": "ecuExplorer.disconnectDevice",
+				"title": "Disconnect from Device",
+				"category": "ECU Explorer",
+				"enablement": "ecuExplorer.deviceConnected"
+			},
+			{
+				"command": "ecuExplorer.startLog",
+				"title": "Start Live Data Log",
+				"category": "ECU Explorer",
+				"enablement": "ecuExplorer.deviceConnected"
+			},
+			{
+				"command": "ecuExplorer.pauseLog",
+				"title": "Pause Live Data Log",
+				"category": "ECU Explorer",
+				"enablement": "ecuExplorer.deviceConnected && ecuExplorer.loggingActive"
+			},
+			{
+				"command": "ecuExplorer.resumeLog",
+				"title": "Resume Live Data Log",
+				"category": "ECU Explorer",
+				"enablement": "ecuExplorer.deviceConnected && ecuExplorer.loggingPaused"
+			},
+			{
+				"command": "ecuExplorer.stopLog",
+				"title": "Stop Live Data Log",
+				"category": "ECU Explorer",
+				"enablement": "ecuExplorer.deviceConnected && ecuExplorer.loggingActive"
+			},
+			{
+				"command": "ecuExplorer.openLogsFolder",
+				"title": "Open Logs Folder",
+				"category": "ECU Explorer"
+			}
+		],
+		"keybindings": [
+			{
+				"command": "ecuExplorer.open2DGraphForActiveTable",
+				"key": "ctrl+shift+g",
+				"mac": "cmd+shift+g",
+				"when": "activeCustomEditorId == 'romViewer.tableEditor' && ecuExplorer.activeTableIs1D"
+			},
+			{
+				"command": "ecuExplorer.open3DGraphForActiveTable",
+				"key": "ctrl+shift+g",
+				"mac": "cmd+shift+g",
+				"when": "activeCustomEditorId == 'romViewer.tableEditor' && ecuExplorer.activeTableIs2D"
+			}
+		],
+		"menus": {
+			"commandPalette": [
+				{
+					"command": "ecuExplorer.open2DGraph",
+					"when": "false"
+				},
+				{
+					"command": "ecuExplorer.open3DGraph",
+					"when": "false"
+				},
+				{
+					"command": "ecuExplorer.open2DGraphForActiveTable",
+					"when": "activeCustomEditorId == 'romViewer.tableEditor' && ecuExplorer.activeTableIs1D"
+				},
+				{
+					"command": "ecuExplorer.open3DGraphForActiveTable",
+					"when": "activeCustomEditorId == 'romViewer.tableEditor' && ecuExplorer.activeTableIs2D"
+				}
+			],
+			"editor/title": [
+				{
+					"command": "ecuExplorer.open2DGraphForActiveTable",
+					"when": "activeCustomEditorId == 'romViewer.tableEditor' && ecuExplorer.activeTableIs1D",
+					"group": "navigation@1"
+				},
+				{
+					"command": "ecuExplorer.open3DGraphForActiveTable",
+					"when": "activeCustomEditorId == 'romViewer.tableEditor' && ecuExplorer.activeTableIs2D",
+					"group": "navigation@2"
+				}
+			],
+			"view/item/context": [
+				{
+					"command": "ecuExplorer.openTable",
+					"when": "view == ecuExplorer && viewItem =~ /^table:/",
+					"group": "navigation@1"
+				},
+				{
+					"command": "ecuExplorer.open2DGraph",
+					"when": "view == ecuExplorer && viewItem == table:table1d",
+					"group": "navigation@2"
+				},
+				{
+					"command": "ecuExplorer.open3DGraph",
+					"when": "view == ecuExplorer && viewItem == table:table2d",
+					"group": "navigation@3"
+				},
+				{
+					"command": "ecuExplorer.removeRom",
+					"when": "view == ecuExplorer && viewItem == rom",
+					"group": "inline@99"
+				}
+			]
+		},
+		"views": {
+			"explorer": [
+				{
+					"id": "ecuExplorer",
+					"name": "ECU Explorer",
+					"icon": "$(file-binary)",
+					"contextualTitle": "ECU Explorer"
+				}
+			]
+		},
+		"customEditors": [
+			{
+				"viewType": "romViewer.editor",
+				"displayName": "ROM Editor",
+				"selector": [
+					{
+						"filenamePattern": "*.hex"
+					},
+					{
+						"filenamePattern": "*.bin"
+					},
+					{
+						"filenamePattern": "*.rom"
+					}
+				],
+				"priority": "option"
+			},
+			{
+				"viewType": "romViewer.tableEditor",
+				"displayName": "Table Editor",
+				"selector": [
+					{
+						"filenamePattern": "*.ecu-table"
+					}
+				],
+				"priority": "default"
+			}
+		],
+		"configuration": {
+			"title": "ECU Explorer",
+			"properties": {
+				"ecuExplorer.definitions.paths": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"default": [],
+					"scope": "resource",
+					"description": "Additional folders to search for ROM definition files (any provider). Relative paths are resolved from the workspace root."
+				},
+				"ecuExplorer.definitions.ecuflash.paths": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"default": [],
+					"scope": "resource",
+					"description": "Additional folders to search for ECUFlash XML definition files. Merged with ecuExplorer.definitions.paths."
+				},
+				"ecuExplorer.providers.enabled": {
+					"type": "array",
+					"items": {
+						"type": "string",
+						"enum": [
+							"ecuflash"
+						]
+					},
+					"default": [
+						"ecuflash"
+					],
+					"scope": "resource",
+					"description": "List of active definition provider IDs. Providers not listed are not loaded."
+				},
+				"ecuExplorer.logsFolder": {
+					"type": "string",
+					"default": "logs",
+					"scope": "resource",
+					"description": "Folder where live data log CSV files are saved. Relative paths are resolved from the workspace root."
+				},
+				"ecuExplorer.logging.columns": {
+					"type": [
+						"array",
+						"string"
+					],
+					"items": {
+						"type": "string"
+					},
+					"default": "all",
+					"scope": "resource",
+					"description": "PID columns to include in log CSV files. Use 'all' to include every streamed PID, or an array of PID names."
+				}
+			}
+		},
+		"mcpServerDefinitionProviders": [
+			{
+				"id": "ecu-explorer",
+				"label": "ECU Explorer MCP"
+			}
+		]
+	},
+	"scripts": {
+		"dev": "vite",
+		"build": "npm run build:extension && npm run build:extension:web && npm run build:webview && npm run build:mcp",
+		"build:extension": "vite build",
+		"build:extension:web": "vite build --config vite.web.config.ts",
+		"build:webview": "vite build --config vite.webview.config.ts",
+		"build:mcp": "vite build --config vite.mcp.config.ts",
+		"watch": "npm run watch:extension & npm run watch:extension:web & npm run watch:webview & npm run watch:mcp",
+		"watch:extension": "vite build --watch",
+		"watch:extension:web": "vite build --watch --config vite.web.config.ts",
+		"watch:webview": "vite build --watch --config vite.webview.config.ts",
+		"watch:mcp": "vite build --watch --config vite.mcp.config.ts",
+		"check": "tsc --noEmit -p tsconfig.desktop.json && tsc --noEmit -p tsconfig.web.json",
+		"vscode:prepublish": "npm run check && npm run build",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"test:ui": "vitest --ui",
+		"test:coverage": "vitest run --coverage",
+		"test:debug": "vitest --inspect-brk --inspect --single-thread"
+	},
+	"dependencies": {
+		"@ecu-explorer/core": "*",
+		"@ecu-explorer/definitions-ecuflash": "*",
+		"@ecu-explorer/device": "*",
+		"@ecu-explorer/device-protocol-mitsubishi-bootloader": "*",
+		"@ecu-explorer/device-protocol-mut3": "*",
+		"@ecu-explorer/device-protocol-obd2": "*",
+		"@ecu-explorer/device-protocol-subaru": "*",
+		"@ecu-explorer/device-protocol-uds": "*",
+		"@ecu-explorer/device-transport-openport2": "*",
+		"@ecu-explorer/mcp": "*",
+		"@ecu-explorer/ui": "*"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.3.8",
+		"@sveltejs/vite-plugin-svelte": "^6.2.1",
+		"@tsconfig/svelte": "^5.0.6",
+		"@types/plotly.js-dist-min": "^2.3.4",
+		"@types/vscode": "^1.107.0",
+		"@types/vscode-webview": "^1.57.5",
+		"@typescript-eslint/types": "^8.49.0",
+		"expr-eval": "^2.0.2",
+		"fast-xml-parser": "^5.3.3",
+		"jest-mock-vscode": "^4.11.0",
+		"plotly.js-dist-min": "^3.3.0",
+		"prettier": "^3.7.4",
+		"prettier-plugin-svelte": "^3.4.0",
+		"svelte": "^5.43.8",
+		"svelte-check": "^4.3.4",
+		"typescript": "~5.9.3",
+		"vite": "npm:rolldown-vite@7.2.5"
+	},
+	"overrides": {
+		"vite": "npm:rolldown-vite@7.2.5"
+	}
+}

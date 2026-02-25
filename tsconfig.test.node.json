@@ -1,0 +1,15 @@
+{
+	"extends": "./tsconfig.base.json",
+	"compilerOptions": {
+		"noEmit": true,
+		"types": ["vitest/globals", "node"]
+	},
+	"include": ["./**/*.test.ts", "./**/*.spec.ts"],
+	"exclude": [
+		"./apps/vscode/**/*.test.ts",
+		"./apps/vscode/**/*.spec.ts",
+		"./**/*.svelte.test.ts",
+		"./**/*.svelte.spec.ts",
+		"node_modules/**"
+	]
+}

@@ -1,0 +1,15 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"baseUrl": ".",
+		"types": [
+			"svelte",
+			"vite/client",
+			"@types/vscode",
+			"@types/vscode-webview"
+		],
+		"skipLibCheck": true
+	},
+	"include": ["src/**/*"],
+	"exclude": ["src/mcp-provider.ts", "src/extension.desktop.ts"]
+}

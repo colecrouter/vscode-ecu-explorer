@@ -1,0 +1,8 @@
+{
+	"extends": "../../../../tsconfig.base.json",
+	"compilerOptions": {
+		"types": ["vscode-webview", "w3c-web-usb"],
+		"outDir": "dist"
+	},
+	"include": ["src/**/*"]
+}
