@@ -5,20 +5,24 @@
  * using the `ecu-table://` scheme. These URIs enable VSCode's Custom Editor API
  * to work with multiple distinct table editors.
  *
- * URI Format:
+ * URI Format (current):
+ * ecu-table://path/to/rom.hex?table=TableName
+ *
+ * Legacy format (still supported for parsing):
  * ecu-table://path/to/rom.hex/TableName
  *
  * Components:
  * - Scheme: "ecu-table" (custom scheme for virtual files)
  * - Authority: Empty (not used)
- * - Path: /path/to/rom.hex/TableName
- *   - ROM file path (absolute) + table name separated by /
- *   - Table name is URL-encoded to handle spaces and special characters
+ * - Path: /path/to/rom.hex
+ * - Query: table=<URL-encoded table name>
+ *   - Query is used to safely preserve table names containing '/' and
+ *     other reserved path characters
  *
  * Examples:
- * - ecu-table:///Users/cole/ROM/test.hex/Fuel%20Trim
- * - ecu-table:///Users/cole/ROM/evo10.bin/Boost%20Target
- * - ecu-table:///Users/cole/ROM/wrx.hex/Fuel%20Map%20(High%20Octane)
+ * - ecu-table:///Users/cole/ROM/test.hex?table=Fuel%20Trim
+ * - ecu-table:///Users/cole/ROM/evo10.bin?table=Boost%20Target
+ * - ecu-table:///Users/cole/ROM/wrx.hex?table=Fuel%20Map%20(High%20Octane)
  */
 
 import * as vscode from "vscode";
@@ -58,18 +62,18 @@ export function createTableUri(romPath: string, tableName: string): vscode.Uri {
 	// Ensure ROM path is absolute
 	const absolutePath = new URL(romPath, import.meta.url).pathname;
 
-	// URL-encode table name to handle spaces and special characters
-	const encodedTableName = encodeURIComponent(tableName);
-
-	// Construct URI path: /rom/path/TableName
+	// Construct URI path: /rom/path
 	// Use forward slashes for the URI path regardless of platform
 	const normalizedAbsolutePath = absolutePath.replace(/\\/g, "/");
 	const uriPath = normalizedAbsolutePath.startsWith("/")
-		? `${normalizedAbsolutePath}/${encodedTableName}`
-		: `/${normalizedAbsolutePath}/${encodedTableName}`;
+		? normalizedAbsolutePath
+		: `/${normalizedAbsolutePath}`;
+
+	// Store table name in query so reserved path chars (e.g. '/') remain intact
+	const query = `table=${encodeURIComponent(tableName)}`;
 
 	// Create URI with ecu-table scheme
-	return vscode.Uri.parse(`ecu-table://${uriPath}`);
+	return vscode.Uri.parse(`ecu-table://${uriPath}?${query}`);
 }
 
 /**
@@ -91,7 +95,27 @@ export function parseTableUri(uri: vscode.Uri): TableUri | null {
 		return null;
 	}
 
-	// Split path into ROM path and table name
+	// Preferred format: table name in query param
+	const params = new URLSearchParams(uri.query);
+	const queryTableName = params.get("table");
+	if (queryTableName) {
+		let tableName: string;
+		try {
+			tableName = decodeURIComponent(queryTableName);
+		} catch (error) {
+			console.error("Failed to decode table name:", error);
+			return null;
+		}
+
+		const romPath = uri.path;
+		if (!romPath || !tableName) {
+			return null;
+		}
+
+		return { romPath, tableName };
+	}
+
+	// Legacy fallback: split path into ROM path and table name
 	const lastSlash = uri.path.lastIndexOf("/");
 	if (lastSlash === -1) {
 		return null;
