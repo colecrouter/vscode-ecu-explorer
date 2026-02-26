@@ -71,9 +71,14 @@ export function createTableUri(romPath: string, tableName: string): vscode.Uri {
 
 	// Store table name in query so reserved path chars (e.g. '/') remain intact
 	const query = `table=${encodeURIComponent(tableName)}`;
+	const encodedTableName = encodeURIComponent(tableName);
+
+	// Include table name as trailing path segment so VSCode tab title uses table name
+	// instead of ROM file name. Query remains the source of truth for robust parsing.
+	const displayPath = `${uriPath}/${encodedTableName}`;
 
 	// Create URI with ecu-table scheme
-	return vscode.Uri.parse(`ecu-table://${uriPath}?${query}`);
+	return vscode.Uri.parse(`ecu-table://${displayPath}?${query}`);
 }
 
 /**
@@ -107,7 +112,23 @@ export function parseTableUri(uri: vscode.Uri): TableUri | null {
 			return null;
 		}
 
-		const romPath = uri.path;
+		// Newer format (display-friendly): /path/to/rom.hex/<tableName>?table=<...>
+		// Older query format: /path/to/rom.hex?table=<...>
+		let romPath = uri.path;
+		const lastSlash = uri.path.lastIndexOf("/");
+		if (lastSlash > 0) {
+			const trailingSegment = uri.path.substring(lastSlash + 1);
+			let decodedTrailingSegment = trailingSegment;
+			try {
+				decodedTrailingSegment = decodeURIComponent(trailingSegment);
+			} catch {
+				// Keep raw segment if decoding fails
+			}
+
+			if (decodedTrailingSegment === tableName) {
+				romPath = uri.path.substring(0, lastSlash);
+			}
+		}
 		if (!romPath || !tableName) {
 			return null;
 		}
