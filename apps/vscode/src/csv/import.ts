@@ -7,9 +7,9 @@ import {
 	type Table2DDefinition,
 	type TableDefinition,
 } from "@ecu-explorer/core";
-import type { UndoRedoManager } from "src/undo-redo-manager";
 import * as vscode from "vscode";
 import type { RomDocument } from "../rom/document";
+import type { UndoRedoManager } from "../undo-redo-manager";
 import { csvToSnapshot, parseCsv, type TableSnapshot } from "./parser";
 import {
 	generateImportPreview,

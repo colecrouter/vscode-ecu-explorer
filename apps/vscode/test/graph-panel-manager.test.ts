@@ -18,27 +18,17 @@ describe("GraphPanelManager", () => {
 	let mockOnCellSelect: any;
 
 	const createMockSnapshot = (): TableSnapshot => ({
+		kind: "table2d",
 		name: "Test Table",
 		description: "Test description",
-		address: 0x1000,
 		rows: 2,
 		cols: 2,
-		rowHeaders: ["0", "1"],
-		colHeaders: ["A", "B"],
-		cells: [
-			[
-				{ value: 10, formatted: "10", raw: 10 },
-				{ value: 20, formatted: "20", raw: 20 },
-			],
-			[
-				{ value: 30, formatted: "30", raw: 30 },
-				{ value: 40, formatted: "40", raw: 40 },
-			],
+		x: [0, 1],
+		y: [0, 1],
+		z: [
+			[10, 20],
+			[30, 40],
 		],
-		unit: "ms",
-		precision: 0,
-		canUndo: false,
-		canRedo: false,
 	});
 
 	beforeEach(() => {
@@ -213,7 +203,21 @@ describe("GraphPanelManager", () => {
 			(panel.webview as any)._clearMessages();
 
 			// Create again with updated snapshot
-			const snapshot2 = { ...snapshot1, cells: [[{ value: 100 }]] };
+			const snapshot2: TableSnapshot = {
+				kind: "table2d",
+				name: snapshot1.name,
+				...(snapshot1.description !== undefined
+					? { description: snapshot1.description }
+					: {}),
+				rows: 2,
+				cols: 2,
+				x: [0, 1],
+				y: [0, 1],
+				z: [
+					[100, 20],
+					[30, 40],
+				],
+			};
 			manager.getOrCreatePanel(
 				"/test/rom.hex",
 				"table1",
@@ -310,7 +314,21 @@ describe("GraphPanelManager", () => {
 			(panel.webview as any)._clearMessages();
 
 			// Broadcast update
-			const updatedSnapshot = { ...snapshot, cells: [[{ value: 999 }]] };
+			const updatedSnapshot: TableSnapshot = {
+				kind: "table2d",
+				name: snapshot.name,
+				...(snapshot.description !== undefined
+					? { description: snapshot.description }
+					: {}),
+				rows: 2,
+				cols: 2,
+				x: [0, 1],
+				y: [0, 1],
+				z: [
+					[999, 20],
+					[30, 40],
+				],
+			};
 			manager.broadcastSnapshot("/test/rom.hex", "table1", updatedSnapshot);
 
 			expect(panel.webview.postMessage).toHaveBeenCalledWith({
@@ -334,7 +352,21 @@ describe("GraphPanelManager", () => {
 			(panel.webview as any)._clearMessages();
 
 			// Broadcast update
-			const updatedSnapshot = { ...snapshot, cells: [[{ value: 999 }]] };
+			const updatedSnapshot: TableSnapshot = {
+				kind: "table2d",
+				name: snapshot.name,
+				...(snapshot.description !== undefined
+					? { description: snapshot.description }
+					: {}),
+				rows: 2,
+				cols: 2,
+				x: [0, 1],
+				y: [0, 1],
+				z: [
+					[999, 20],
+					[30, 40],
+				],
+			};
 			manager.broadcastSnapshot("/test/rom.hex", "table1", updatedSnapshot);
 
 			expect(panel.webview.postMessage).toHaveBeenCalledWith({

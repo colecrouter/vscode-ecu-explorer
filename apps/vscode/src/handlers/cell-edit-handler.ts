@@ -4,9 +4,9 @@ import {
 	snapshotTable,
 	type TableDefinition,
 } from "@ecu-explorer/core";
-import type { RomDocument } from "src/rom/document";
-import type { UndoRedoManager } from "src/undo-redo-manager";
 import type * as vscode from "vscode";
+import type { RomDocument } from "../rom/document";
+import type { UndoRedoManager } from "../undo-redo-manager";
 
 /**
  * Get references to extension state

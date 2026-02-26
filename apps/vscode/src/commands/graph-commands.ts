@@ -73,6 +73,11 @@ export async function handleOpenGraph(
 		const uri = activeTab.input.uri;
 		const tableDoc = state.editorProvider?.getTableDocument(uri);
 		if (tableDoc) {
+			if (!tableDoc.romDocument.definition) {
+				throw new Error(
+					"Cannot open graph: ROM definition is missing for active table document",
+				);
+			}
 			tableName = tableDoc.tableId;
 			tableDef = tableDoc.tableDef;
 			rom = {
@@ -81,7 +86,7 @@ export async function handleOpenGraph(
 				providerId: "",
 				defUri: "",
 				bytes: tableDoc.romDocument.romBytes,
-				definition: tableDoc.romDocument.definition!,
+				definition: tableDoc.romDocument.definition,
 			};
 			panel =
 				state.editorProvider?.getPanelForDocument(tableDoc.romDocument) || null;

@@ -5,13 +5,25 @@ import {
 	snapshotTable,
 	type TableDefinition,
 } from "@ecu-explorer/core";
-import type { RomExplorerTreeProvider } from "src/tree/rom-tree-provider";
 import * as vscode from "vscode";
 import type { RomDocument } from "../rom/document";
 import { TableDocument } from "../table-document";
 import { getThemeColors } from "../theme-colors";
-import type { UndoRedoManager } from "../undo-redo-manager";
+import type { RomExplorerTreeProvider } from "../tree/rom-tree-provider";
+import type { EditOperation, UndoRedoManager } from "../undo-redo-manager";
 import { isBatchEdit } from "../undo-redo-manager";
+
+/**
+ * Cell edit message from webview
+ */
+interface CellEditMessage {
+	type: string;
+	row: number;
+	col: number;
+	depth?: number;
+	value: Uint8Array;
+	label?: string;
+}
 
 /**
  * Get references to extension state
@@ -41,7 +53,7 @@ let getStateRefs:
 				disposables: vscode.Disposable[],
 			) => void;
 			handleCellEdit: (
-				msg: any,
+				msg: CellEditMessage,
 				def: TableDefinition,
 				panel: vscode.WebviewPanel,
 			) => void;
@@ -301,7 +313,10 @@ export async function handleTableOpen(
 		const { UndoRedoManager } = await import("../undo-redo-manager");
 		undoRedoManagers.set(tableUriKey, new UndoRedoManager());
 	}
-	const undoRedoManager = undoRedoManagers.get(tableUriKey)!;
+	const undoRedoManager = undoRedoManagers.get(tableUriKey);
+	if (!undoRedoManager) {
+		throw new Error("Failed to get undo/redo manager for table");
+	}
 
 	// Compute snapshot
 	const snapshot = snapshotTable(selectedTable, rom.bytes);
@@ -440,7 +455,7 @@ export async function handleTableOpen(
 				const newSnapshot = snapshotTable(selectedTable, activeRom.bytes);
 				const decodedValue = decodeScalarBytes(
 					newValue,
-					selectedTable.z.dtype as any,
+					selectedTable.z.dtype,
 					selectedTable.z.endianness ?? "le",
 				);
 				const scaledValue =
@@ -689,7 +704,7 @@ export async function handleTableOpen(
 					let maxAddress = 0;
 
 					// Build batch edit operations, capturing 'before' bytes from ROM
-					const batchOps: any[] = [];
+					const batchOps: EditOperation[] = [];
 					for (const edit of mathMsg.edits) {
 						const newValue = new Uint8Array(edit.after);
 						// Capture old bytes before overwriting

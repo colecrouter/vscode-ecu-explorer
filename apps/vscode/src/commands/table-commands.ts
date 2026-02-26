@@ -1,4 +1,4 @@
-import type { TableDefinition } from "@ecu-explorer/core";
+import type { DefinitionProvider, TableDefinition } from "@ecu-explorer/core";
 import * as vscode from "vscode";
 import { resolveRomDefinition } from "../rom/definition-resolver";
 import { createTableUri } from "../table-fs-uri";
@@ -7,7 +7,7 @@ import type { WorkspaceState } from "../workspace-state";
 /**
  * Registry for definition providers
  */
-let registry: any = null;
+let registry: { list(): DefinitionProvider[] } | null = null;
 
 /**
  * Workspace state manager
@@ -18,7 +18,7 @@ let workspaceState: WorkspaceState | null = null;
  * Set the registry and workspace state for command handlers
  */
 export function setTableCommandsContext(
-	_registry: any,
+	_registry: { list(): DefinitionProvider[] },
 	_workspaceState: WorkspaceState,
 ): void {
 	registry = _registry;
@@ -65,6 +65,10 @@ export async function openTableInCustomEditor(
 		if (!workspaceState) {
 			throw new Error("Workspace state not initialized");
 		}
+		if (!registry) {
+			vscode.window.showWarningMessage("No definition providers available.");
+			return;
+		}
 		const romBytes = new Uint8Array(await vscode.workspace.fs.readFile(romUri));
 		const definition = await resolveRomDefinition(
 			romUri,
@@ -108,7 +112,10 @@ export async function openTableInCustomEditor(
  */
 export async function openTableFlow(
 	_ctx: vscode.ExtensionContext,
-	activeRom: any,
+	activeRom: {
+		definition: { tables: TableDefinition[] };
+		romUri: string;
+	} | null,
 ): Promise<void> {
 	if (!activeRom) {
 		vscode.window.showWarningMessage("Open a ROM first.");
@@ -116,12 +123,14 @@ export async function openTableFlow(
 	}
 
 	type TablePickItem = vscode.QuickPickItem & { def: TableDefinition };
-	const items: TablePickItem[] = activeRom.definition.tables.map((t: any) => ({
-		label: t.name,
-		...(t.category ? { description: t.category } : {}),
-		detail: t.kind,
-		def: t,
-	}));
+	const items: TablePickItem[] = activeRom.definition.tables.map(
+		(t: TableDefinition) => ({
+			label: t.name,
+			...(t.category ? { description: t.category } : {}),
+			detail: t.kind,
+			def: t,
+		}),
+	);
 
 	const picked = await vscode.window.showQuickPick<TablePickItem>(items, {
 		placeHolder: "Select a table",

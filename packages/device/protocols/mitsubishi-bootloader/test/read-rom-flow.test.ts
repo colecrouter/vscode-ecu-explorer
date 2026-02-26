@@ -1,4 +1,8 @@
-import type { DeviceConnection, EcuEvent, RomProgress } from "@ecu-explorer/device";
+import type {
+	DeviceConnection,
+	EcuEvent,
+	RomProgress,
+} from "@ecu-explorer/device";
 import { describe, expect, it } from "vitest";
 import { MitsubishiBootloaderProtocol } from "../src/index.js";
 
