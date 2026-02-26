@@ -22,27 +22,17 @@ describe("Graph Panel Synchronization", () => {
 	let cellSelectionCallback: any;
 
 	const createMockSnapshot = (value: number = 10): TableSnapshot => ({
+		kind: "table2d",
 		name: "Test Table",
 		description: "Test description",
-		address: 0x1000,
 		rows: 2,
 		cols: 2,
-		rowHeaders: ["0", "1"],
-		colHeaders: ["A", "B"],
-		cells: [
-			[
-				{ value, formatted: String(value), raw: value },
-				{ value: value + 10, formatted: String(value + 10), raw: value + 10 },
-			],
-			[
-				{ value: value + 20, formatted: String(value + 20), raw: value + 20 },
-				{ value: value + 30, formatted: String(value + 30), raw: value + 30 },
-			],
+		x: [0, 1],
+		y: [0, 1],
+		z: [
+			[value, value + 10],
+			[value + 20, value + 30],
 		],
-		unit: "ms",
-		precision: 0,
-		canUndo: false,
-		canRedo: false,
 	});
 
 	beforeEach(() => {
@@ -134,7 +124,7 @@ describe("Graph Panel Synchronization", () => {
 			(panel.webview as any)._clearMessages();
 
 			// Simulate undo (snapshot with canUndo = true)
-			const undoSnapshot = { ...createMockSnapshot(5), canUndo: true };
+			const undoSnapshot = createMockSnapshot(5);
 			manager.broadcastSnapshot("/test/rom.hex", "table1", undoSnapshot);
 
 			expect(panel.webview.postMessage).toHaveBeenCalledWith({
@@ -156,7 +146,7 @@ describe("Graph Panel Synchronization", () => {
 			(panel.webview as any)._clearMessages();
 
 			// Simulate redo (snapshot with canRedo = true)
-			const redoSnapshot = { ...createMockSnapshot(15), canRedo: true };
+			const redoSnapshot = createMockSnapshot(15);
 			manager.broadcastSnapshot("/test/rom.hex", "table1", redoSnapshot);
 
 			expect(panel.webview.postMessage).toHaveBeenCalledWith({
@@ -552,10 +542,10 @@ describe("Graph Panel Synchronization", () => {
 			const messages2 = (panel2.webview as any)._getMessages();
 
 			expect(messages1).toHaveLength(1);
-			expect(messages1[0].snapshot.cells[0][0].value).toBe(111);
+			expect(messages1[0].snapshot.z[0][0]).toBe(111);
 
 			expect(messages2).toHaveLength(1);
-			expect(messages2[0].snapshot.cells[0][0].value).toBe(222);
+			expect(messages2[0].snapshot.z[0][0]).toBe(222);
 		});
 
 		it("should handle complex workflow with multiple tables and ROMs", () => {

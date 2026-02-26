@@ -117,7 +117,11 @@ export class RomSaveManager {
 					} else {
 						// On success, keep suppression active for a short grace period
 						// because the file watcher may fire slightly after writeFile resolves
-						setTimeout(() => savingUris!.delete(uriStr!), 500);
+						setTimeout(() => {
+							if (savingUris && uriStr) {
+								savingUris.delete(uriStr);
+							}
+						}, 500);
 					}
 				}
 			}

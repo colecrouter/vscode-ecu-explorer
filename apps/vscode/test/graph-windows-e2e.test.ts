@@ -27,27 +27,17 @@ describe("Graph Windows E2E", () => {
 	let tableEditorWebview: any;
 
 	const createMockSnapshot = (value: number = 10): TableSnapshot => ({
+		kind: "table2d",
 		name: "Test Table",
 		description: "Test description",
-		address: 0x1000,
 		rows: 2,
 		cols: 2,
-		rowHeaders: ["0", "1"],
-		colHeaders: ["A", "B"],
-		cells: [
-			[
-				{ value, formatted: String(value), raw: value },
-				{ value: value + 10, formatted: String(value + 10), raw: value + 10 },
-			],
-			[
-				{ value: value + 20, formatted: String(value + 20), raw: value + 20 },
-				{ value: value + 30, formatted: String(value + 30), raw: value + 30 },
-			],
+		x: [0, 1],
+		y: [0, 1],
+		z: [
+			[value, value + 10],
+			[value + 20, value + 30],
 		],
-		unit: "ms",
-		precision: 0,
-		canUndo: false,
-		canRedo: false,
 	});
 
 	const createMockDocument = (romPath: string): RomDocument =>
@@ -276,7 +266,7 @@ describe("Graph Windows E2E", () => {
 
 			// Verify the updated value
 			const messages = (panel.webview as any)._getMessages();
-			expect(messages[0].snapshot.cells[0][0].value).toBe(999);
+			expect(messages[0].snapshot.z[0][0]).toBe(999);
 		});
 
 		it("should update graph when user performs undo", () => {
@@ -292,7 +282,7 @@ describe("Graph Windows E2E", () => {
 			(panel.webview as any)._clearMessages();
 
 			// User performs undo
-			const undoSnapshot = { ...createMockSnapshot(5), canUndo: true };
+			const undoSnapshot = createMockSnapshot(5);
 			manager.broadcastSnapshot("/test/rom.hex", "table1", undoSnapshot);
 
 			// Graph should receive update
@@ -315,7 +305,7 @@ describe("Graph Windows E2E", () => {
 			(panel.webview as any)._clearMessages();
 
 			// User performs redo
-			const redoSnapshot = { ...createMockSnapshot(15), canRedo: true };
+			const redoSnapshot = createMockSnapshot(15);
 			manager.broadcastSnapshot("/test/rom.hex", "table1", redoSnapshot);
 
 			// Graph should receive update

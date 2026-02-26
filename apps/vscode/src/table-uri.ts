@@ -54,8 +54,7 @@ export function createTableUri(
 	const defParam = definitionUri ? btoa(definitionUri) : undefined;
 
 	// Build query string
-	const query =
-		`table=${tableParam}` + (defParam ? `&definition=${defParam}` : "");
+	const query = `table=${tableParam}${defParam ? `&definition=${defParam}` : ""}`;
 
 	// Create URI with query parameters
 	// Use with() to add query parameters to the file URI

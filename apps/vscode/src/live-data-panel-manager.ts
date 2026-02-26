@@ -80,8 +80,9 @@ export class LiveDataPanelManager {
 					pids,
 				});
 			}
-		} catch (error: any) {
-			vscode.window.showErrorMessage(`Failed to connect: ${error.message}`);
+		} catch (error: unknown) {
+			const message = error instanceof Error ? error.message : String(error);
+			vscode.window.showErrorMessage(`Failed to connect: ${message}`);
 		}
 	}
 

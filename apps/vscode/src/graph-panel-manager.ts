@@ -18,6 +18,14 @@ import type { RomDocument } from "./rom/document";
 import { getThemeColors, type ThemeColors } from "./theme-colors";
 
 /**
+ * Message from graph webview
+ */
+type WebviewMessage =
+	| { type: "ready" }
+	| { type: "cellSelect"; row: number; col: number }
+	| { type: "selectionChange"; selection: { row: number; col: number } | null };
+
+/**
  * Context information for a graph panel
  */
 interface PanelContext {
@@ -55,7 +63,7 @@ export class GraphPanelManager {
 		public onSelectionChange?: (
 			romPath: string,
 			tableId: string,
-			selection: any,
+			selection: { row: number; col: number } | null,
 		) => void,
 	) {}
 
@@ -65,7 +73,7 @@ export class GraphPanelManager {
 	handleExternalSelectionChange(
 		romPath: string,
 		tableId: string,
-		selection: any,
+		selection: { row: number; col: number } | null,
 	) {
 		const panel = this.panels.get(romPath)?.get(tableId);
 		if (panel) {
@@ -303,7 +311,10 @@ export class GraphPanelManager {
 	/**
 	 * Handle message from graph panel
 	 */
-	private handleMessage(panel: vscode.WebviewPanel, message: any): void {
+	private handleMessage(
+		panel: vscode.WebviewPanel,
+		message: WebviewMessage,
+	): void {
 		const context = this.panelContext.get(panel);
 		if (!context) return;
 

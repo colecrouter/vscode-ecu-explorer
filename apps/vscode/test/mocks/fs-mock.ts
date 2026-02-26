@@ -38,7 +38,7 @@ export function createMockFileSystem() {
 			await writeFile(path, data);
 		},
 		listFiles: (directory: string) => {
-			const prefix = directory.endsWith("/") ? directory : directory + "/";
+			const prefix = directory.endsWith("/") ? directory : `${directory}/`;
 			return Array.from(files.keys()).filter((path) => path.startsWith(prefix));
 		},
 		_files: files,

@@ -13,15 +13,15 @@ vi.mock("vscode", async () => {
 	// Add proposed/newer APIs not included in jest-mock-vscode
 	// vscode.lm — Language Model / MCP APIs (used by mcp-provider.ts)
 	const mockAsAny = mock as Record<string, unknown>;
-	mockAsAny["lm"] = {
+	mockAsAny.lm = {
 		registerMcpServerDefinitionProvider: vi
 			.fn()
 			.mockReturnValue({ dispose: vi.fn() }),
 	};
 
 	// vscode.RelativePattern — used by per-document file watchers
-	if (!mockAsAny["RelativePattern"]) {
-		mockAsAny["RelativePattern"] = class RelativePattern {
+	if (!mockAsAny.RelativePattern) {
+		mockAsAny.RelativePattern = class RelativePattern {
 			base: import("vscode").Uri | import("vscode").WorkspaceFolder;
 			pattern: string;
 			constructor(

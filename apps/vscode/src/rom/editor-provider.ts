@@ -151,7 +151,7 @@ export class RomEditorProvider
 	handleExternalSelectionChange(
 		romPath: string,
 		tableId: string,
-		selection: any,
+		selection: { row: number; col: number } | null,
 	) {
 		// Find the document for this ROM
 		for (const [_uri, doc] of this.documents.entries()) {
@@ -647,11 +647,7 @@ export class RomEditorProvider
 			.split("/")
 			.slice(0, -1)
 			.join("/");
-		try {
-			await vscode.workspace.fs.createDirectory(vscode.Uri.file(backupDir));
-		} catch (error) {
-			throw error;
-		}
+		await vscode.workspace.fs.createDirectory(vscode.Uri.file(backupDir));
 
 		// Write backup to temporary location
 		await vscode.workspace.fs.writeFile(context.destination, document.romBytes);
