@@ -139,7 +139,13 @@ export class DeviceManagerImpl implements DeviceManager {
 			if (!selected) {
 				throw new Error("Device selection cancelled by user");
 			}
-			selectedDevice = devices[selected.index]!;
+			const device = devices[selected.index];
+			if (!device) {
+				throw new Error(
+					"Selected device index is out of bounds for device list",
+				);
+			}
+			selectedDevice = device;
 		}
 
 		if (!selectedDevice) {

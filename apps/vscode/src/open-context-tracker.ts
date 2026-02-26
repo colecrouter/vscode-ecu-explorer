@@ -6,6 +6,7 @@
  * `ecu-explorer://context/open-documents` MCP resource.
  */
 
+import type { TableDefinition } from "@ecu-explorer/core";
 import type * as vscode from "vscode";
 import type { RomDocument } from "./rom/document.js";
 import type { TableDocument } from "./table-document.js";
@@ -257,7 +258,10 @@ export class OpenContextTracker {
 	/**
 	 * Get table dimensions from table definition
 	 */
-	private getTableDimensions(tableDef: any): { rows: number; cols: number } {
+	private getTableDimensions(tableDef: TableDefinition): {
+		rows: number;
+		cols: number;
+	} {
 		if (tableDef.kind === "table1d") {
 			return { rows: tableDef.rows, cols: 1 };
 		}

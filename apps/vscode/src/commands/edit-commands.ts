@@ -376,23 +376,3 @@ export async function handleMathOpSmooth(): Promise<void> {
 		boundaryMode: boundaryMode.value,
 	});
 }
-
-/**
- * Get size of scalar type in bytes
- */
-function sizeOf(dtype: string): number {
-	switch (dtype) {
-		case "u8":
-		case "i8":
-			return 1;
-		case "u16":
-		case "i16":
-			return 2;
-		case "u32":
-		case "i32":
-		case "f32":
-			return 4;
-		default:
-			return 4;
-	}
-}

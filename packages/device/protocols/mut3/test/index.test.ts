@@ -1,4 +1,8 @@
-import type { DeviceConnection, DeviceInfo, LiveDataFrame } from "@ecu-explorer/device";
+import type {
+	DeviceConnection,
+	DeviceInfo,
+	LiveDataFrame,
+} from "@ecu-explorer/device";
 import { describe, expect, it, vi } from "vitest";
 import {
 	buildRaxPidDescriptors,
