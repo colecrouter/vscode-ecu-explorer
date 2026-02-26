@@ -49,7 +49,7 @@ describe("table-fs-uri", () => {
 	describe("parseTableUri", () => {
 		it("parses a valid table URI", () => {
 			const romPath = "/Users/test/rom.hex";
-			const uri = vscode.Uri.parse(`ecu-table://${romPath}/Fuel%20Map`);
+			const uri = vscode.Uri.parse(`ecu-table://${romPath}?table=Fuel%20Map`);
 			const parsed = parseTableUri(uri);
 
 			expect(parsed).not.toBeNull();
@@ -59,12 +59,29 @@ describe("table-fs-uri", () => {
 
 		it("decodes URL-encoded table names", () => {
 			const uri = vscode.Uri.parse(
-				"ecu-table:///test/rom.hex/Fuel%20Map%20(High%20Octane)",
+				"ecu-table:///test/rom.hex?table=Fuel%20Map%20(High%20Octane)",
 			);
 			const parsed = parseTableUri(uri);
 
 			expect(parsed).not.toBeNull();
 			expect(parsed?.tableName).toBe("Fuel Map (High Octane)");
+		});
+
+		it("supports table names containing slash", () => {
+			const tableName = "Fuel/Timing Blend";
+			const uri = createTableUri("/test/rom.hex", tableName);
+			const parsed = parseTableUri(uri);
+
+			expect(parsed).not.toBeNull();
+			expect(parsed?.tableName).toBe(tableName);
+		});
+
+		it("parses legacy path-based URI format", () => {
+			const uri = vscode.Uri.parse("ecu-table:///test/rom.hex/Fuel%20Map");
+			const parsed = parseTableUri(uri);
+
+			expect(parsed).not.toBeNull();
+			expect(parsed?.tableName).toBe("Fuel Map");
 		});
 
 		it("returns null for non-table URI", () => {
