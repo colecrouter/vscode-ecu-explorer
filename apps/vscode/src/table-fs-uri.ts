@@ -59,15 +59,9 @@ export function createTableUri(romPath: string, tableName: string): vscode.Uri {
 		throw new Error("Table name is required");
 	}
 
-	// Ensure ROM path is absolute
-	const absolutePath = new URL(romPath, import.meta.url).pathname;
-
-	// Construct URI path: /rom/path
-	// Use forward slashes for the URI path regardless of platform
-	const normalizedAbsolutePath = absolutePath.replace(/\\/g, "/");
-	const uriPath = normalizedAbsolutePath.startsWith("/")
-		? normalizedAbsolutePath
-		: `/${normalizedAbsolutePath}`;
+	// Convert filesystem path to URI path using VSCode semantics.
+	// This preserves Windows drive paths (e.g. E:\\foo\\bar.hex) without URL rebasing.
+	const uriPath = vscode.Uri.file(romPath).path;
 
 	// Store table name in query so reserved path chars (e.g. '/') remain intact
 	const query = `table=${encodeURIComponent(tableName)}`;
@@ -114,7 +108,7 @@ export function parseTableUri(uri: vscode.Uri): TableUri | null {
 
 		// Newer format (display-friendly): /path/to/rom.hex/<tableName>?table=<...>
 		// Older query format: /path/to/rom.hex?table=<...>
-		let romPath = uri.path;
+		let romUriPath = uri.path;
 		const lastSlash = uri.path.lastIndexOf("/");
 		if (lastSlash > 0) {
 			const trailingSegment = uri.path.substring(lastSlash + 1);
@@ -126,12 +120,17 @@ export function parseTableUri(uri: vscode.Uri): TableUri | null {
 			}
 
 			if (decodedTrailingSegment === tableName) {
-				romPath = uri.path.substring(0, lastSlash);
+				romUriPath = uri.path.substring(0, lastSlash);
 			}
 		}
-		if (!romPath || !tableName) {
+		if (!romUriPath || !tableName) {
 			return null;
 		}
+
+		const romPath = vscode.Uri.from({
+			scheme: "file",
+			path: romUriPath,
+		}).fsPath;
 
 		return { romPath, tableName };
 	}
@@ -142,7 +141,7 @@ export function parseTableUri(uri: vscode.Uri): TableUri | null {
 		return null;
 	}
 
-	const romPath = uri.path.substring(0, lastSlash);
+	const romUriPath = uri.path.substring(0, lastSlash);
 	const encodedTableName = uri.path.substring(lastSlash + 1);
 
 	// Decode table name
@@ -155,9 +154,11 @@ export function parseTableUri(uri: vscode.Uri): TableUri | null {
 	}
 
 	// Validate decoded values
-	if (!romPath || !tableName) {
+	if (!romUriPath || !tableName) {
 		return null;
 	}
+
+	const romPath = vscode.Uri.from({ scheme: "file", path: romUriPath }).fsPath;
 
 	return { romPath, tableName };
 }

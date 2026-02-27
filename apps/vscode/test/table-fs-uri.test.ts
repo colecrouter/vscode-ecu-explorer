@@ -35,6 +35,15 @@ describe("table-fs-uri", () => {
 			expect(uri.toString()).toContain("Boost%20Target");
 		});
 
+		it("preserves Windows absolute ROM paths without rebasing", () => {
+			const romPath = "E:\\ROM\\test.hex";
+			const uri = createTableUri(romPath, "Fuel Map");
+
+			expect(uri.scheme).toBe("ecu-table");
+			expect(uri.path).toContain(vscode.Uri.file(romPath).path);
+			expect(uri.toString()).not.toContain("/apps/vscode/");
+		});
+
 		it("throws error if ROM path is empty", () => {
 			expect(() => createTableUri("", "Table")).toThrow("ROM path is required");
 		});
@@ -133,6 +142,18 @@ describe("table-fs-uri", () => {
 			const parsed = parseTableUri(uri);
 
 			expect(parsed).not.toBeNull();
+			expect(parsed?.tableName).toBe(tableName);
+		});
+
+		it("round-trips Windows drive paths", () => {
+			const romPath = "E:\\ROM\\test.hex";
+			const tableName = "Fuel Map";
+
+			const uri = createTableUri(romPath, tableName);
+			const parsed = parseTableUri(uri);
+
+			expect(parsed).not.toBeNull();
+			expect(parsed?.romPath).toBe(vscode.Uri.file(romPath).fsPath);
 			expect(parsed?.tableName).toBe(tableName);
 		});
 	});
