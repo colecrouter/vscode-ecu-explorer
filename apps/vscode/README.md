@@ -189,6 +189,12 @@ ECU Explorer searches for ROM definitions in:
 
 *Command palette filtered to ECU Explorer commands*
 
+### Theme-Adaptive Table UI
+
+![Theme-Adaptive Table UI](assets/6.png)
+
+*Table views and related UI elements automatically adapt to your active VS Code/IDE theme for a consistent editing experience.*
+
 ---
 
 ## Supported Hardware
