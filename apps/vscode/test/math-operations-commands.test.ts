@@ -1,10 +1,19 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeAll,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vitest";
 import * as vscode from "vscode";
 import {
 	type EditOperation,
 	isBatchEdit,
 	UndoRedoManager,
 } from "../src/undo-redo-manager";
+import { WorkspaceState } from "../src/workspace-state";
 
 // Mock fs module to avoid file system operations
 vi.mock("node:fs/promises", () => ({
@@ -76,6 +85,20 @@ describe("Math Operations Commands", () => {
 		await activate(mockContext as any);
 	});
 	describe("Command Registration", () => {
+		it("should register ecuExplorer.clearDefinitionCache command", async () => {
+			expect(vscode.commands.registerCommand).toHaveBeenCalledWith(
+				"ecuExplorer.clearDefinitionCache",
+				expect.any(Function),
+			);
+		});
+
+		it("should register ecuExplorer.clearDefinitionCacheForActiveRom command", async () => {
+			expect(vscode.commands.registerCommand).toHaveBeenCalledWith(
+				"ecuExplorer.clearDefinitionCacheForActiveRom",
+				expect.any(Function),
+			);
+		});
+
 		it("should register rom.mathOpAdd command", async () => {
 			expect(vscode.commands.registerCommand).toHaveBeenCalledWith(
 				"rom.mathOpAdd",
@@ -102,6 +125,99 @@ describe("Math Operations Commands", () => {
 				"rom.mathOpSmooth",
 				expect.any(Function),
 			);
+		});
+	});
+
+	describe("Definition Cache Clear Commands", () => {
+		afterEach(() => {
+			vi.restoreAllMocks();
+		});
+
+		function getRegisteredHandler(commandId: string): (...args: any[]) => any {
+			const registerCalls = (vscode.commands.registerCommand as any).mock.calls;
+			const match = registerCalls.find((call: any[]) => call[0] === commandId);
+			if (!match) {
+				throw new Error(`Command not registered: ${commandId}`);
+			}
+			return match[1];
+		}
+
+		it("clears all cached state for ecuExplorer.clearDefinitionCache", async () => {
+			const clearAllSpy = vi.spyOn(WorkspaceState.prototype, "clearAll");
+			const infoSpy = vi.spyOn(vscode.window, "showInformationMessage");
+			const handler = getRegisteredHandler("ecuExplorer.clearDefinitionCache");
+
+			await handler();
+
+			expect(clearAllSpy).toHaveBeenCalledTimes(1);
+			expect(infoSpy).toHaveBeenCalledWith(
+				"Cleared all cached ROM definition mappings for this workspace.",
+			);
+
+			clearAllSpy.mockRestore();
+			infoSpy.mockRestore();
+		});
+
+		it("clears active ROM cached state for ecuExplorer.clearDefinitionCacheForActiveRom", async () => {
+			const activeTabGroupSpy = vi
+				.spyOn(vscode.window.tabGroups, "activeTabGroup", "get")
+				.mockReturnValue({
+					activeTab: {
+						input: {
+							uri: vscode.Uri.file("/test/active.rom"),
+						},
+					},
+				} as any);
+
+			const clearRomStateSpy = vi.spyOn(
+				WorkspaceState.prototype,
+				"clearRomState",
+			);
+			const infoSpy = vi.spyOn(vscode.window, "showInformationMessage");
+			const handler = getRegisteredHandler(
+				"ecuExplorer.clearDefinitionCacheForActiveRom",
+			);
+
+			await handler();
+
+			expect(clearRomStateSpy).toHaveBeenCalledWith(
+				expect.stringMatching(/[\\/]test[\\/]active\.rom$/),
+			);
+			expect(infoSpy).toHaveBeenCalledWith(
+				expect.stringMatching(
+					/^Cleared cached ROM definition mapping for: .*active\.rom$/,
+				),
+			);
+
+			activeTabGroupSpy.mockRestore();
+			clearRomStateSpy.mockRestore();
+			infoSpy.mockRestore();
+		});
+
+		it("shows warning when there is no active ROM for targeted clear", async () => {
+			const activeTabGroupSpy = vi
+				.spyOn(vscode.window.tabGroups, "activeTabGroup", "get")
+				.mockReturnValue({ activeTab: undefined } as any);
+
+			const clearRomStateSpy = vi.spyOn(
+				WorkspaceState.prototype,
+				"clearRomState",
+			);
+			const warningSpy = vi.spyOn(vscode.window, "showWarningMessage");
+			const handler = getRegisteredHandler(
+				"ecuExplorer.clearDefinitionCacheForActiveRom",
+			);
+
+			await handler();
+
+			expect(clearRomStateSpy).not.toHaveBeenCalled();
+			expect(warningSpy).toHaveBeenCalledWith(
+				"No active ROM found to clear definition cache.",
+			);
+
+			activeTabGroupSpy.mockRestore();
+			clearRomStateSpy.mockRestore();
+			warningSpy.mockRestore();
 		});
 	});
 
