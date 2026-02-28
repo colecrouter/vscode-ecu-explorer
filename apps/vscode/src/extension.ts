@@ -73,6 +73,23 @@ let deviceManager: DeviceManagerImpl | null = null;
 let editorProvider: RomEditorProvider | null = null; // Will be set during activation
 let workspaceState: WorkspaceState | null = null; // Workspace state manager
 
+function getActiveRomPathForCacheClear(): string | null {
+	if (activeRom) {
+		return vscode.Uri.parse(activeRom.romUri).fsPath;
+	}
+
+	const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab as
+		| { input?: { uri?: vscode.Uri } }
+		| undefined;
+	const activeUri = activeTab?.input?.uri;
+
+	if (activeUri?.scheme === "file") {
+		return activeUri.fsPath;
+	}
+
+	return null;
+}
+
 /**
  * Manages selection synchronization across different panels for the same ROM.
  */
@@ -450,6 +467,39 @@ export async function activate(ctx: vscode.ExtensionContext) {
 	ctx.subscriptions.push(
 		vscode.commands.registerCommand("rom.open", () => openRomFlow(ctx)),
 		vscode.commands.registerCommand("rom.openTable", () => openTableFlow(ctx)),
+		vscode.commands.registerCommand("ecuExplorer.clearDefinitionCache", () => {
+			if (!workspaceState) {
+				vscode.window.showErrorMessage("Workspace state not initialized.");
+				return;
+			}
+
+			workspaceState.clearAll();
+			vscode.window.showInformationMessage(
+				"Cleared all cached ROM definition mappings for this workspace.",
+			);
+		}),
+		vscode.commands.registerCommand(
+			"ecuExplorer.clearDefinitionCacheForActiveRom",
+			() => {
+				if (!workspaceState) {
+					vscode.window.showErrorMessage("Workspace state not initialized.");
+					return;
+				}
+
+				const romPath = getActiveRomPathForCacheClear();
+				if (!romPath) {
+					vscode.window.showWarningMessage(
+						"No active ROM found to clear definition cache.",
+					);
+					return;
+				}
+
+				workspaceState.clearRomState(romPath);
+				vscode.window.showInformationMessage(
+					`Cleared cached ROM definition mapping for: ${romPath}`,
+				);
+			},
+		),
 		vscode.commands.registerCommand(
 			"ecuExplorer.openTable",
 			async (romUriOrTreeItem: string | RomTreeItem, tableName?: string) => {

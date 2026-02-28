@@ -99,6 +99,16 @@
 				"category": "ECU Explorer"
 			},
 			{
+				"command": "ecuExplorer.clearDefinitionCache",
+				"title": "Clear Definition Cache (All ROMs)",
+				"category": "ECU Explorer"
+			},
+			{
+				"command": "ecuExplorer.clearDefinitionCacheForActiveRom",
+				"title": "Clear Definition Cache (Active ROM)",
+				"category": "ECU Explorer"
+			},
+			{
 				"command": "ecuExplorer.removeRom",
 				"title": "Remove ROM from Explorer",
 				"category": "ECU Explorer",

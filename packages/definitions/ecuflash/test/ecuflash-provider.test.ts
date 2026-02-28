@@ -1,11 +1,158 @@
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { snapshotTable } from "@ecu-explorer/core";
 import { describe, expect, it } from "vitest";
 import { EcuFlashProvider } from "../src/index";
 
+function getProcessEnv(): Record<string, string | undefined> | undefined {
+	return (
+		globalThis as { process?: { env?: Record<string, string | undefined> } }
+	).process?.env;
+}
+
+function setProgramFilesX86(value: string): string | undefined {
+	const env = getProcessEnv();
+	if (!env) return undefined;
+	const previous = env["ProgramFiles(x86)"];
+	env["ProgramFiles(x86)"] = value;
+	return previous;
+}
+
+function restoreProgramFilesX86(previous: string | undefined): void {
+	const env = getProcessEnv();
+	if (!env) return;
+	if (previous === undefined) {
+		delete env["ProgramFiles(x86)"];
+		return;
+	}
+	env["ProgramFiles(x86)"] = previous;
+}
+
+const testDir = path.dirname(fileURLToPath(import.meta.url));
+const validFixtureDir = path.join(testDir, "fixtures", "valid-xml");
+const invalidFixtureDir = path.join(testDir, "fixtures", "invalid-xml");
+
 describe("EcuFlashProvider", () => {
+	it("resolves include token by xmlid with real fixture files when include filename differs", async () => {
+		const provider = new EcuFlashProvider([validFixtureDir]);
+		const topLevelPath = path.join(
+			validFixtureDir,
+			"xmlid-include-chain",
+			"TephraMOD-56890313.xml",
+		);
+
+		const def = await provider.parse(pathToFileURL(topLevelPath).toString());
+		const t = def.tables.find(
+			(x) => x.name === "Boost Target Engine Load #1A (High Gear Range)",
+		);
+
+		expect(t).toBeTruthy();
+		expect(t?.kind).toBe("table2d");
+		if (!t || t.kind !== "table2d") throw new Error("expected table2d");
+		expect(t.cols).toBe(9);
+		expect(t.rows).toBe(18);
+		expect(t.x?.kind).toBe("dynamic");
+		expect(t.y?.kind).toBe("dynamic");
+	});
+
+	it("loads recursive include chain from disk fixtures and inherits scaling units for x/y/z", async () => {
+		const provider = new EcuFlashProvider([validFixtureDir]);
+		const topLevelPath = path.join(
+			validFixtureDir,
+			"xmlid-include-chain",
+			"TephraMOD-56890313.xml",
+		);
+
+		const def = await provider.parse(pathToFileURL(topLevelPath).toString());
+		const t = def.tables.find(
+			(x) => x.name === "Boost Target Engine Load #1A (High Gear Range)",
+		);
+
+		expect(t).toBeTruthy();
+		expect(t?.kind).toBe("table2d");
+		if (!t || t.kind !== "table2d") throw new Error("expected table2d");
+
+		expect(t.z.unit?.symbol).toBe("psia");
+		expect(t.x?.kind).toBe("dynamic");
+		if (t.x?.kind === "dynamic") {
+			expect(t.x.unit?.symbol).toBe("%");
+		}
+		expect(t.y?.kind).toBe("dynamic");
+		if (t.y?.kind === "dynamic") {
+			expect(t.y.unit?.symbol).toBe("RPM");
+		}
+	});
+
+	it("throws descriptive error for missing include using repository fixture file", async () => {
+		const provider = new EcuFlashProvider([invalidFixtureDir]);
+		const romXmlPath = path.join(
+			invalidFixtureDir,
+			"xmlid-include-chain-missing-include.xml",
+		);
+
+		let thrown: Error | undefined;
+		try {
+			await provider.parse(pathToFileURL(romXmlPath).toString());
+		} catch (error) {
+			thrown = error as Error;
+		}
+
+		expect(thrown).toBeTruthy();
+		expect(thrown?.message).toContain('include "does-not-exist"');
+		expect(thrown?.message).toContain(path.resolve(romXmlPath));
+		expect(thrown?.message).toContain("Searched roots:");
+		expect(thrown?.message).toContain("Attempted xmlid lookup");
+	});
+
+	it("handles include cycles without infinite loop", async () => {
+		const provider = new EcuFlashProvider();
+
+		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "ecuflash-cycle-"));
+		try {
+			const aXmlPath = path.join(tmpDir, "A.xml");
+			const bXmlPath = path.join(tmpDir, "B.xml");
+
+			const aXml = `<?xml version="1.0"?>
+<rom>
+	<romid>
+		<xmlid>A</xmlid>
+		<internalidaddress>0</internalidaddress>
+		<internalidhex>AAAAAAAA</internalidhex>
+	</romid>
+	<include>B</include>
+	<scaling name="ScaleA" units="raw" toexpr="x" storagetype="uint8" endian="big" />
+	<table name="Cycle Table" address="1234" type="1D" scaling="ScaleA" />
+</rom>
+`;
+
+			const bXml = `<?xml version="1.0"?>
+<rom>
+	<romid>
+		<xmlid>B</xmlid>
+		<internalidaddress>0</internalidaddress>
+	</romid>
+	<include>A</include>
+</rom>
+`;
+
+			await fs.writeFile(aXmlPath, aXml, "utf8");
+			await fs.writeFile(bXmlPath, bXml, "utf8");
+
+			const defUri = pathToFileURL(aXmlPath).toString();
+			const def = await provider.parse(defUri);
+			const t = def.tables.find((x) => x.name === "Cycle Table");
+
+			expect(t).toBeTruthy();
+			expect(t?.kind).toBe("table1d");
+			if (!t || t.kind !== "table1d") throw new Error("expected table1d");
+			expect(t.z.scale).toBe(1);
+		} finally {
+			await fs.rm(tmpDir, { recursive: true, force: true });
+		}
+	});
+
 	it("parses included scalings + honors swapxy for Boost Target Engine Load #1A", async () => {
 		const provider = new EcuFlashProvider();
 
@@ -804,6 +951,172 @@ describe("EcuFlashProvider", () => {
 			if (t.x?.kind === "dynamic") {
 				expect(t.x.unit?.symbol).toBe("%");
 			}
+		} finally {
+			await fs.rm(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it("uses u16 big-endian for dynamic axes when named scaling is unresolved", async () => {
+		const provider = new EcuFlashProvider();
+
+		const tmpDir = await fs.mkdtemp(
+			path.join(os.tmpdir(), "ecuflash-axis-dtype-"),
+		);
+		try {
+			const baseXmlPath = path.join(tmpDir, "56890013.xml");
+			const romXmlPath = path.join(tmpDir, "user-case.xml");
+
+			// Intentionally omit the axis scaling names referenced by template axes.
+			const baseXml = `<?xml version="1.0"?>
+<rom>
+	<romid>
+		<xmlid>56890013</xmlid>
+		<internalidaddress>0</internalidaddress>
+	</romid>
+	<scaling name="BoostTarget" units="psi" toexpr="x" storagetype="uint8" endian="big" />
+	<table name="Alternate #1 Boost Target #1 (High Gear Range)" type="3D" scaling="BoostTarget">
+		<table name="X Axis" type="X Axis" elements="9" scaling="Throttle_Main - Stored Minimum Throttle %" />
+		<table name="Y Axis" type="Y Axis" elements="18" scaling="RPM" />
+	</table>
+</rom>
+`;
+
+			const romXml = `<?xml version="1.0"?>
+<rom>
+	<romid>
+		<xmlid>user-case</xmlid>
+		<internalidaddress>5002a</internalidaddress>
+		<internalidhex>56890013</internalidhex>
+	</romid>
+	<include>56890013</include>
+	<table name="Alternate #1 Boost Target #1 (High Gear Range)" address="58EF1" scaling="BoostTarget">
+		<table name="X Axis" address="63020" />
+		<table name="Y Axis" address="62F9E" />
+	</table>
+</rom>
+`;
+
+			await fs.writeFile(baseXmlPath, baseXml, "utf8");
+			await fs.writeFile(romXmlPath, romXml, "utf8");
+
+			const defUri = pathToFileURL(romXmlPath).toString();
+			const def = await provider.parse(defUri);
+
+			const t = def.tables.find(
+				(x) => x.name === "Alternate #1 Boost Target #1 (High Gear Range)",
+			);
+			expect(t).toBeTruthy();
+			expect(t?.kind).toBe("table2d");
+			if (!t || t.kind !== "table2d") throw new Error("expected table2d");
+
+			expect(t.x?.kind).toBe("dynamic");
+			if (t.x?.kind === "dynamic") {
+				// Unresolved named scaling on dynamic axis defaults to u16 big-endian.
+				expect(t.x.dtype).toBe("u16");
+				expect(t.x.endianness).toBe("be");
+			}
+
+			expect(t.y?.kind).toBe("dynamic");
+			if (t.y?.kind === "dynamic") {
+				// Unresolved named scaling on dynamic axis defaults to u16 big-endian.
+				expect(t.y.dtype).toBe("u16");
+				expect(t.y.endianness).toBe("be");
+			}
+		} finally {
+			await fs.rm(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it("regression: inline 3D swapxy table keeps distinct 9x18 axes and non-striped Z decode", async () => {
+		const provider = new EcuFlashProvider();
+
+		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "ecuflash-swapxy-"));
+		try {
+			const romXmlPath = path.join(tmpDir, "inline-swapxy.xml");
+
+			const romXml = `<?xml version="1.0"?>
+<rom>
+	<romid>
+		<xmlid>inline-swapxy</xmlid>
+		<internalidaddress>0</internalidaddress>
+		<internalidhex>ABCD1234</internalidhex>
+	</romid>
+	<scaling name="psia8" units="psia" toexpr="x" storagetype="uint8" endian="big" />
+	<scaling name="Throttle_Main - Stored Minimum Throttle %" units="%" toexpr="x" storagetype="uint16" endian="big" />
+	<scaling name="RPM" units="RPM" toexpr="x" storagetype="uint16" endian="big" />
+	<table name="Alternate #1 Boost Target #1 (High Gear Range)" address="100" type="3D" swapxy="true" scaling="psia8">
+		<table name="Throttle" type="X Axis" address="200" elements="9" scaling="Throttle_Main - Stored Minimum Throttle %" />
+		<table name="RPM" type="Y Axis" address="300" elements="18" scaling="RPM" />
+	</table>
+</rom>
+`;
+
+			await fs.writeFile(romXmlPath, romXml, "utf8");
+
+			const defUri = pathToFileURL(romXmlPath).toString();
+			const def = await provider.parse(defUri);
+			const t = def.tables.find(
+				(x) => x.name === "Alternate #1 Boost Target #1 (High Gear Range)",
+			);
+			expect(t).toBeTruthy();
+			expect(t?.kind).toBe("table2d");
+			if (!t || t.kind !== "table2d") throw new Error("expected table2d");
+
+			// swapxy=true should keep axes distinct and dimensions as rows=Y, cols=X.
+			expect(t.cols).toBe(9);
+			expect(t.rows).toBe(18);
+			expect(t.z.rowStrideBytes).toBe(1);
+			expect(t.z.colStrideBytes).toBe(18);
+
+			expect(t.x?.kind).toBe("dynamic");
+			if (t.x?.kind === "dynamic") {
+				expect(t.x.length).toBe(9);
+			}
+			expect(t.y?.kind).toBe("dynamic");
+			if (t.y?.kind === "dynamic") {
+				expect(t.y.length).toBe(18);
+			}
+
+			const rom = new Uint8Array(1024);
+
+			// X axis (u16 BE): 0,10,20,...,80
+			for (let i = 0; i < 9; i++) {
+				const v = i * 10;
+				rom[0x200 + i * 2] = (v >> 8) & 0xff;
+				rom[0x200 + i * 2 + 1] = v & 0xff;
+			}
+
+			// Y axis (u16 BE): 500,1000,...,9000
+			for (let i = 0; i < 18; i++) {
+				const v = (i + 1) * 500;
+				rom[0x300 + i * 2] = (v >> 8) & 0xff;
+				rom[0x300 + i * 2 + 1] = v & 0xff;
+			}
+
+			// Z body (u8), written in column-major layout for swapxy tables.
+			for (let c = 0; c < 9; c++) {
+				for (let r = 0; r < 18; r++) {
+					rom[0x100 + c * 18 + r] = r * 10 + c;
+				}
+			}
+
+			const snap = snapshotTable(t, rom);
+			expect(snap.kind).toBe("table2d");
+			if (snap.kind !== "table2d") throw new Error("expected table2d");
+
+			// Distinct axis sets and correct lengths (not mirrored/collapsed).
+			expect(snap.x?.length).toBe(9);
+			expect(snap.y?.length).toBe(18);
+			expect(snap.x?.[1]).toBe(10);
+			expect(snap.y?.[1]).toBe(1000);
+
+			// Non-striped decode: matrix matches source row/col intent.
+			expect(snap.z).toHaveLength(18);
+			expect(snap.z[0]).toHaveLength(9);
+			expect(snap.z[0]?.[0]).toBe(0);
+			expect(snap.z[0]?.[1]).toBe(1);
+			expect(snap.z[1]?.[0]).toBe(10);
+			expect(snap.z[17]?.[8]).toBe(178);
 		} finally {
 			await fs.rm(tmpDir, { recursive: true, force: true });
 		}

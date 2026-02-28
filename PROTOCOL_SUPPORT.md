@@ -17,7 +17,9 @@ Comprehensive reference for vehicle support, protocol capabilities, and paramete
 | **Nissan (modern CAN)** | NCS CAN | ❌ | ❌ | ❌ | CAN (future) | Checksums implemented; protocols pending |
 | **Any OBD-II Vehicle** | ISO 14229-1 | ❌ | ❌ | ✅ | CAN 500kbps | 8 standard PIDs only |
 
-**Legend**: ✅ = Complete, ⏳ = In Progress, ❌ = Not Implemented, ❌* = Blocked on security key, ❌** = Requires K-line hardware
+**Footnotes**:
+- ❌* = Blocked on security key (MUT-III write-session algorithm unknown)
+- ❌** = Requires K-line hardware (parameter streaming not yet available over CAN)
 
 ---
 
@@ -148,32 +150,48 @@ Comprehensive reference for vehicle support, protocol capabilities, and paramete
 
 ### Older ECUs – NCS K-Line Protocol
 
-**Status**: ❌ Not Started  
+**Status**: ❌ Not Started (Protocol Layer)  
 **Priority**: Medium (community demand)
+
+#### Implementation Status Summary
+
+| Component | Status | Details |
+|-----------|--------|---------|
+| **Checksum Algorithms** | ✅ Complete | 5 algorithms implemented and tested |
+| **K-Line Transport** | ⏳ In Progress | Shared with Subaru; Phase 2 development |
+| **NCS Protocol Layer** | ❌ Not Implemented | Awaits K-line transport completion |
+| **ROM Read/Write** | ❌ Not Implemented | Blocked on protocol layer |
+| **Real-Time Logging** | ❌ Not Implemented | Blocked on protocol layer |
 
 #### Implemented Checksum Algorithms
 
-| Algorithm | Type | Status |
-|-----------|------|--------|
-| **nissan-std** | ROM checksum | ✅ Complete |
-| **nissan-alt** | ROM checksum alt | ✅ Complete |
-| **nissan-alt2** | Extended ROM checksum | ✅ Complete |
-| **ncsChecksum** | K-line byte sum | ✅ Complete |
-| **ncsCrc16** | CRC-16/IBM-SDLC | ✅ Complete |
+| Algorithm | Type | Status | Details |
+|-----------|------|--------|---------|
+| **nissan-std** | ROM checksum | ✅ Complete | Standard Nissan ROM checksum |
+| **nissan-alt** | ROM checksum alt | ✅ Complete | Alternative ROM checksum variant |
+| **nissan-alt2** | Extended ROM checksum | ✅ Complete | Extended ROM checksum variant |
+| **ncsChecksum** | K-line byte sum | ✅ Complete | K-line packet frame checksum |
+| **ncsCrc16** | CRC-16/IBM-SDLC | ✅ Complete | Data block CRC validation |
 
 **See also**: [`NISSAN_CHECKSUM_ANALYSIS.md`](NISSAN_CHECKSUM_ANALYSIS.md)
 
-#### Blockers
+#### Blockers & Classification
 
-- ❌ K-line transport not implemented
-- ❌ NCS protocol layer not implemented
-- ❌ Seed-key algorithm unknown
+- ⏳ **K-line transport not implemented** — Classification: ⏳ In Progress (shared with Subaru)
+  - **Why Not Applicable**: K-line is required for NCS protocol; cannot proceed without it
+  
+- ❌ **NCS protocol layer not implemented** — Classification: ❌ Not Implemented (blocked on K-line)
+  - **Blocker**: K-line transport must be completed first
+  
+- ❌ **Seed-key algorithm unknown** — Classification: ❌ Not Implemented (research needed)
+  - **Why Not Applicable**: Seed-key algorithm is specific to Nissan ECUs; requires reverse engineering or documentation
 
 #### Implementation Path
 
-1. Implement K-line transport abstraction (shared with Subaru)
-2. Implement NCS protocol layer (ROM read/write)
-3. Add parameter registry if real-time logging desired
+1. ⏳ Implement K-line transport abstraction (shared with Subaru) — Phase 2 in progress
+2. ❌ Implement NCS protocol layer (ROM read/write) — Awaits K-line completion
+3. ❌ Reverse engineer or document seed-key algorithm — Research phase
+4. ❌ Add parameter registry if real-time logging desired — Post-protocol implementation
 
 ---
 
@@ -277,32 +295,54 @@ See **[TRANSPORT_LAYERS.md](TRANSPORT_LAYERS.md)** for detailed hardware specifi
 
 ### Mitsubishi EVO X (MUT-III)
 
-- ❌ **ROM Write Blocked**: Write-session security key algorithm unknown
-  - **Workaround**: Use Bootloader method (0x55 handshake)
+- ❌ **ROM Write via MUT-III (UDS)**: Write-session security key algorithm unknown
+  - **Classification**: ❌ Not Implemented (blocked on research)
+  - **Workaround**: Use Bootloader method (0x55 handshake) — ✅ Fully functional
+  - **Why Not Applicable**: MUT-III write is not applicable when Bootloader method is available and superior
   - **Progress**: See [`MITSUCAN_WRITE_RESEARCH_PLAN.md`](MITSUCAN_WRITE_RESEARCH_PLAN.md)
 
-- ⏳ **Real-Time Logging**: Requires K-line transport (CAN only for now)
-  - **Status**: Infrastructure ready; awaiting K-line hardware testing
+- ⏳ **Real-Time Logging (RAX Parameters)**: Requires K-line transport
+  - **Classification**: ⏳ In Progress (K-line Phase 2)
+  - **Current Status**: Infrastructure ready; parameter catalog complete (48 RAX parameters defined)
+  - **Blocker**: K-line transport layer not yet implemented; CAN cannot stream RAX data
+  - **Why Not Applicable**: RAX parameters are K-line only; CAN transport cannot access them (not a limitation of CAN, but a protocol design choice)
 
 ### Subaru WRX/STI
 
-- ⏳ **Real-Time Logging**: Requires K-line transport (CAN only for now)
-  - **Status**: SST parameter registry complete; awaiting K-line streaming
+- ⏳ **Real-Time Logging (SST Parameters)**: Requires K-line transport
+  - **Classification**: ⏳ In Progress (K-line Phase 2)
+  - **Current Status**: SST parameter registry complete (100+ parameters defined); awaiting K-line streaming
+  - **Blocker**: K-line transport layer not yet implemented; CAN cannot stream SST data
+  - **Why Not Applicable**: SST parameters are K-line only; CAN transport cannot access them
 
 - ❌ **K-Line Hardware**: OpenPort 2.0 K-line mode not yet tested in project
+  - **Classification**: ❌ Not Implemented (hardware testing pending)
   - **Path**: Verify K-line init sequence; toggle transport mode
 
 ### Nissan
 
-- ❌ **Checksum Algorithms**: 5 algorithms implemented ✅
+- ✅ **Checksum Algorithms**: 5 algorithms implemented and tested
+  - **Classification**: ✅ Implemented (nissan-std, nissan-alt, nissan-alt2, ncsChecksum, ncsCrc16)
+  
 - ❌ **Protocol Layer**: Not implemented yet
+  - **Classification**: ❌ Not Implemented (awaits K-line transport)
+  - **Blocker**: K-line transport not yet available; shared with Subaru implementation
+  
 - ❌ **K-Line Transport**: Shared blocker with Subaru; awaits implementation
+  - **Classification**: ❌ Not Implemented (Phase 2 in progress)
 
 ### OBD-II
 
 - ✅ **Standard PIDs**: 8 supported (RPM, speed, temps, pressures, etc.)
-- ❌ **Manufacturer Extensions**: Not supported (proprietary PIDs beyond 0x00-0xFF)
-- ❌ **ROM Access**: OBD-II standard doesn't allow ROM read/write
+  - **Classification**: ✅ Implemented (fully tested over CAN)
+  
+- ⚠️ **Manufacturer Extensions**: Not supported (proprietary PIDs beyond 0x00-0xFF)
+  - **Classification**: ⚠️ Not Applicable (OBD-II standard does not define manufacturer-specific PIDs)
+  - **Why Not Applicable**: Manufacturer extensions are vehicle-specific and not part of the OBD-II standard; supporting them would require vehicle-specific definitions
+  
+- ⚠️ **ROM Access**: OBD-II standard doesn't allow ROM read/write
+  - **Classification**: ⚠️ Not Applicable (OBD-II standard limitation, not a project limitation)
+  - **Why Not Applicable**: The OBD-II standard explicitly forbids ROM access; this is a protocol design choice, not a missing feature
 
 ---
 
@@ -329,17 +369,39 @@ See **[TRANSPORT_LAYERS.md](TRANSPORT_LAYERS.md)** for detailed hardware specifi
 
 ---
 
-## Cross-References
+## Glossary
 
-- **["Recent Additions" in README](README.md#recent-additions-v1x)** — What's new this release
-- **[REAL_TIME_LOGGING.md](REAL_TIME_LOGGING.md)** — Detailed parameter catalogs (48 MUT-III, 100+ Subaru)
-- **[TRANSPORT_LAYERS.md](TRANSPORT_LAYERS.md)** — Hardware and protocol abstraction layers
-- **[FEATURES.md](FEATURES.md)** — Feature comparison matrix (optional)
-- **[DEVELOPMENT.md](DEVELOPMENT.md)** — Full roadmap and progress tracking
-- **[KNOWN_ISSUES.md](KNOWN_ISSUES.md)** — Detailed limitations and workarounds
+### Capability Status Symbols
+
+| Symbol | Term | Definition | Example |
+|--------|------|-----------|---------|
+| ✅ | Implemented | Feature is complete, tested, and ready for production use | ROM read on Mitsubishi via Bootloader |
+| ⏳ | In Progress | Feature is under active development; infrastructure may be ready but not fully functional | K-line transport (Phase 2) |
+| ❌ | Not Implemented | Feature is planned but development has not started; may be blocked on dependencies | Nissan NCS protocol layer |
+| ⚠️ | Not Applicable | Feature does not apply to this vehicle/protocol; not a limitation but a design choice | ROM write on OBD-II (standard forbids it) |
+| 🐢 | Impractical | Feature is technically possible but not recommended due to performance/reliability concerns | ROM read over K-line (would take hours) |
+
+### Key Terms
+
+**K-Line Transport**: ISO 14230 serial communication protocol used for real-time parameter streaming on older vehicles. Currently in Phase 2 development; required for MUT-III RAX and Subaru SST real-time logging.
+
+**CAN Transport**: ISO 15765-4 protocol used for ROM read/write operations on modern vehicles. Fully implemented and tested; 500 kbps baud rate.
+
+**RAX Parameters**: 48 real-time engine parameters available on Mitsubishi EVO X via MUT-III protocol over K-line. Parameter catalog is complete; streaming awaits K-line transport implementation.
+
+**SST Parameters**: 100+ transmission parameters available on Subaru WRX/STI via SSM-II protocol over K-line. Parameter catalog is complete; streaming awaits K-line transport implementation.
+
+**Blocker**: A dependency that prevents a feature from being implemented. Example: K-line transport is a blocker for MUT-III real-time logging.
+
+**Workaround**: An alternative method to achieve similar functionality when the primary method is blocked. Example: Bootloader method is a workaround for MUT-III ROM write when UDS write-session key is unknown.
 
 ---
 
-**Last Updated**: February 24, 2026  
-**Document Version**: 1.x  
-**Focus**: Vehicles actively supported or in active development
+## Cross-References
+
+- **["Recent Additions" in README](README.md#recent-additions-v1x)** — What's new this release
+- **[REAL_TIME_LOGGING.md](REAL_TIME_LOGGING.md)** — Detailed parameter catalogs (48 MUT-III, 100+ Subaru); includes transport dependency section
+- **[TRANSPORT_LAYERS.md](TRANSPORT_LAYERS.md)** — Hardware and protocol abstraction layers; K-line vs. CAN comparison
+- **[FEATURES.md](FEATURES.md)** — Feature comparison matrix (optional)
+- **[DEVELOPMENT.md](DEVELOPMENT.md)** — Full roadmap and progress tracking
+- **[KNOWN_ISSUES.md](KNOWN_ISSUES.md)** — Detailed limitations and workarounds

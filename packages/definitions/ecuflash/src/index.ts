@@ -74,6 +74,15 @@ function fsPathToUri(p: string): string {
 	return pathToFileURL(p).toString();
 }
 
+async function fileExists(fsPath: string): Promise<boolean> {
+	try {
+		const stat = await fs.stat(fsPath);
+		return stat.isFile();
+	} catch {
+		return false;
+	}
+}
+
 function parseNumberish(value: string | undefined): number | undefined {
 	if (!value) return undefined;
 	const v = value.trim();
@@ -237,6 +246,25 @@ function extractText(v: unknown): string | undefined {
 		if (typeof t === "number") return String(t);
 	}
 	return undefined;
+}
+
+function normalizeLookupToken(value: string): string {
+	return value.trim().toLowerCase();
+}
+
+async function readRomXmlId(fsPath: string): Promise<string | undefined> {
+	try {
+		const raw = await fs.readFile(fsPath, "utf8");
+		const romidMatch = raw.match(/<romid\b[^>]*>([\s\S]*?)<\/romid>/i);
+		if (!romidMatch) return undefined;
+		const xmlidMatch = romidMatch[1]?.match(
+			/<xmlid\b[^>]*>([\s\S]*?)<\/xmlid>/i,
+		);
+		const xmlid = xmlidMatch?.[1]?.trim();
+		return xmlid ? xmlid : undefined;
+	} catch {
+		return undefined;
+	}
 }
 
 function buildScalingIndex(rom: Raw): Map<string, ScalingNode> {
@@ -563,36 +591,151 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 		templates: Map<string, TemplateTable>;
 		scalings: Map<string, ScalingNode>;
 	}> {
-		const includes = asArray(
-			(rom as Raw)["include"] as unknown as string | string[],
-		)
-			.map((s) => String(s).trim())
-			.filter(Boolean);
-		if (!includes.length) {
-			return { templates: new Map(), scalings: new Map() };
-		}
+		const rootDefinitionPath = path.resolve(uriToFsPath(definitionUri));
+		const searchRoots = [
+			path.dirname(rootDefinitionPath),
+			...this.additionalSearchPaths,
+			expandWindowsEnv(DEFAULT_WIN_DIR),
+		]
+			.map((p) => path.resolve(p))
+			.filter((p, i, arr) => arr.indexOf(p) === i);
 
-		const currentDir = path.dirname(uriToFsPath(definitionUri));
 		const templates = new Map<string, TemplateTable>();
 		const scalings = new Map<string, ScalingNode>();
+		const visited = new Set<string>([rootDefinitionPath]);
+		const recursiveFileCache = new Map<string, string[]>();
+		const includeXmlIdLookupCache = new Map<string, string | null>();
+		const fileXmlIdCache = new Map<string, string | null>();
 
-		for (const inc of includes) {
-			const candidate = path.join(currentDir, `${inc}.xml`);
-			let doc: Raw | null = null;
-			try {
-				doc = await this.readXml(fsPathToUri(candidate));
-			} catch {
-				doc = null;
+		const includeTokensFrom = (parentRom: Raw): string[] =>
+			asArray((parentRom as Raw)["include"] as string | string[])
+				.map((s) => String(s).trim())
+				.filter(Boolean);
+
+		const includePathCandidates = (includeToken: string): string[] => {
+			const normalized = path.normalize(includeToken.trim());
+			if (!normalized) return [];
+			if (normalized.toLowerCase().endsWith(".xml")) return [normalized];
+			return [normalized, `${normalized}.xml`];
+		};
+
+		const recursiveXmlFilesForRoot = async (
+			root: string,
+		): Promise<string[]> => {
+			const cached = recursiveFileCache.get(root);
+			if (cached) return cached;
+			const files = await listXmlFilesRecursive(root);
+			files.sort((a, b) => a.localeCompare(b));
+			recursiveFileCache.set(root, files);
+			return files;
+		};
+
+		const resolveIncludePath = async (
+			parentDefinitionPath: string,
+			includeToken: string,
+		): Promise<string> => {
+			const candidates = includePathCandidates(includeToken);
+			const normalizedLookupToken = normalizeLookupToken(includeToken);
+
+			if (includeXmlIdLookupCache.has(normalizedLookupToken)) {
+				const cachedPath = includeXmlIdLookupCache.get(normalizedLookupToken);
+				if (cachedPath && (await fileExists(cachedPath))) {
+					return cachedPath;
+				}
+				if (cachedPath === null) {
+					throw new Error(
+						`Failed to resolve include "${includeToken}" referenced by "${parentDefinitionPath}". Searched roots: ${searchRoots.join(", ")}. Attempted xmlid lookup in discovered XML files.`,
+					);
+				}
 			}
-			const baseRom = doc ? extractRom(doc) : undefined;
-			if (!baseRom) continue;
-			for (const [k, v] of buildTemplateIndex(baseRom).entries()) {
-				if (!templates.has(k)) templates.set(k, v);
+
+			for (const candidate of candidates) {
+				const siblingCandidate = path.resolve(
+					path.dirname(parentDefinitionPath),
+					candidate,
+				);
+				if (await fileExists(siblingCandidate)) {
+					return siblingCandidate;
+				}
 			}
-			for (const [k, v] of buildScalingIndex(baseRom).entries()) {
-				if (!scalings.has(k)) scalings.set(k, v);
+
+			for (const root of searchRoots) {
+				for (const candidate of candidates) {
+					const rootedCandidate = path.resolve(root, candidate);
+					if (await fileExists(rootedCandidate)) {
+						return rootedCandidate;
+					}
+				}
 			}
-		}
+
+			const lowerBasenames = new Set(
+				candidates.map((c) => path.basename(c).toLowerCase()),
+			);
+
+			for (const root of searchRoots) {
+				const files = await recursiveXmlFilesForRoot(root);
+				for (const file of files) {
+					const base = path.basename(file).toLowerCase();
+					if (lowerBasenames.has(base)) {
+						return file;
+					}
+				}
+			}
+
+			for (const root of searchRoots) {
+				const files = await recursiveXmlFilesForRoot(root);
+				for (const file of files) {
+					let fileXmlId: string | null;
+					if (fileXmlIdCache.has(file)) {
+						fileXmlId = fileXmlIdCache.get(file) ?? null;
+					} else {
+						fileXmlId = (await readRomXmlId(file)) ?? null;
+						fileXmlIdCache.set(file, fileXmlId);
+					}
+					if (!fileXmlId) continue;
+					if (normalizeLookupToken(fileXmlId) === normalizedLookupToken) {
+						includeXmlIdLookupCache.set(normalizedLookupToken, file);
+						return file;
+					}
+				}
+			}
+
+			includeXmlIdLookupCache.set(normalizedLookupToken, null);
+
+			throw new Error(
+				`Failed to resolve include "${includeToken}" referenced by "${parentDefinitionPath}". Searched roots: ${searchRoots.join(", ")}. Attempted xmlid lookup in discovered XML files.`,
+			);
+		};
+
+		const visitIncludes = async (
+			parentDefinitionPath: string,
+			parentRom: Raw,
+		): Promise<void> => {
+			for (const includeToken of includeTokensFrom(parentRom)) {
+				const includePath = path.resolve(
+					await resolveIncludePath(parentDefinitionPath, includeToken),
+				);
+				if (visited.has(includePath)) {
+					continue;
+				}
+				visited.add(includePath);
+
+				const includeDoc = await this.readXml(fsPathToUri(includePath));
+				const includeRom = extractRom(includeDoc);
+				if (!includeRom) continue;
+
+				for (const [k, v] of buildTemplateIndex(includeRom).entries()) {
+					if (!templates.has(k)) templates.set(k, v);
+				}
+				for (const [k, v] of buildScalingIndex(includeRom).entries()) {
+					if (!scalings.has(k)) scalings.set(k, v);
+				}
+
+				await visitIncludes(includePath, includeRom);
+			}
+		};
+
+		await visitIncludes(rootDefinitionPath, rom);
 
 		return { templates, scalings };
 	}
@@ -672,11 +815,13 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 				node,
 				tmpl?.axes.find((a) => a.role === "x"),
 				scalings,
+				"x",
 			);
 			const y = this.buildAxisDefinition(
 				node,
 				tmpl?.axes.find((a) => a.role === "y"),
 				scalings,
+				"y",
 			);
 
 			// Calculate dimensions
@@ -721,12 +866,18 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 		node: TableNode,
 		template: TemplateAxis | undefined,
 		scalings: Map<string, ScalingNode>,
+		preferredRole?: "x" | "y",
 	): AxisDefinition | undefined {
 		// Try to find a child axis table in the definition file.
 		const children = asArray(node.table);
 		let axisNode: TableNode | undefined;
 		if (template?.name) {
 			axisNode = children.find((c) => c.name === template.name);
+		}
+		if (!axisNode && preferredRole) {
+			axisNode = children.find((c) =>
+				(c.type ?? "").toLowerCase().includes(`${preferredRole} axis`),
+			);
 		}
 		axisNode ??= children[0];
 		if (!axisNode && template?.data && template.data.length) {
@@ -747,6 +898,7 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 		const scalingName = axisNode.scaling ?? template?.scaling;
 		const scaling = scalingName ? scalings.get(scalingName) : undefined;
 		const affine = affineFromScaling(scaling);
+		const hasUnresolvedNamedScaling = Boolean(scalingName) && !scaling;
 
 		if (axisAddress === undefined) {
 			const values = asArray(axisNode.data)
@@ -762,13 +914,21 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 		}
 
 		if (!elements) return undefined;
+		// Dynamic axes with an unresolved named scaling default to u16 big-endian.
+		// This matches observed ECUFlash axis storage for this unresolved-scaling case.
+		const inferredDynamicAxisDtype = hasUnresolvedNamedScaling
+			? "u16"
+			: storageTypeToScalarType(scaling?.storagetype);
+		const inferredDynamicAxisEndianness = hasUnresolvedNamedScaling
+			? "be"
+			: scalingEndianness(scaling?.endian);
 		return {
 			kind: "dynamic",
 			name: axisNode.name ?? template?.name ?? "Axis",
 			address: axisAddress,
 			length: elements,
-			dtype: storageTypeToScalarType(scaling?.storagetype),
-			endianness: scalingEndianness(scaling?.endian),
+			dtype: inferredDynamicAxisDtype,
+			endianness: inferredDynamicAxisEndianness,
 			scale: affine?.scale ?? 1,
 			offset: affine?.offset ?? 0,
 			...(scaling?.units ? { unit: { symbol: scaling.units } as any } : {}),

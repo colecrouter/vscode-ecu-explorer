@@ -29,6 +29,30 @@ ECU Device → Protocol (MUT-III, KWP2000, OBD-II)
 - [`packages/device/protocols/mut3/src/rax-parameters.ts`](packages/device/protocols/mut3/src/rax-parameters.ts) — MUT-III catalog (ready)
 - [`packages/device/protocols/subaru/src/sst-parameters.ts`](packages/device/protocols/subaru/src/sst-parameters.ts) — Subaru catalog (ready)
 
+### Transport Dependency
+
+**Critical**: Real-time logging capabilities are **transport-dependent**. The following table clarifies which features require which transports:
+
+| Platform | Parameters | Transport | Status | Blocker |
+|----------|-----------|-----------|--------|---------|
+| **OBD-II** | 8 standard PIDs | CAN (ISO 15765-4) | ✅ Complete | None — CAN fully implemented |
+| **MUT-III (Mitsubishi)** | 48 RAX parameters | K-Line (ISO 14230) | ⏳ Ready | K-line transport not yet implemented |
+| **Subaru SST** | 100+ transmission params | K-Line (ISO 14230) | ⏳ Ready | K-line transport not yet implemented |
+| **Nissan NCS** | TBD | K-Line (ISO 14230) | ❌ Not Started | K-line transport + NCS protocol both needed |
+
+**Key Distinction**:
+- ✅ **OBD-II is complete** because CAN transport is fully implemented
+- ⏳ **MUT-III and Subaru are ready but blocked** because parameter catalogs are complete but K-line transport is not
+- ❌ **Nissan is not started** because both K-line transport and NCS protocol layer are needed
+
+**Why This Matters**:
+- Parameter definitions (RAX, SST) are ✅ **Implemented** and tested
+- CSV logging infrastructure is ✅ **Implemented** and tested
+- But streaming cannot begin until the transport layer is ✅ **Implemented**
+- This is not a limitation of the parameter definitions or logging infrastructure, but a dependency on transport availability
+
+**See also**: [`TRANSPORT_LAYERS.md`](TRANSPORT_LAYERS.md) for K-line implementation status and timeline
+
 ### CSV Format
 
 **Wide Format** (one column per parameter):
@@ -480,9 +504,3 @@ print(f"Knock events at: {knock_events[['RPM', 'Load', 'Timing', 'Knock']].to_st
 - **[MUT3_LOGGING_CAPABILITIES.md](MUT3_LOGGING_CAPABILITIES.md)** — Deep dive into MUT-III RAX implementation
 - **[SUBARU_EVOSCAN_FINDINGS.md](SUBARU_EVOSCAN_FINDINGS.md)** — Deep dive into Subaru SST implementation
 - **[DEVELOPMENT.md § Real-Time Logging Status](DEVELOPMENT.md#real-time-logging-capabilities-analysis)** — Project roadmap
-
----
-
-**Last Updated**: February 24, 2026  
-**Status**: OBD-II ✅ Complete; MUT-III/Subaru ⏳ Ready (K-line pending)  
-**Next Steps**: K-line hardware testing; enable streaming on real vehicles

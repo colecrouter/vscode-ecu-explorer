@@ -109,7 +109,12 @@ class OpenPort2Transport implements Transport {
 **Standard**: ISO 14230-1/4 (K-line diagnostic protocol)  
 **Baud Rate**: 10.4 kbaud (legacy automotive standard) or 19.2 kbaud (some modern ECUs)  
 **Hardware**: OpenPort 2.0 (K-line mode)  
-**Status**: ⏳ **Phase 3 (Testing)**
+**Status**: ⏳ **Phase 2 (In Progress)**
+
+**Classification**: ⏳ In Progress (not ⚠️ Not Applicable)
+- **Why In Progress**: K-line transport is actively being developed and is essential for real-time logging on Mitsubishi and Subaru vehicles
+- **Current Blockers**: OpenPort 2.0 K-line initialization sequence not yet fully verified; hardware testing pending
+- **Impact**: Blocks MUT-III RAX streaming (48 parameters), Subaru SST streaming (100+ parameters), and Nissan NCS protocol implementation
 
 ### Physical Layer
 
@@ -188,14 +193,16 @@ class KLineTransport implements Transport {
 
 ### K-Line vs CAN Comparison
 
-| Aspect | K-Line | CAN | Best For |
-|--------|--------|-----|----------|
-| **Speed** | 10.4 kbaud | 500 kbps | **CAN** (50x faster) |
-| **Complexity** | Simple 1-wire | Differential 2-wire | **K-Line** (simpler) |
-| **Real-time Capable** | ✅ 10-50 Hz | ✅ 100+ Hz | **CAN** (higher rate) |
-| **ROM Transfer** | Hours | Minutes | **CAN** (practical) |
-| **Hardware** | Ubiquitous | Modern cars | **K-Line** (older cars) |
-| **Handshake** | Complex (5-baud sync) | Simple | **CAN** (easier init) |
+| Aspect | K-Line | CAN | Best For | Classification |
+|--------|--------|-----|----------|-----------------|
+| **Speed** | 10.4 kbaud | 500 kbps | **CAN** (50x faster) | — |
+| **Complexity** | Simple 1-wire | Differential 2-wire | **K-Line** (simpler) | — |
+| **Real-time Capable** | ✅ 10-50 Hz | ✅ 100+ Hz | **CAN** (higher rate) | — |
+| **ROM Transfer** | Hours | Minutes | **CAN** (practical) | 🐢 K-Line impractical for ROM |
+| **Hardware** | Ubiquitous | Modern cars | **K-Line** (older cars) | — |
+| **Handshake** | Complex (5-baud sync) | Simple | **CAN** (easier init) | — |
+
+**Note on ROM Transfer over K-Line**: Transferring a 1 MB ROM over K-line at 10.4 kbaud would take approximately 13+ hours, making it 🐢 **Impractical** for production use. This is not a limitation of the project but a physical constraint of the protocol. K-line is suitable for real-time parameter streaming (small, frequent messages) but not for bulk data transfer.
 
 ---
 
@@ -449,9 +456,3 @@ export DEBUG=ecuexplorer:protocol npm run test
 - **Protocol Details**: [PROTOCOL_SUPPORT.md](PROTOCOL_SUPPORT.md) — CAN/K-line specific protocols
 - **Architecture**: [ARCHITECTURE.md](ARCHITECTURE.md) — Module dependencies and design patterns
 - **Implementation**: [`packages/device/`](packages/device/) — Source code
-
----
-
-**Last Updated**: February 24, 2026  
-**Status**: CAN ✅ Complete; K-Line ⏳ Phase 3; Serial ❌ Planned v2.x  
-**Maintainers**: Community contributions welcome
