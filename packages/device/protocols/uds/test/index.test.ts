@@ -4,6 +4,7 @@ import {
 	parseNegativeResponse,
 	UDS_NEGATIVE_RESPONSE,
 	UDS_NRC,
+	UDS_RESET_TYPES,
 	UDS_SERVICES,
 	UDS_SESSION_TYPES,
 	UdsProtocol,
@@ -513,6 +514,135 @@ describe("UdsProtocol", () => {
 			// Security access key send should use level + 1 = 0x04
 			expect(frames[2]![0]).toBe(0x27);
 			expect(frames[2]![1]).toBe(0x04);
+		});
+	});
+
+	describe("heartbeat lifecycle", () => {
+		it("startHeartbeat sends TesterPresent with subfunction 0x00", async () => {
+			vi.useFakeTimers();
+			try {
+				const protocol = new UdsProtocol();
+				const frames: Uint8Array[] = [];
+				const connection = makeMockConnection("openport2", async (data) => {
+					frames.push(data);
+					return new Uint8Array([0x7e, 0x00]);
+				});
+
+				protocol.startHeartbeat(connection);
+				await vi.runOnlyPendingTimersAsync();
+
+				expect(frames.length).toBeGreaterThan(0);
+				expect(Array.from(frames[0]!)).toEqual([
+					UDS_SERVICES.TESTER_PRESENT,
+					0x00,
+				]);
+			} finally {
+				vi.useRealTimers();
+			}
+		});
+
+		it("isConnectionDegraded becomes true after 3 consecutive misses", async () => {
+			vi.useFakeTimers();
+			try {
+				const protocol = new UdsProtocol();
+				const connection = makeMockConnection("openport2", async () => {
+					throw new Error("heartbeat timeout");
+				});
+
+				protocol.startHeartbeat(connection);
+				await vi.advanceTimersByTimeAsync(6500);
+
+				expect(protocol.getHeartbeatMissCount()).toBeGreaterThanOrEqual(3);
+				expect(protocol.isConnectionDegraded()).toBe(true);
+			} finally {
+				vi.useRealTimers();
+			}
+		});
+
+		it("stopHeartbeat emits heartbeat_stopped", () => {
+			const protocol = new UdsProtocol();
+			const connection = makeMockConnection(
+				"openport2",
+				async () => new Uint8Array([0x7e, 0x00]),
+			);
+			const onEvent = vi.fn();
+
+			protocol.startHeartbeat(connection, onEvent);
+			protocol.stopHeartbeat();
+
+			expect(onEvent).toHaveBeenCalledWith(
+				expect.objectContaining({ type: "heartbeat_stopped" }),
+			);
+		});
+	});
+
+	describe("ecu reset lifecycle", () => {
+		it("ecuReset sends ECU_RESET and re-enters diagnostic session", async () => {
+			vi.useFakeTimers();
+			try {
+				const protocol = new UdsProtocol();
+				const frames: Uint8Array[] = [];
+				const connection = makeMockConnection("openport2", async (data) => {
+					frames.push(data);
+					if (data[0] === UDS_SERVICES.ECU_RESET) {
+						return new Uint8Array([0x51, data[1]!]);
+					}
+					if (data[0] === UDS_SERVICES.DIAGNOSTIC_SESSION_CONTROL) {
+						return new Uint8Array([0x50, 0x03]);
+					}
+					if (data[0] === UDS_SERVICES.SECURITY_ACCESS && data[1] === 0x01) {
+						return new Uint8Array([0x67, 0x01, 0xab, 0xcd]);
+					}
+					if (data[0] === UDS_SERVICES.SECURITY_ACCESS && data[1] === 0x02) {
+						return new Uint8Array([0x67, 0x02]);
+					}
+					return new Uint8Array([]);
+				});
+				const onEvent = vi.fn();
+
+				const resetPromise = protocol.ecuReset(
+					connection,
+					UDS_RESET_TYPES.SOFT_RESET,
+					onEvent,
+				);
+				await vi.advanceTimersByTimeAsync(1000);
+				await resetPromise;
+
+				expect(Array.from(frames[0]!)).toEqual([0x11, 0x03]);
+				expect(
+					frames.some((f) => f[0] === UDS_SERVICES.DIAGNOSTIC_SESSION_CONTROL),
+				).toBe(true);
+				expect(onEvent).toHaveBeenCalledWith(
+					expect.objectContaining({ type: "ecu_reset_acknowledged" }),
+				);
+				expect(onEvent).toHaveBeenCalledWith(
+					expect.objectContaining({ type: "ecu_reset_reconnected" }),
+				);
+			} finally {
+				vi.useRealTimers();
+			}
+		});
+
+		it("ecuReset emits ecu_reset_failed on negative response", async () => {
+			const protocol = new UdsProtocol();
+			const connection = makeMockConnection(
+				"openport2",
+				async () =>
+					new Uint8Array([
+						UDS_NEGATIVE_RESPONSE,
+						UDS_SERVICES.ECU_RESET,
+						UDS_NRC.CONDITIONS_NOT_CORRECT,
+					]),
+			);
+			const onEvent = vi.fn();
+
+			await expect(
+				protocol.ecuReset(connection, UDS_RESET_TYPES.HARD_RESET, onEvent),
+			).rejects.toThrow(/ECU reset failed/i);
+
+			expect(onEvent).toHaveBeenCalledWith(
+				expect.objectContaining({ type: "ecu_reset_failed" }),
+			);
 		});
 	});
 });

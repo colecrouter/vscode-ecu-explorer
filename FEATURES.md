@@ -147,8 +147,8 @@ High-level feature overview across vehicle platforms and implementation status.
 
 | Protocol | Vehicle(s) | ROM | Real-Time | Transport | Status |
 |----------|------------|-----|-----------|-----------|--------|
-| **UDS (MUT-III)** | Mitsubishi | ✅ Read | ⏳ 48 params | CAN + K-line* | Partial |
-| **Bootloader** | Mitsubishi | ✅ R/W | ❌ | CAN | Complete |
+| **UDS** | Any UDS | ✅ Read | ⏳ 48 params | CAN + K-line* | Partial |
+| **Mitsu Bootloader** | Mitsubishi | ✅ R/W | ❌ | CAN | Complete |
 | **KWP2000** | Subaru | ✅ R/W | ⏳ SST | CAN + K-line* | Partial |
 | **OBD-II** | Any OBD-II | ❌ | ✅ 8 PIDs | CAN | Complete |
 | **NCS K-line** | Nissan (older) | ❌ | ❌ | K-line* | Not Started |

@@ -87,6 +87,7 @@ describe("DeviceManagerImpl", () => {
 			expect(result.connection).toBe(mockConnection);
 			expect(result.protocol).toBe(mockProtocol);
 			expect(manager.activeConnection).toBe(result);
+			expect(result.state).toBe("connected");
 		});
 
 		it("should return the existing connection if already connected", async () => {
@@ -130,6 +131,40 @@ describe("DeviceManagerImpl", () => {
 
 			await expect(manager.connect()).rejects.toThrow("No devices found");
 			expect(manager.activeConnection).toBeUndefined();
+		});
+	});
+
+	describe("reconnectActiveConnection()", () => {
+		it("fails fast for write operations", async () => {
+			await manager.connect();
+
+			const ok = await manager.reconnectActiveConnection("write");
+
+			expect(ok).toBe(false);
+			expect(manager.activeConnection?.state).toBe("failed");
+			expect(manager.activeConnection?.lastFailure).toBe("transport_error");
+		});
+
+		it("reconnects for read operations", async () => {
+			await manager.connect();
+
+			const nextConnection = createMockConnection();
+			manager.registerTransport("openport2", {
+				name: "openport2",
+				listDevices: vi.fn().mockResolvedValue([]),
+				connect: vi.fn().mockResolvedValue(nextConnection),
+			} as any);
+
+			(manager.activeConnection!.connection as any).deviceInfo = {
+				id: "openport2:test",
+				transportName: "openport2",
+			};
+
+			const ok = await manager.reconnectActiveConnection("read");
+
+			expect(ok).toBe(true);
+			expect(manager.activeConnection?.state).toBe("connected");
+			expect(manager.activeConnection?.connection).toBe(nextConnection);
 		});
 	});
 

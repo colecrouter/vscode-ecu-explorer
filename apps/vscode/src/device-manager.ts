@@ -1,11 +1,34 @@
 import type {
+	ConnectionState,
 	DeviceConnection,
 	DeviceInfo,
 	DeviceManager,
 	DeviceTransport,
 	EcuProtocol,
+	FailureCause,
 } from "@ecu-explorer/device";
 import * as vscode from "vscode";
+
+/**
+ * Reconnect configuration options.
+ */
+export interface ReconnectConfig {
+	/** Maximum number of reconnection attempts (default: 5) */
+	maxAttempts: number;
+	/** Base delay in ms between attempts (default: 1000) */
+	baseDelayMs: number;
+	/** Maximum delay in ms (default: 10000) */
+	maxDelayMs: number;
+}
+
+/**
+ * Default reconnect configuration.
+ */
+const DEFAULT_RECONNECT_CONFIG = {
+	maxAttempts: 5,
+	baseDelayMs: 1000,
+	maxDelayMs: 10000,
+} satisfies ReconnectConfig;
 
 /**
  * Represents an active device connection with its associated protocol.
@@ -14,6 +37,10 @@ export interface ActiveConnection {
 	connection: DeviceConnection;
 	protocol: EcuProtocol;
 	deviceName: string;
+	/** Current connection state for reliability tracking */
+	state: ConnectionState;
+	/** Last failure cause if state is 'failed' */
+	lastFailure?: FailureCause;
 }
 
 /**
@@ -28,14 +55,31 @@ export class DeviceManagerImpl implements DeviceManager {
 	/** The currently active connection, or undefined if not connected. */
 	private _activeConnection: ActiveConnection | undefined;
 
+	/** Reconnect configuration */
+	private _reconnectConfig: ReconnectConfig = DEFAULT_RECONNECT_CONFIG;
+
 	/** Fires whenever the active connection changes (connect or disconnect). */
 	private _onDidChangeConnection = new vscode.EventEmitter<
 		ActiveConnection | undefined
 	>();
 
+	/** Fires whenever connection state changes. */
+	private _onDidChangeState = new vscode.EventEmitter<{
+		connection: ActiveConnection;
+		state: ConnectionState;
+		cause?: FailureCause;
+	}>();
+
 	/** Event that fires when the active connection changes. */
 	readonly onDidChangeConnection: vscode.Event<ActiveConnection | undefined> =
 		this._onDidChangeConnection.event;
+
+	/** Event that fires when connection state changes. */
+	readonly onDidChangeState: vscode.Event<{
+		connection: ActiveConnection;
+		state: ConnectionState;
+		cause?: FailureCause;
+	}> = this._onDidChangeState.event;
 
 	/**
 	 * Returns the current active connection, or undefined if not connected.
@@ -201,10 +245,127 @@ export class DeviceManagerImpl implements DeviceManager {
 		const { connection, protocol } = await this.selectDeviceAndProtocol();
 		const deviceName = "ECU Device";
 
-		this._activeConnection = { connection, protocol, deviceName };
+		this._activeConnection = {
+			connection,
+			protocol,
+			deviceName,
+			state: "connected",
+		};
 		this._onDidChangeConnection.fire(this._activeConnection);
 
 		return this._activeConnection;
+	}
+
+	/**
+	 * Update the connection state and emit state change event.
+	 *
+	 * @param state - New connection state
+	 * @param cause - Optional failure cause
+	 */
+	private setConnectionState(
+		state: ConnectionState,
+		cause?: FailureCause,
+	): void {
+		if (!this._activeConnection) return;
+
+		this._activeConnection.state = state;
+		if (cause) {
+			this._activeConnection.lastFailure = cause;
+		}
+
+		// Build event payload, omitting cause if undefined
+		const eventPayload: {
+			connection: ActiveConnection;
+			state: ConnectionState;
+			cause?: FailureCause;
+		} = {
+			connection: this._activeConnection,
+			state,
+		};
+		if (cause) {
+			eventPayload.cause = cause;
+		}
+
+		this._onDidChangeState.fire(eventPayload);
+	}
+
+	/**
+	 * Attempt to reconnect the active connection.
+	 * Uses exponential backoff with jitter.
+	 *
+	 * @param operationType - Type of operation (read/logging vs write)
+	 * @returns True if reconnection successful
+	 */
+	async reconnectActiveConnection(
+		operationType: "read" | "logging" | "write",
+	): Promise<boolean> {
+		if (!this._activeConnection) {
+			return false;
+		}
+
+		// For write operations, fail fast - no reconnect
+		if (operationType === "write") {
+			this.setConnectionState("failed", "TRANSPORT_ERROR");
+			return false;
+		}
+
+		const { maxAttempts, baseDelayMs, maxDelayMs } = this._reconnectConfig;
+		const deviceId = this._activeConnection.connection.deviceInfo.id;
+		const transportName =
+			this._activeConnection.connection.deviceInfo.transportName;
+
+		for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+			this.setConnectionState("reconnecting");
+
+			// Emit reconnect attempt event
+			this._onDidChangeState.fire({
+				connection: this._activeConnection,
+				state: "reconnecting",
+			});
+
+			try {
+				// Get the transport
+				const transport = this.transports.get(transportName);
+				if (!transport) {
+					throw new Error(`Transport ${transportName} not found`);
+				}
+
+				// Attempt to reconnect
+				const newConnection = await transport.connect(deviceId);
+
+				// Update the connection
+				this._activeConnection.connection = newConnection;
+				this.setConnectionState("connected");
+
+				// Emit success event
+				this._onDidChangeState.fire({
+					connection: this._activeConnection,
+					state: "connected",
+				});
+
+				return true;
+			} catch {
+				// Wait with exponential backoff + jitter
+				if (attempt < maxAttempts) {
+					const delay = Math.min(
+						baseDelayMs * 2 ** (attempt - 1) + Math.random() * 500,
+						maxDelayMs,
+					);
+					await new Promise((resolve) => setTimeout(resolve, delay));
+				}
+			}
+		}
+
+		// All attempts failed
+		this.setConnectionState("failed", "TRANSPORT_ERROR");
+		return false;
+	}
+
+	/**
+	 * Get the current connection state.
+	 */
+	getConnectionState(): ConnectionState | undefined {
+		return this._activeConnection?.state;
 	}
 
 	/**
@@ -230,6 +391,7 @@ export class DeviceManagerImpl implements DeviceManager {
 			// Ignore errors during dispose
 		});
 		this._onDidChangeConnection.dispose();
+		this._onDidChangeState.dispose();
 		this.transports.clear();
 		this.protocols = [];
 	}
