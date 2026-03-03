@@ -18,6 +18,12 @@ Run the complete test suite across all packages:
 npm run test
 ```
 
+**Note**: Before running tests, it's recommended to run type checking first:
+
+```bash
+npm run check
+```
+
 **Output**:
 ```
 ✓ packages/core/test/binary.test.ts (12 tests)
@@ -274,6 +280,7 @@ Cannot find module '@ecu-explorer/core'
 
 **Fix**: Rebuild the project:
 ```bash
+npm run check
 npm run build
 npm run test
 ```

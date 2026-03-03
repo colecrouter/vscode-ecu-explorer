@@ -63,6 +63,7 @@ Use descriptive branch names that reflect the feature or fix (e.g., `feature/add
 - Test edge cases, error conditions, and boundary conditions
 - Run tests locally before committing:
   ```bash
+  npm run check
   npm run test
   npm run test:coverage
   ```
@@ -72,14 +73,14 @@ Use descriptive branch names that reflect the feature or fix (e.g., `feature/add
 Before committing, ensure your code passes all checks:
 
 ```bash
+# Type checking
+npm run check
+
 # Full test suite
 npm run test
 
 # Format code
 npm run format
-
-# Type checking
-npm run check
 
 # Run linter
 npm run lint

@@ -211,9 +211,10 @@ function exportTable3D(table: Table3D): string {
 
 ### 6. Run Tests
 
-Run the tests to verify implementation:
+Run type checking first, then run the tests to verify implementation:
 
 ```bash
+npm run check
 npm run test -- csv-export.test.ts
 ```
 
@@ -376,6 +377,7 @@ Check all acceptance criteria:
 Run all tests to ensure no regressions:
 
 ```bash
+npm run check
 npm run test:coverage
 ```
 

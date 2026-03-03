@@ -52,9 +52,11 @@ Instructions:
 1. **Follow the specification** - Implement exactly what the spec describes
 2. **Write tests first** - Create test cases before implementation (TDD approach)
 3. **Implement the code** - Write implementation to pass tests
-4. **Update documentation** - Add JSDoc comments, update specs if needed
-5. **Verify against spec** - Ensure all acceptance criteria are met
-6. **Update DEVELOPMENT.md** - Mark feature as complete, link to commit
+4. **Run type check** - Execute `npm run check` to verify TypeScript types
+5. **Run tests** - Execute `npm run test:coverage` to verify tests pass
+6. **Update documentation** - Add JSDoc comments, update specs if needed
+7. **Verify against spec** - Ensure all acceptance criteria are met
+8. **Update DEVELOPMENT.md** - Mark feature as complete, link to commit
 
 **Process**:
 
@@ -62,19 +64,21 @@ Instructions:
 1. Create feature branch: git checkout -b feature/name
 2. Write tests in appropriate test file
 3. Implement code to pass tests
-4. Run full test suite: npm run test:coverage
-5. Update DEVELOPMENT.md with completion
-6. Commit with message linking to spec
-7. Create pull request
+4. Run type check: npm run check
+5. Run test suite: npm run test:coverage
+6. Update DEVELOPMENT.md with completion
+7. Commit with message linking to spec
+8. Create pull request
 ```
 
 ### How to Verify Changes
 
-1. **Run tests** - Execute `npm run test:coverage` to run all tests
-2. **Check coverage** - Ensure coverage meets targets (see Testing Requirements)
-3. **Review code** - Use code review checklist below
-4. **Test manually** - If applicable, test in VSCode extension
-5. **Check for regressions** - Verify existing functionality still works
+1. **Run type check** - Execute `npm run check` to check TypeScript types
+2. **Run tests** - Execute `npm run test:coverage` to run all tests
+3. **Check coverage** - Ensure coverage meets targets (see Testing Requirements)
+4. **Review code** - Use code review checklist below
+5. **Test manually** - If applicable, test in VSCode extension
+6. **Check for regressions** - Verify existing functionality still works
 
 **Verification checklist**:
 

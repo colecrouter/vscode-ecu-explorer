@@ -47,6 +47,7 @@ This command installs dependencies for the root workspace and all packages defin
 ### Build All Packages
 
 ```bash
+npm run check
 npm run build
 ```
 
@@ -177,6 +178,7 @@ npm run test -- packages/core/src/binary.test.ts
 # Clean install
 rm -rf node_modules package-lock.json
 npm install
+npm run check
 npm run build
 ```
 
@@ -229,6 +231,7 @@ npm run build --workspaces -- --force
 npm install --save-dev vitest
 
 # Rebuild and retry
+npm run check
 npm run build
 npm run test
 ```
@@ -243,7 +246,7 @@ For testing guidelines and patterns, see [`specs/TESTING.md`](specs/TESTING.md).
 
 ## Next Steps
 
-1. **First Build**: Run `npm install && npm run build` to set up the project
+1. **First Build**: Run `npm install && npm run check && npm run build` to set up the project
 2. **Run Tests**: Execute `npm run test` to verify everything works
 3. **Start Development**: Use `npm run dev --workspace=packages/ui` for UI development
 4. **Debug Extension**: Press F5 in VS Code to debug the extension

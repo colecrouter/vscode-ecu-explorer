@@ -16,6 +16,7 @@ This guide explains how to build and package the ECU Explorer VSCode extension f
 Build all packages in the monorepo:
 
 ```bash
+npm run check
 npm run build
 ```
 
@@ -268,6 +269,7 @@ Error: Cannot find module '@ecu-explorer/core'
 
 **Fix**: Rebuild dependencies:
 ```bash
+npm run check
 npm install
 npm run build
 ```

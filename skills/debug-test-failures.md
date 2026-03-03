@@ -308,6 +308,7 @@ Cannot find module '@ecu-explorer/core'
 
 **Fix**: Rebuild packages:
 ```bash
+npm run check
 npm run build
 npm run test
 ```
