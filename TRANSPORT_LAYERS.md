@@ -10,14 +10,41 @@ Technical reference for communication transports, device hardware, and physical 
 
 The transport layer provides a unified abstraction for diverse physical communication mediums, allowing protocols (MUT-III, KWP2000, SSM, OBD-II) to operate across CAN, K-line, and future serial transports without modification.
 
-```
-Protocol Layer (UDS, KWP2000, SSM)
-        ↓
-Transport Abstraction (DeviceConnection)
-        ↓
-Hardware Transport (CAN, K-Line, Serial)
-        ↓
-Physical Device (OpenPort 2.0, USB, etc.)
+```mermaid
+flowchart TD
+    subgraph ProtocolLayer["Protocol Layer"]
+        MUT3["MUT-III<br/>(Mitsubishi)"]
+        KWP["KWP2000<br/>(Subaru)"]
+        SSM["SSM<br/>(Subaru)"]
+        OBDII["OBD-II<br/>(Generic)"]
+    end
+
+    subgraph Abstraction["Transport Abstraction (DeviceConnection)"]
+        DC["DeviceConnection interface<br/>sendFrame / receiveFrame / drain"]
+    end
+
+    subgraph HardwareTransport["Hardware Transport"]
+        CAN["CAN Transport<br/>ISO 15765-4 · 500 kbps<br/>✅ Complete"]
+        KLINE["K-Line Transport<br/>ISO 14230 · 10.4 kbaud<br/>⏳ In Progress"]
+        SERIAL["Serial/UART<br/>9600–115200 baud<br/>❌ Planned v2.x"]
+    end
+
+    subgraph PhysicalDevice["Physical Device"]
+        OP2["Tactrix OpenPort 2.0<br/>WebUSB · vendor 0x0403"]
+        ELM["ELM327 Clone<br/>❌ Planned"]
+        LIBUSB["Libusb Serial Adapter<br/>❌ Planned v2.x"]
+    end
+
+    subgraph Vehicle["Vehicle ECU"]
+        ECU["ECU<br/>OBD-II Port<br/>Pin 6/14: CAN · Pin 7: K-Line"]
+    end
+
+    MUT3 & KWP & SSM & OBDII --> DC
+    DC --> CAN & KLINE & SERIAL
+    CAN & KLINE --> OP2
+    SERIAL --> LIBUSB
+    OP2 --> ECU
+    ELM -.->|OBD-II only| ECU
 ```
 
 ---
