@@ -200,6 +200,107 @@ Run formatting automatically:
 npm run format
 ```
 
+## Type Safety Conventions
+
+This project prioritizes type safety. We rely on strict TypeScript configuration to catch errors at compile time rather than runtime. Follow these conventions:
+
+### Avoid `any`
+
+Never use `any` — it defeats the entire purpose of TypeScript's type system. The project uses strict settings that make `any` dangerous:
+
+- `noUncheckedIndexedAccess` — array accesses return `T | undefined`
+- `exactOptionalPropertyTypes` — optional properties are `T | undefined`, not `T`
+
+```typescript
+// ❌ Never do this
+function process(data: any): any { }
+
+// ✅ Use proper types instead
+function process(data: Data[]): Result[] { }
+```
+
+### Avoid Non-Null Assertions (`!`)
+
+The `!` operator tells TypeScript "trust me, this is defined" — it's a bug waiting to happen. Use optional chaining or conditional checks instead.
+
+```typescript
+// ❌ Avoid
+const first = values[0]!;
+
+// ✅ Prefer: use `as const` for test fixtures
+const values = [1, 2, 3] as const;
+const first = values[0]; // typed as 1 (readonly)
+
+// ✅ Or use conditional checks
+const first = values[0];
+if (first !== undefined) {
+  // first is narrowed to number here
+}
+```
+
+### Avoid Type Casting
+
+Resist the urge to cast types to make the compiler happy. Instead, refactor to use proper type definitions or type guards.
+
+```typescript
+// ❌ Avoid
+const data2d = data as Uint8Array[][];
+
+// ✅ Prefer: refactor to proper types
+function is2DArray(data: unknown): data is Uint8Array[][] {
+  return Array.isArray(data) &&
+         data.every(row => Array.isArray(row) && row.every(cell => typeof cell === 'number'));
+}
+
+if (is2DArray(data)) {
+  // data is typed correctly here without casting
+}
+```
+
+**Exception**: When interfacing with external systems (e.g., parsing XML from ROM definitions), casting may be necessary. In those cases, create narrow wrapper types rather than casting to `any`:
+
+```typescript
+// ✅ Acceptable: narrow wrapper type
+type RawXmlData = { [key: string]: unknown };
+const rom = parsedXml as RawXmlData;
+```
+
+### Prefer `satisfies` over `: Type`
+
+When declaring constants, prefer `satisfies` to validate the shape while preserving literal types:
+
+```typescript
+// ✅ Good: validates shape, keeps literal types
+const config = { port: 3000 } satisfies ServerConfig;
+// config.port is typed as 3000, not number
+
+// ❌ Avoid: loses literal type info
+const config: ServerConfig = { port: 3000 };
+// config.port is now number
+```
+
+### Test Fixtures
+
+Use `as const` for test data to preserve literal types and avoid assertions:
+
+```typescript
+// ✅ Good
+const sampleRom = {
+  id: '56890009',
+  tables: [
+    { name: 'FuelMap', address: 0x1000 } as const
+  ]
+};
+
+// ❌ Avoid
+const sampleRom = {
+  id: '56890009',
+  tables: [
+    { name: 'FuelMap', address: 0x1000 }
+  ]
+} as RomStub;
+```
+
 ## Architecture and Patterns
 
 ### Key Resources
