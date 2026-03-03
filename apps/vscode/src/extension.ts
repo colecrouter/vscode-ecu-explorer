@@ -436,6 +436,33 @@ export async function activate(ctx: vscode.ExtensionContext) {
 		}),
 	);
 
+	// Listen for connection state changes and show appropriate status messages
+	ctx.subscriptions.push(
+		deviceManager.onDidChangeState(({ state, cause }) => {
+			switch (state) {
+				case "degraded":
+					vscode.window.showWarningMessage(
+						`Connection degraded. Heartbeat missed. Cause: ${cause ?? "unknown"}`,
+					);
+					break;
+				case "reconnecting":
+					vscode.window.showInformationMessage("Attempting to reconnect...");
+					break;
+				case "connected":
+					vscode.window.showInformationMessage("Connection restored.");
+					break;
+				case "failed":
+					vscode.window.showErrorMessage(
+						`Connection failed. Cause: ${cause ?? "unknown"}. Please reconnect manually.`,
+					);
+					break;
+				case "resetting":
+					vscode.window.showInformationMessage("ECU reset in progress...");
+					break;
+			}
+		}),
+	);
+
 	// Initialize and register DeviceStatusBarManager
 	const deviceStatusBarManager = new DeviceStatusBarManager(deviceManager);
 	ctx.subscriptions.push(deviceStatusBarManager);

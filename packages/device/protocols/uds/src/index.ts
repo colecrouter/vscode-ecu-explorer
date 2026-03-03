@@ -9,9 +9,129 @@ import { computeChangedSectors } from "@ecu-explorer/device";
 
 import { UDS_NEGATIVE_RESPONSE, UDS_NRC, UDS_SERVICES } from "./services.js";
 
+/**
+ * UDS reset types (sub-functions for ECUReset 0x11).
+ * Ref: ISO 14229-1 §11.5 — ECUReset
+ */
+export const UDS_RESET_TYPES = {
+	HARD_RESET: 0x01,
+	KEY_OFF_ON_RESET: 0x02,
+	SOFT_RESET: 0x03,
+} as const;
+
+/**
+ * Heartbeat configuration for UDS sessions.
+ */
+export interface HeartbeatConfig {
+	/** Interval between TesterPresent requests in ms (default: 2000) */
+	intervalMs: number;
+	/** Number of consecutive misses before marking degraded (default: 3) */
+	missThreshold: number;
+}
+
+/**
+ * Default heartbeat configuration.
+ */
+export const DEFAULT_HEARTBEAT_CONFIG: HeartbeatConfig = {
+	intervalMs: 2000,
+	missThreshold: 3,
+};
+
 // Ref: ISO 14229-1 UDS standard
 // Address and length format identifier: 1 byte length, 3 bytes address
 const ADDRESS_AND_LENGTH_FORMAT = 0x14;
+
+/**
+ * UDS heartbeat manager for maintaining session activity.
+ * Sends periodic TesterPresent (0x3E) messages to prevent session timeout.
+ */
+class HeartbeatManager {
+	private intervalId: ReturnType<typeof setInterval> | null = null;
+	private missCount = 0;
+	private config: HeartbeatConfig;
+	private onMiss: (() => void) | undefined;
+	private onRestore: (() => void) | undefined;
+	private onStop: (() => void) | undefined;
+	private connection: DeviceConnection | null = null;
+
+	constructor(config: Partial<HeartbeatConfig> = {}) {
+		this.config = { ...DEFAULT_HEARTBEAT_CONFIG, ...config };
+	}
+
+	/**
+	 * Start sending TesterPresent messages on the connection.
+	 */
+	start(
+		conn: DeviceConnection,
+		onMiss?: () => void,
+		onRestore?: () => void,
+		onStop?: () => void,
+	): void {
+		this.connection = conn;
+		this.onMiss = onMiss;
+		this.onRestore = onRestore;
+		this.onStop = onStop;
+		this.missCount = 0;
+
+		// Send initial TesterPresent
+		this.sendTesterPresent();
+
+		// Schedule periodic TesterPresent
+		this.intervalId = setInterval(() => {
+			this.sendTesterPresent();
+		}, this.config.intervalMs);
+	}
+
+	/**
+	 * Stop the heartbeat.
+	 */
+	stop(): void {
+		if (this.intervalId) {
+			clearInterval(this.intervalId);
+			this.intervalId = null;
+		}
+		this.onStop?.();
+		this.connection = null;
+	}
+
+	/**
+	 * Get current miss count.
+	 */
+	getMissCount(): number {
+		return this.missCount;
+	}
+
+	/**
+	 * Check if connection is degraded (exceeded miss threshold).
+	 */
+	isDegraded(): boolean {
+		return this.missCount >= this.config.missThreshold;
+	}
+
+	/**
+	 * Send a TesterPresent (0x3E) message.
+	 */
+	private async sendTesterPresent(): Promise<void> {
+		if (!this.connection) return;
+
+		try {
+			await this.connection.sendFrame(
+				new Uint8Array([UDS_SERVICES.TESTER_PRESENT, 0x00]),
+			);
+			// Success - reset miss count
+			if (this.missCount > 0) {
+				this.missCount = 0;
+				this.onRestore?.();
+			}
+		} catch {
+			// Missed heartbeat
+			this.missCount++;
+			if (this.missCount >= this.config.missThreshold) {
+				this.onMiss?.();
+			}
+		}
+	}
+}
 
 /**
  * Parses a UDS negative response and returns a human-readable error message.
@@ -123,6 +243,149 @@ export class UdsProtocol implements EcuProtocol {
 	 * which sectors need to be erased and rewritten.
 	 */
 	protected readonly SECTOR_SIZE: number = 0x10000;
+
+	/**
+	 * Heartbeat manager instance for maintaining session activity.
+	 * Created lazily on first use.
+	 */
+	private _heartbeatManager: HeartbeatManager | null = null;
+
+	/**
+	 * Get or create the heartbeat manager.
+	 */
+	private get heartbeatManager(): HeartbeatManager {
+		if (!this._heartbeatManager) {
+			this._heartbeatManager = new HeartbeatManager();
+		}
+		return this._heartbeatManager;
+	}
+
+	/**
+	 * Start the UDS heartbeat to maintain session activity.
+	 * Sends periodic TesterPresent (0x3E) messages.
+	 *
+	 * @param connection - Active device connection
+	 * @param onEvent - Optional event callback for heartbeat state changes
+	 */
+	startHeartbeat(
+		connection: DeviceConnection,
+		onEvent?: (event: EcuEvent) => void,
+	): void {
+		this.heartbeatManager.start(
+			connection,
+			// On miss threshold reached
+			() => {
+				onEvent?.({
+					type: "HEARTBEAT_MISSED",
+					timestamp: Date.now(),
+					data: { missCount: this.heartbeatManager.getMissCount() },
+				});
+			},
+			// On restore (miss count reset)
+			() => {
+				onEvent?.({
+					type: "HEARTBEAT_RESTORED",
+					timestamp: Date.now(),
+				});
+			},
+			// On stop
+			() => {
+				onEvent?.({
+					type: "HEARTBEAT_STOPPED",
+					timestamp: Date.now(),
+				});
+			},
+		);
+		onEvent?.({
+			type: "HEARTBEAT_STARTED",
+			timestamp: Date.now(),
+		});
+	}
+
+	/**
+	 * Stop the UDS heartbeat.
+	 */
+	stopHeartbeat(): void {
+		this._heartbeatManager?.stop();
+	}
+
+	/**
+	 * Check if the connection is degraded due to missed heartbeats.
+	 */
+	isConnectionDegraded(): boolean {
+		return this._heartbeatManager?.isDegraded() ?? false;
+	}
+
+	/**
+	 * Get the current heartbeat miss count.
+	 */
+	getHeartbeatMissCount(): number {
+		return this._heartbeatManager?.getMissCount() ?? 0;
+	}
+
+	/**
+	 * Perform an ECU reset and reconnect.
+	 *
+	 * Sends ECUReset (0x11) with the specified reset type, waits for the ECU
+	 * to come back up, then re-establishes the diagnostic session.
+	 *
+	 * @param connection - Active device connection
+	 * @param resetType - Reset type (0x01=hard, 0x02=keyOffOn, 0x03=soft)
+	 * @param onEvent - Optional event callback for reset lifecycle events
+	 * @returns Promise that resolves when session is re-established
+	 */
+	async ecuReset(
+		connection: DeviceConnection,
+		resetType: number = UDS_RESET_TYPES.SOFT_RESET,
+		onEvent?: (event: EcuEvent) => void,
+	): Promise<void> {
+		onEvent?.({
+			type: "ECU_RESET_REQUESTED",
+			timestamp: Date.now(),
+			data: { resetType },
+		});
+
+		// Send ECUReset command
+		const response = await connection.sendFrame(
+			new Uint8Array([UDS_SERVICES.ECU_RESET, resetType]),
+		);
+
+		// Check for positive response (0x51 + SID = 0x51 for ECU_RESET)
+		if (response[0] !== 0x51) {
+			if (response[0] === UDS_NEGATIVE_RESPONSE) {
+				const errorMsg = parseNegativeResponse(response);
+				onEvent?.({
+					type: "ECU_RESET_FAILED",
+					timestamp: Date.now(),
+					data: { error: errorMsg },
+				});
+				throw new Error(`ECU reset failed: ${errorMsg}`);
+			}
+			onEvent?.({
+				type: "ECU_RESET_FAILED",
+				timestamp: Date.now(),
+				data: { error: "Unexpected response from ECU" },
+			});
+			throw new Error("Unexpected response from ECU during reset");
+		}
+
+		onEvent?.({
+			type: "ECU_RESET_ACKNOWLEDGED",
+			timestamp: Date.now(),
+			data: { resetType },
+		});
+
+		// ECU should reconnect - wait briefly for it to come back
+		await new Promise((resolve) => setTimeout(resolve, 1000));
+
+		// Re-establish the diagnostic session
+		await this.enterDiagnosticSession(connection, onEvent);
+
+		onEvent?.({
+			type: "ECU_RESET_RECONNECTED",
+			timestamp: Date.now(),
+		});
+	}
 
 	/**
 	 * Probe the connection to determine if this protocol can communicate

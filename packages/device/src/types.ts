@@ -25,7 +25,20 @@ export type EcuEventType =
 	| "BOOT_MODE_ENTERED"
 	| "SECTOR_ERASE_STARTED"
 	| "SECTOR_ERASE_COMPLETE"
-	| "KERNEL_INITIALIZED";
+	| "KERNEL_INITIALIZED"
+	| "HEARTBEAT_STARTED"
+	| "HEARTBEAT_MISSED"
+	| "HEARTBEAT_RESTORED"
+	| "HEARTBEAT_STOPPED"
+	| "ECU_RESET_REQUESTED"
+	| "ECU_RESET_ACKNOWLEDGED"
+	| "ECU_RESET_RECONNECTED"
+	| "ECU_RESET_FAILED"
+	| "RECONNECT_ATTEMPT"
+	| "RECONNECT_SUCCESS"
+	| "RECONNECT_FAILED"
+	| "OPERATION_RESUMED"
+	| "OPERATION_ABORTED";
 
 export interface EcuEvent {
 	type: EcuEventType;
@@ -83,3 +96,24 @@ export interface LiveDataSession {
 	/** Save the recorded session to a file (CSV or binary) */
 	saveRecording?(uri: vscode.Uri): Promise<void>;
 }
+
+/**
+ * Connection state for device reliability tracking.
+ */
+export type ConnectionState =
+	| "connected"
+	| "degraded"
+	| "reconnecting"
+	| "resetting"
+	| "failed";
+
+/**
+ * Failure cause classification for diagnostic events.
+ */
+export type FailureCause =
+	| "USB_DISCONNECT"
+	| "ECU_DISCONNECT"
+	| "HEARTBEAT_TIMEOUT"
+	| "PROTOCOL_NEGATIVE_RESPONSE"
+	| "TRANSPORT_ERROR"
+	| "UNKNOWN";
