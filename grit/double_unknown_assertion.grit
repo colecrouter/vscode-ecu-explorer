@@ -1,0 +1,9 @@
+language js(typescript);
+
+`$expr as unknown as $type` as $assertion where {
+	register_diagnostic(
+		span = $assertion,
+		message = "Using `as unknown as T` disables type checking. Consider using a type guard or using the correct type.",
+		severity = "warn"
+	)
+}

@@ -5,6 +5,10 @@
 		"clientKind": "git",
 		"useIgnoreFile": true
 	},
+	"plugins": [
+		"./grit/double_unknown_assertion.grit",
+		"./grit/inline_import_assertion.grit"
+	],
 	"files": {
 		"ignoreUnknown": false,
 		"includes": ["**/*.js", "**/*.ts", "**/*.css", "**/*.json", "**/*.jsonc"]

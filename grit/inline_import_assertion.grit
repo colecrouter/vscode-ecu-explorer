@@ -1,0 +1,16 @@
+language js(typescript);
+
+or {
+	TsAsExpression() as $node where {
+		$node <: contains TsImportType()
+	},
+	TsTypeAnnotation() as $node where {
+		$node <: contains TsImportType()
+	}
+} where {
+	register_diagnostic(
+		span = $node,
+		message = "Avoid inline `import()` in type assertions. Import the type explicitly instead.",
+		severity = "warn"
+	)
+}
