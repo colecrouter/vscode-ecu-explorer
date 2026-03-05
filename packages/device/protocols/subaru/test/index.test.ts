@@ -87,6 +87,14 @@ function makeKwp2000Mock(): (data: Uint8Array) => Promise<Uint8Array> {
 	};
 }
 
+function getRequiredFrame(frames: Uint8Array[], index: number): Uint8Array {
+	const frame = frames[index];
+	if (!frame) {
+		throw new Error(`Expected frame at index ${index}`);
+	}
+	return frame;
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("SubaruProtocol", () => {
@@ -147,7 +155,7 @@ describe("SubaruProtocol", () => {
 
 			await protocol.readRom(connection);
 
-			expect(Array.from(frames[0]!)).toEqual([0x10, 0x85]);
+			expect(Array.from(getRequiredFrame(frames, 0))).toEqual([0x10, 0x85]);
 		});
 
 		it("sends security access seed request [0x27, 0x01] as the second frame", async () => {
@@ -166,7 +174,7 @@ describe("SubaruProtocol", () => {
 
 			await protocol.readRom(connection);
 
-			expect(Array.from(frames[1]!)).toEqual([0x27, 0x01]);
+			expect(Array.from(getRequiredFrame(frames, 1))).toEqual([0x27, 0x01]);
 		});
 
 		it("sends security access key [0x27, 0x02, key0, key1] as the third frame", async () => {
@@ -187,11 +195,11 @@ describe("SubaruProtocol", () => {
 			await protocol.readRom(connection);
 
 			// Frame 2: [0x27, 0x02, key0, key1]
-			expect(frames[2]![0]).toBe(0x27);
-			expect(frames[2]![1]).toBe(0x02);
+			expect(frames[2]?.[0]).toBe(0x27);
+			expect(frames[2]?.[1]).toBe(0x02);
 			// Key for seed 0xAB 0xCD
-			expect(frames[2]![2]).toBe(0xce);
-			expect(frames[2]![3]).toBe(0xe8);
+			expect(frames[2]?.[2]).toBe(0xce);
+			expect(frames[2]?.[3]).toBe(0xe8);
 		});
 
 		it("computes key from seed using S-box algorithm", async () => {
@@ -220,7 +228,9 @@ describe("SubaruProtocol", () => {
 			await protocol.readRom(connection);
 
 			// Frame 3 is the first ROM block read (addr = 0x000000)
-			expect(Array.from(frames[3]!)).toEqual([0x23, 0x00, 0x00, 0x00, 0x80]);
+			expect(Array.from(getRequiredFrame(frames, 3))).toEqual([
+				0x23, 0x00, 0x00, 0x00, 0x80,
+			]);
 		});
 
 		it("sends correct address for second ROM block", async () => {
@@ -240,7 +250,9 @@ describe("SubaruProtocol", () => {
 			await protocol.readRom(connection);
 
 			// Frame 4 is the second ROM block read (addr = 0x000080)
-			expect(Array.from(frames[4]!)).toEqual([0x23, 0x00, 0x00, 0x80, 0x80]);
+			expect(Array.from(getRequiredFrame(frames, 4))).toEqual([
+				0x23, 0x00, 0x00, 0x80, 0x80,
+			]);
 		});
 	});
 
@@ -637,10 +649,10 @@ describe("SubaruProtocol.writeRom()", () => {
 		expect(transferFrames.length).toBe(BLOCKS_PER_SECTOR);
 
 		// Erase frame should contain sector 5 address (0x050000)
-		expect(eraseFrames[0]![0]).toBe(0xff); // SID_ERASE_MEMORY
-		expect(eraseFrames[0]![2]).toBe(0x05); // addr byte 0 (0x050000 >> 16)
-		expect(eraseFrames[0]![3]).toBe(0x00); // addr byte 1
-		expect(eraseFrames[0]![4]).toBe(0x00); // addr byte 2
+		expect(eraseFrames[0]?.[0]).toBe(0xff); // SID_ERASE_MEMORY
+		expect(eraseFrames[0]?.[2]).toBe(0x05); // addr byte 0 (0x050000 >> 16)
+		expect(eraseFrames[0]?.[3]).toBe(0x00); // addr byte 1
+		expect(eraseFrames[0]?.[4]).toBe(0x00); // addr byte 2
 	});
 
 	it("skips all sectors when originalRom is identical to modified ROM", async () => {
@@ -773,7 +785,13 @@ describe("SubaruProtocol onEvent callbacks", () => {
 			if (call === 2) return new Uint8Array([0x67, 0x02]); // key accepted
 			if (data[0] === 0xff) return new Uint8Array([0x00]); // erase memory
 			if (data[0] === 0x34) return new Uint8Array([0x74, 0x20]); // RequestDownload
-			if (data[0] === 0x36) return new Uint8Array([0x76, data[1]!]); // TransferData
+			if (data[0] === 0x36) {
+				const blockCounter = data[1];
+				if (blockCounter === undefined) {
+					throw new Error("TransferData missing block counter byte");
+				}
+				return new Uint8Array([0x76, blockCounter]);
+			}
 			if (data[0] === 0x37) return new Uint8Array([0x77]); // RequestTransferExit
 			return new Uint8Array([]);
 		};

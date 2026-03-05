@@ -2,12 +2,7 @@
 	"extends": "./tsconfig.base.json",
 	"compilerOptions": {
 		"noEmit": true,
-		"types": [
-			"vitest/globals",
-			"node",
-			"@types/vscode",
-			"@types/vscode-webview"
-		]
+		"types": ["node", "@types/vscode", "@types/vscode-webview"]
 	},
 	"include": ["./apps/vscode/**/*.test.ts", "./apps/vscode/**/*.spec.ts"],
 	"exclude": [

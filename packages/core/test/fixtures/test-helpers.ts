@@ -4,6 +4,8 @@ import { expect } from "vitest";
  * Common test utilities and assertions for core package tests
  */
 
+type TestHelperRecord = Record<string, unknown>;
+
 export function createTestRomBuffer(size: number = 256): Uint8Array {
 	return new Uint8Array(size);
 }
@@ -83,7 +85,7 @@ export function assertAddressInBounds(address: number, romSize: number): void {
 	expect(address).toBeLessThan(romSize);
 }
 
-export function createTestDefinition(overrides: Record<string, any> = {}) {
+export function createTestDefinition(overrides: TestHelperRecord = {}) {
 	return {
 		name: "Test Definition",
 		providerId: "test-provider",
@@ -93,7 +95,7 @@ export function createTestDefinition(overrides: Record<string, any> = {}) {
 	};
 }
 
-export function createTestTable(overrides: Record<string, any> = {}) {
+export function createTestTable(overrides: TestHelperRecord = {}) {
 	return {
 		name: "Test Table",
 		address: 0x1000,
@@ -103,7 +105,7 @@ export function createTestTable(overrides: Record<string, any> = {}) {
 	};
 }
 
-export function createTestAxis(overrides: Record<string, any> = {}) {
+export function createTestAxis(overrides: TestHelperRecord = {}) {
 	return {
 		name: "Test Axis",
 		address: 0x2000,

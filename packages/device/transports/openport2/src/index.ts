@@ -162,7 +162,7 @@ export class OpenPort2Connection implements DeviceConnection {
 		const response = await this.receiveFrame(64);
 		const text = new TextDecoder().decode(response).trim();
 		const channelId = parseInt(text, 10);
-		return isNaN(channelId) ? 0 : channelId;
+		return Number.isNaN(channelId) ? 0 : channelId;
 	}
 
 	/**

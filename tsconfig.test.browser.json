@@ -2,7 +2,7 @@
 	"extends": "./tsconfig.base.json",
 	"compilerOptions": {
 		"noEmit": true,
-		"types": ["vitest/globals", "vite/client", "svelte"]
+		"types": ["vite/client", "svelte"]
 	},
 	"include": ["./**/*.svelte.test.ts", "./**/*.svelte.spec.ts"],
 	"exclude": [

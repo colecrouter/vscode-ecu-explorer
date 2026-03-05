@@ -39,8 +39,7 @@
 		"lint": "biome check",
 		"format": "biome format --write && biome check --write --linter-enabled false && prettier --write . -l",
 		"test": "vitest run",
-		"test:watch": "vitest watch -w packages/core -w packages/ui -w packages/definitions/ecuflash -w apps/vscode",
-		"test:ui": "vitest run -w packages/ui",
+		"test:ui": "vitest run --ui",
 		"test:coverage": "vitest run --coverage"
 	},
 	"devDependencies": {

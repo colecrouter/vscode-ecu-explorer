@@ -16,6 +16,60 @@ import * as nodePath from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
 
+type MockReadFileResult = Awaited<
+	ReturnType<typeof vscode.workspace.fs.readFile>
+>;
+
+interface MockRomDocument {
+	uri: vscode.Uri;
+	romBytes: Uint8Array;
+	definition: undefined;
+	isDirty: boolean;
+	updateBytes: ReturnType<
+		typeof vi.fn<
+			(
+				newBytes: Uint8Array,
+				address?: number,
+				length?: number,
+				markDirty?: boolean,
+			) => void
+		>
+	>;
+	makeDirty: ReturnType<typeof vi.fn>;
+	makeClean: ReturnType<typeof vi.fn>;
+	onDidChange: ReturnType<typeof vi.fn>;
+	onDidUpdateBytes: ReturnType<typeof vi.fn>;
+	onDidDispose: ReturnType<
+		typeof vi.fn<(cb: () => void) => { dispose: () => void }>
+	>;
+	dispose: ReturnType<typeof vi.fn>;
+	triggerDispose: () => void;
+}
+
+type Disposable = { dispose: () => void };
+
+interface CapturingFileSystemWatcher {
+	onDidChange: (cb: (uri: vscode.Uri) => void) => Disposable;
+	onDidCreate: (cb: (uri: vscode.Uri) => void) => Disposable;
+	onDidDelete: () => Disposable;
+	dispose: () => void;
+	ignoreCreateEvents: boolean;
+	ignoreChangeEvents: boolean;
+	ignoreDeleteEvents: boolean;
+	fireChange: (uri: vscode.Uri) => void;
+	fireCreate: (uri: vscode.Uri) => void;
+}
+
+function asFileSystemWatcher(
+	watcher: CapturingFileSystemWatcher,
+): vscode.FileSystemWatcher {
+	return watcher as vscode.FileSystemWatcher;
+}
+
+function mockReadFileResult(bytes: Uint8Array): MockReadFileResult {
+	return bytes;
+}
+
 // Mock fs module to avoid file system operations during activate()
 vi.mock("node:fs/promises", () => ({
 	default: {
@@ -34,7 +88,7 @@ vi.mock("node:fs/promises", () => ({
  * Creates a mock FileSystemWatcher that captures its `onDidChange` and
  * `onDidCreate` listeners so tests can fire file-change events programmatically.
  */
-function createCapturingFileSystemWatcher() {
+function createCapturingFileSystemWatcher(): CapturingFileSystemWatcher {
 	let changeListener: ((uri: vscode.Uri) => void) | null = null;
 	let createListener: ((uri: vscode.Uri) => void) | null = null;
 
@@ -72,13 +126,16 @@ function createCapturingFileSystemWatcher() {
 /**
  * Creates a minimal mock RomDocument for testing.
  */
-function createMockRomDocument(uri: vscode.Uri, romBytes: Uint8Array) {
+function createMockRomDocument(
+	uri: vscode.Uri,
+	romBytes: Uint8Array,
+): MockRomDocument {
 	let disposeListener: (() => void) | null = null;
 
 	const doc = {
 		uri,
 		romBytes,
-		definition: undefined as any,
+		definition: undefined,
 		isDirty: false,
 		updateBytes: vi.fn(
 			(
@@ -135,7 +192,7 @@ describe("ROM File Watcher – callback logic (unit)", () => {
 				u.toString() === uri.toString() ? mockDoc : undefined;
 
 			vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(
-				newFileBytes as any,
+				mockReadFileResult(newFileBytes),
 			);
 
 			// ---- Inline replica of the per-document watcher handler ----
@@ -150,8 +207,8 @@ describe("ROM File Watcher – callback logic (unit)", () => {
 			}
 
 			expect(document).toBeDefined();
-			expect(document!.updateBytes).toHaveBeenCalledOnce();
-			expect(document!.updateBytes).toHaveBeenCalledWith(newFileBytes);
+			expect(document?.updateBytes).toHaveBeenCalledOnce();
+			expect(document?.updateBytes).toHaveBeenCalledWith(newFileBytes);
 		});
 
 		it("posts { type: 'update', snapshot, rom } to activePanel when activeRom URI matches", async () => {
@@ -160,7 +217,7 @@ describe("ROM File Watcher – callback logic (unit)", () => {
 			const newFileBytes = new Uint8Array([0xff, 0xfe]);
 
 			vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(
-				newFileBytes as any,
+				mockReadFileResult(newFileBytes),
 			);
 
 			const mockPanel = {
@@ -209,7 +266,7 @@ describe("ROM File Watcher – callback logic (unit)", () => {
 			panelToDocument.set(dummyPanel, mockDoc);
 
 			vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(
-				newFileBytes as any,
+				mockReadFileResult(newFileBytes),
 			);
 
 			// ---- Inline replica of the watcher callback ----
@@ -248,7 +305,7 @@ describe("ROM File Watcher – callback logic (unit)", () => {
 			>();
 
 			vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(
-				new Uint8Array([0x00]) as any,
+				mockReadFileResult(new Uint8Array([0x00])),
 			);
 
 			// ---- Inline replica of the watcher callback ----
@@ -285,7 +342,7 @@ describe("ROM File Watcher – callback logic (unit)", () => {
 				u.toString() === changedUri.toString() ? mockDoc : undefined;
 
 			vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(
-				new Uint8Array([0x02]) as any,
+				mockReadFileResult(new Uint8Array([0x02])),
 			);
 
 			const mockPanel = { webview: { postMessage: vi.fn() } };
@@ -306,7 +363,7 @@ describe("ROM File Watcher – callback logic (unit)", () => {
 				}
 			}
 
-			expect(document!.updateBytes).toHaveBeenCalledOnce();
+			expect(document?.updateBytes).toHaveBeenCalledOnce();
 			expect(mockPanel.webview.postMessage).not.toHaveBeenCalled();
 		});
 	});
@@ -331,7 +388,7 @@ describe("ROM File Watcher – per-document watchRomDocument logic", () => {
 
 		capturedWatcher = createCapturingFileSystemWatcher();
 		vi.mocked(vscode.workspace.createFileSystemWatcher).mockReturnValue(
-			capturedWatcher as any,
+			asFileSystemWatcher(capturedWatcher),
 		);
 	});
 
@@ -437,7 +494,7 @@ describe("ROM File Watcher – per-document watchRomDocument logic", () => {
 		const mockDoc = createMockRomDocument(uri, originalBytes);
 
 		vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(
-			newFileBytes as any,
+			mockReadFileResult(newFileBytes),
 		);
 
 		const { fireChange } = simulateWatchRomDocument(mockDoc, null, null, null);
@@ -461,7 +518,7 @@ describe("ROM File Watcher – per-document watchRomDocument logic", () => {
 		const mockDoc = createMockRomDocument(uri, originalBytes);
 
 		vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(
-			newFileBytes as any,
+			mockReadFileResult(newFileBytes),
 		);
 
 		const { fireChange } = simulateWatchRomDocument(mockDoc, null, null, null);
@@ -486,7 +543,7 @@ describe("ROM File Watcher – per-document watchRomDocument logic", () => {
 		const mockDoc = createMockRomDocument(uri, new Uint8Array([0x00]));
 
 		vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(
-			newFileBytes as any,
+			mockReadFileResult(newFileBytes),
 		);
 
 		const { fireCreate } = simulateWatchRomDocument(mockDoc, null, null, null);
@@ -525,7 +582,9 @@ describe("ROM File Watcher – per-document watchRomDocument logic", () => {
 		const mockDoc = createMockRomDocument(uri, new Uint8Array(4));
 		const newBytes = new Uint8Array([0xca, 0xfe]);
 
-		vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(newBytes as any);
+		vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(
+			mockReadFileResult(newBytes),
+		);
 
 		const activeRom = { romUri: uri.toString(), bytes: new Uint8Array(4) };
 		const mockPanel = { webview: { postMessage: vi.fn() } };
@@ -560,7 +619,9 @@ describe("ROM File Watcher – per-document watchRomDocument logic", () => {
 		const mockDoc = createMockRomDocument(uri, new Uint8Array(4));
 		const newBytes = new Uint8Array([0xca, 0xfe]);
 
-		vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(newBytes as any);
+		vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(
+			mockReadFileResult(newBytes),
+		);
 
 		// Active ROM is a DIFFERENT file
 		const activeRom = {

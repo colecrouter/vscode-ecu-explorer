@@ -13,18 +13,44 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
 import { GraphPanelManager } from "../src/graph-panel-manager";
 import { GraphPanelSerializer } from "../src/graph-panel-serializer";
-import type { RomDocument } from "../src/rom/document";
+import { RomDocument } from "../src/rom/document";
 import type { RomEditorProvider } from "../src/rom/editor-provider";
-import { createMockPanel, createMockWebviewPanel } from "./mocks/webview-mock";
+import {
+	createMockPanel,
+	createMockWebviewPanel,
+	type GraphCompatibleWebviewPanel,
+	type MockGraphWebview,
+} from "./mocks/webview-mock";
 
 describe("Graph Windows E2E", () => {
 	let manager: GraphPanelManager;
 	let serializer: GraphPanelSerializer;
-	let mockContext: any;
-	let mockGetDocument: any;
-	let mockRomEditorProvider: any;
-	let cellSelectionCallback: any;
-	let tableEditorWebview: any;
+	let mockContext: vscode.ExtensionContext;
+	let mockGetDocument: (romPath: string) => RomDocument | undefined;
+	let mockRomEditorProvider: RomEditorProvider;
+	let cellSelectionCallback: (
+		romPath: string,
+		tableId: string,
+		row: number,
+		col: number,
+	) => void;
+	let tableEditorWebview: { postMessage: (message: unknown) => void };
+	let tableEditorPostMessage: ReturnType<
+		typeof vi.fn<(message: unknown) => void>
+	>;
+
+	const getMockPanel = (
+		panel: vscode.WebviewPanel,
+	): GraphCompatibleWebviewPanel => panel as GraphCompatibleWebviewPanel;
+
+	const getRestoredPanel = (): vscode.WebviewPanel => {
+		const panel = createMockPanel("ecuExplorerGraph", "Graph: Test Table");
+		panel.iconPath = vscode.Uri.file("/test/icon.svg");
+		return panel as vscode.WebviewPanel;
+	};
+
+	const asMockWebview = (panel: vscode.WebviewPanel): MockGraphWebview =>
+		getMockPanel(panel).webview;
 
 	const createMockSnapshot = (value: number = 10): TableSnapshot => ({
 		kind: "table2d",
@@ -41,27 +67,26 @@ describe("Graph Windows E2E", () => {
 	});
 
 	const createMockDocument = (romPath: string): RomDocument =>
-		({
-			uri: { path: romPath } as any,
-			bytes: new Uint8Array(1024),
-			definition: {
-				name: "Test ROM",
-				tables: [
-					{
-						name: "table1",
-						description: "Test Table 1",
+		new RomDocument(vscode.Uri.file(romPath), new Uint8Array(1024), {
+			uri: "file:///test/definition.xml",
+			name: "Test ROM",
+			fingerprints: [],
+			platform: {},
+			tables: [
+				{
+					name: "table1",
+					kind: "table2d",
+					rows: 2,
+					cols: 2,
+					z: {
+						name: "z",
 						address: 0x1000,
-						rows: 2,
-						cols: 2,
-						rowHeaders: ["0", "1"],
-						colHeaders: ["A", "B"],
-						type: "u8",
-						endianness: "big",
+						dtype: "u8",
+						endianness: "be",
 					},
-				],
-			},
-			onDidUpdateBytes: vi.fn(() => ({ dispose: vi.fn() })),
-		}) as any;
+				},
+			],
+		});
 
 	beforeEach(() => {
 		// Clear mocks
@@ -70,44 +95,49 @@ describe("Graph Windows E2E", () => {
 		// Mock vscode.window.createWebviewPanel
 		vi.mocked(vscode.window.createWebviewPanel).mockImplementation(
 			(_viewType, title) => {
-				return createMockWebviewPanel(title) as any;
+				return createMockWebviewPanel(title) as vscode.WebviewPanel;
 			},
 		);
 
 		// Create mock context
 		mockContext = {
-			subscriptions: [],
+			subscriptions: [] as vscode.Disposable[],
 			extensionUri: vscode.Uri.file("/test/extension"),
-		};
+		} satisfies Partial<vscode.ExtensionContext> as vscode.ExtensionContext;
 
 		// Create mock table editor webview
+		tableEditorPostMessage = vi.fn<(message: unknown) => void>();
 		tableEditorWebview = {
-			postMessage: vi.fn(),
+			postMessage: (message) => {
+				tableEditorPostMessage(message);
+			},
 		};
 
 		// Create mock getDocument function
-		mockGetDocument = vi.fn((romPath: string): RomDocument | undefined => {
+		mockGetDocument = (romPath: string): RomDocument | undefined => {
 			if (romPath.includes("test")) {
 				return createMockDocument(romPath);
 			}
 			return undefined;
-		});
+		};
 
 		// Create mock RomEditorProvider
 		mockRomEditorProvider = {
-			getDocument: mockGetDocument,
-		} as RomEditorProvider;
+			getDocument: (uri: vscode.Uri) => mockGetDocument(uri.fsPath),
+		} satisfies Pick<RomEditorProvider, "getDocument"> as RomEditorProvider;
 
 		// Create cell selection callback
-		cellSelectionCallback = vi.fn((_romPath, tableId, row, col) => {
-			// Simulate forwarding to table editor
-			tableEditorWebview.postMessage({
-				type: "selectCell",
-				tableId,
-				row,
-				col,
-			});
-		});
+		cellSelectionCallback = vi.fn(
+			(_romPath: string, tableId: string, row: number, col: number) => {
+				// Simulate forwarding to table editor
+				tableEditorWebview.postMessage({
+					type: "selectCell",
+					tableId,
+					row,
+					col,
+				});
+			},
+		);
 
 		// Create manager and serializer
 		manager = new GraphPanelManager(
@@ -217,10 +247,10 @@ describe("Graph Windows E2E", () => {
 			);
 
 			// Clear initial messages
-			(panel.webview as any)._clearMessages();
+			asMockWebview(panel)._clearMessages();
 
 			// Simulate webview ready
-			(panel.webview as any)._simulateMessage({ type: "ready" });
+			asMockWebview(panel)._simulateMessage({ type: "ready" });
 
 			// Should send init message
 			expect(panel.webview.postMessage).toHaveBeenCalledWith({
@@ -252,7 +282,7 @@ describe("Graph Windows E2E", () => {
 			);
 
 			// Clear initial messages
-			(panel.webview as any)._clearMessages();
+			asMockWebview(panel)._clearMessages();
 
 			// User edits cell in table
 			const updatedSnapshot = createMockSnapshot(999);
@@ -263,10 +293,6 @@ describe("Graph Windows E2E", () => {
 				type: "update",
 				snapshot: updatedSnapshot,
 			});
-
-			// Verify the updated value
-			const messages = (panel.webview as any)._getMessages();
-			expect(messages[0].snapshot.z[0][0]).toBe(999);
 		});
 
 		it("should update graph when user performs undo", () => {
@@ -279,7 +305,7 @@ describe("Graph Windows E2E", () => {
 			);
 
 			// Clear initial messages
-			(panel.webview as any)._clearMessages();
+			asMockWebview(panel)._clearMessages();
 
 			// User performs undo
 			const undoSnapshot = createMockSnapshot(5);
@@ -302,7 +328,7 @@ describe("Graph Windows E2E", () => {
 			);
 
 			// Clear initial messages
-			(panel.webview as any)._clearMessages();
+			asMockWebview(panel)._clearMessages();
 
 			// User performs redo
 			const redoSnapshot = createMockSnapshot(15);
@@ -327,7 +353,7 @@ describe("Graph Windows E2E", () => {
 			);
 
 			// Clear messages
-			(panel.webview as any)._clearMessages();
+			asMockWebview(panel)._clearMessages();
 
 			// User edits table
 			const updatedSnapshot = createMockSnapshot(999);
@@ -352,7 +378,7 @@ describe("Graph Windows E2E", () => {
 			);
 
 			// User clicks cell in graph
-			(panel.webview as any)._simulateMessage({
+			asMockWebview(panel)._simulateMessage({
 				type: "cellSelect",
 				row: 1,
 				col: 1,
@@ -365,7 +391,7 @@ describe("Graph Windows E2E", () => {
 				1,
 				1,
 			);
-			expect(tableEditorWebview.postMessage).toHaveBeenCalledWith({
+			expect(tableEditorPostMessage).toHaveBeenCalledWith({
 				type: "selectCell",
 				tableId: "table1",
 				row: 1,
@@ -383,7 +409,7 @@ describe("Graph Windows E2E", () => {
 			);
 
 			// Clear initial messages
-			(panel.webview as any)._clearMessages();
+			asMockWebview(panel)._clearMessages();
 
 			// User selects cell in table
 			manager.selectCell("/test/rom.hex", "table1", 0, 1);
@@ -414,7 +440,7 @@ describe("Graph Windows E2E", () => {
 			);
 
 			// User clicks in graph 1
-			(panel1.webview as any)._simulateMessage({
+			asMockWebview(panel1)._simulateMessage({
 				type: "cellSelect",
 				row: 0,
 				col: 0,
@@ -429,7 +455,7 @@ describe("Graph Windows E2E", () => {
 			);
 
 			// User clicks in graph 2
-			(panel2.webview as any)._simulateMessage({
+			asMockWebview(panel2)._simulateMessage({
 				type: "cellSelect",
 				row: 1,
 				col: 1,
@@ -458,8 +484,8 @@ describe("Graph Windows E2E", () => {
 			);
 
 			// 2. Graph becomes ready
-			(panel.webview as any)._clearMessages();
-			(panel.webview as any)._simulateMessage({ type: "ready" });
+			asMockWebview(panel)._clearMessages();
+			asMockWebview(panel)._simulateMessage({ type: "ready" });
 
 			// Should receive init
 			expect(panel.webview.postMessage).toHaveBeenCalledWith({
@@ -479,7 +505,7 @@ describe("Graph Windows E2E", () => {
 			});
 
 			// 3. User edits cell in table
-			(panel.webview as any)._clearMessages();
+			asMockWebview(panel)._clearMessages();
 			const updatedSnapshot = createMockSnapshot(999);
 			manager.broadcastSnapshot("/test/rom.hex", "table1", updatedSnapshot);
 
@@ -490,7 +516,7 @@ describe("Graph Windows E2E", () => {
 			});
 
 			// 4. User clicks cell in graph
-			(panel.webview as any)._simulateMessage({
+			asMockWebview(panel)._simulateMessage({
 				type: "cellSelect",
 				row: 1,
 				col: 0,
@@ -523,8 +549,8 @@ describe("Graph Windows E2E", () => {
 			);
 
 			// Clear messages
-			(panel1.webview as any)._clearMessages();
-			(panel2.webview as any)._clearMessages();
+			asMockWebview(panel1)._clearMessages();
+			asMockWebview(panel2)._clearMessages();
 
 			// 2. User edits table1
 			const update1 = createMockSnapshot(111);
@@ -538,8 +564,8 @@ describe("Graph Windows E2E", () => {
 			expect(panel2.webview.postMessage).not.toHaveBeenCalled();
 
 			// 3. User edits table2
-			(panel1.webview as any)._clearMessages();
-			(panel2.webview as any)._clearMessages();
+			asMockWebview(panel1)._clearMessages();
+			asMockWebview(panel2)._clearMessages();
 			const update2 = createMockSnapshot(222);
 			manager.broadcastSnapshot("/test/rom.hex", "table2", update2);
 
@@ -606,16 +632,11 @@ describe("Graph Windows E2E", () => {
 			};
 
 			// Create a mock panel (simulating VSCode restoration)
-			const restoredPanel = createMockPanel(
-				"ecuExplorerGraph",
-				"Graph: Test Table",
-			);
+			const restoredPanel = getRestoredPanel();
+			restoredPanel.iconPath = vscode.Uri.file("/test/icon.svg");
 
 			// Deserialize
-			await serializer.deserializeWebviewPanel(
-				restoredPanel as any,
-				savedState,
-			);
+			await serializer.deserializeWebviewPanel(restoredPanel, savedState);
 
 			// Panel should be registered
 			const panel = manager.getPanel("/test/rom.hex", "table1");
@@ -629,16 +650,11 @@ describe("Graph Windows E2E", () => {
 				tableName: "Test Table",
 			};
 
-			const restoredPanel = createMockPanel(
-				"ecuExplorerGraph",
-				"Graph: Test Table",
-			);
+			const restoredPanel = getRestoredPanel();
+			restoredPanel.iconPath = vscode.Uri.file("/test/icon.svg");
 
 			// Deserialize
-			await serializer.deserializeWebviewPanel(
-				restoredPanel as any,
-				savedState,
-			);
+			await serializer.deserializeWebviewPanel(restoredPanel, savedState);
 
 			// Panel should be disposed
 			expect(restoredPanel.dispose).toHaveBeenCalled();
@@ -651,16 +667,11 @@ describe("Graph Windows E2E", () => {
 				romPath: "/test/rom.hex",
 			};
 
-			const restoredPanel = createMockPanel(
-				"ecuExplorerGraph",
-				"Graph: Test Table",
-			);
+			const restoredPanel = getRestoredPanel();
+			restoredPanel.iconPath = vscode.Uri.file("/test/icon.svg");
 
 			// Deserialize
-			await serializer.deserializeWebviewPanel(
-				restoredPanel as any,
-				invalidState,
-			);
+			await serializer.deserializeWebviewPanel(restoredPanel, invalidState);
 
 			// Panel should be disposed
 			expect(restoredPanel.dispose).toHaveBeenCalled();
@@ -675,18 +686,13 @@ describe("Graph Windows E2E", () => {
 				tableName: "Test Table",
 			};
 
-			const restoredPanel = createMockPanel(
-				"ecuExplorerGraph",
-				"Graph: Test Table",
-			);
+			const restoredPanel = getRestoredPanel();
+			restoredPanel.iconPath = vscode.Uri.file("/test/icon.svg");
 
-			await serializer.deserializeWebviewPanel(
-				restoredPanel as any,
-				savedState,
-			);
+			await serializer.deserializeWebviewPanel(restoredPanel, savedState);
 
 			// 2. Clear messages
-			(restoredPanel.webview as any)._clearMessages();
+			getMockPanel(restoredPanel).webview._clearMessages();
 
 			// 3. Update table
 			const snapshot = createMockSnapshot(999);
@@ -735,7 +741,7 @@ describe("Graph Windows E2E", () => {
 
 			// Send invalid message
 			expect(() => {
-				(panel.webview as any)._simulateMessage({
+				asMockWebview(panel)._simulateMessage({
 					type: "unknownType",
 					data: "invalid",
 				});

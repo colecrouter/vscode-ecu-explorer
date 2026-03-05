@@ -4,6 +4,13 @@ import {
 	levenshteinDistance,
 } from "../src/definition/fuzzy-match";
 
+const nullableFindClosestMatches = findClosestMatches as (
+	input: string | null,
+	candidates: string[] | null,
+	maxResults?: number,
+	maxDistance?: number,
+) => string[];
+
 describe("levenshteinDistance", () => {
 	it("returns 0 for identical strings", () => {
 		expect(levenshteinDistance("hello", "hello")).toBe(0);
@@ -93,12 +100,12 @@ describe("findClosestMatches", () => {
 	});
 
 	it("returns empty array for undefined/null input", () => {
-		const result = findClosestMatches(null as unknown as string, candidates);
+		const result = nullableFindClosestMatches(null, candidates);
 		expect(result).toEqual([]);
 	});
 
 	it("returns empty array for undefined/null candidates", () => {
-		const result = findClosestMatches("table", null as unknown as string[]);
+		const result = nullableFindClosestMatches("table", null);
 		expect(result).toEqual([]);
 	});
 

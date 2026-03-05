@@ -9,6 +9,33 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
 import { LoggingManager, openLogsFolder } from "../src/logging-manager";
 
+type LoggingConfiguration = Pick<
+	vscode.WorkspaceConfiguration,
+	"get" | "has" | "inspect" | "update"
+>;
+
+const OPEN_FOLDER_ACTION: vscode.MessageItem = { title: "Open Folder" };
+
+function createWorkspaceFolders(): readonly vscode.WorkspaceFolder[] {
+	return [{ uri: vscode.Uri.file("/workspace"), name: "workspace", index: 0 }];
+}
+
+function createLoggingConfiguration(
+	logsFolder: string,
+	columns: string[] | "all" = "all",
+): LoggingConfiguration {
+	return {
+		get: vi.fn((key: string) => {
+			if (key === "logsFolder") return logsFolder;
+			if (key === "logging.columns") return columns;
+			return undefined;
+		}),
+		has: vi.fn(() => true),
+		inspect: vi.fn(() => undefined),
+		update: vi.fn(async () => {}),
+	};
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function createSamplePids() {
@@ -47,25 +74,21 @@ describe("LoggingManager", () => {
 
 		// Mock workspace folders
 		vi.spyOn(vscode.workspace, "workspaceFolders", "get").mockReturnValue([
-			{ uri: vscode.Uri.file("/workspace"), name: "workspace", index: 0 },
-		] as any);
+			...createWorkspaceFolders(),
+		]);
 
 		// Mock workspace.fs
 		vi.mocked(vscode.workspace.fs.createDirectory).mockResolvedValue(undefined);
 		vi.mocked(vscode.workspace.fs.writeFile).mockResolvedValue(undefined);
 
 		// Mock workspace.getConfiguration
-		vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
-			get: vi.fn((key: string) => {
-				if (key === "logsFolder") return "logs";
-				if (key === "logging.columns") return "all";
-				return undefined;
-			}),
-		} as any);
+		vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(
+			createLoggingConfiguration("logs"),
+		);
 
 		// Mock showInformationMessage to return undefined (no button clicked)
 		vi.mocked(vscode.window.showInformationMessage).mockResolvedValue(
-			undefined as any,
+			undefined,
 		);
 
 		manager = new LoggingManager();
@@ -140,13 +163,9 @@ describe("LoggingManager", () => {
 		});
 
 		it("should use relative logsFolder setting", async () => {
-			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
-				get: vi.fn((key: string) => {
-					if (key === "logsFolder") return "data/logs";
-					if (key === "logging.columns") return "all";
-					return undefined;
-				}),
-			} as any);
+			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(
+				createLoggingConfiguration("data/logs"),
+			);
 
 			await manager.startLog(createSamplePids());
 
@@ -156,13 +175,9 @@ describe("LoggingManager", () => {
 		});
 
 		it("should use absolute logsFolder setting", async () => {
-			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
-				get: vi.fn((key: string) => {
-					if (key === "logsFolder") return "/absolute/logs";
-					if (key === "logging.columns") return "all";
-					return undefined;
-				}),
-			} as any);
+			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(
+				createLoggingConfiguration("/absolute/logs"),
+			);
 
 			await manager.startLog(createSamplePids());
 
@@ -213,13 +228,9 @@ describe("LoggingManager", () => {
 		});
 
 		it("should drop frame for PID not in enabled columns", async () => {
-			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
-				get: vi.fn((key: string) => {
-					if (key === "logsFolder") return "logs";
-					if (key === "logging.columns") return ["Engine RPM"]; // only Engine RPM
-					return undefined;
-				}),
-			} as any);
+			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(
+				createLoggingConfiguration("logs", ["Engine RPM"]),
+			);
 
 			const pids = createSamplePids();
 			await manager.startLog(pids);
@@ -334,7 +345,7 @@ describe("LoggingManager", () => {
 
 		it("should reveal logs folder when Open Folder is clicked", async () => {
 			vi.mocked(vscode.window.showInformationMessage).mockResolvedValue(
-				"Open Folder" as any,
+				OPEN_FOLDER_ACTION,
 			);
 
 			await manager.startLog(createSamplePids());
@@ -361,13 +372,9 @@ describe("LoggingManager", () => {
 
 	describe("column filtering", () => {
 		it("should include all PIDs when columns is 'all'", async () => {
-			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
-				get: vi.fn((key: string) => {
-					if (key === "logsFolder") return "logs";
-					if (key === "logging.columns") return "all";
-					return undefined;
-				}),
-			} as any);
+			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(
+				createLoggingConfiguration("logs"),
+			);
 
 			const pids = createSamplePids();
 			await manager.startLog(pids);
@@ -381,13 +388,9 @@ describe("LoggingManager", () => {
 		});
 
 		it("should only include specified PIDs when columns is an array", async () => {
-			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
-				get: vi.fn((key: string) => {
-					if (key === "logsFolder") return "logs";
-					if (key === "logging.columns") return ["Engine RPM", "Coolant Temp"];
-					return undefined;
-				}),
-			} as any);
+			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(
+				createLoggingConfiguration("logs", ["Engine RPM", "Coolant Temp"]),
+			);
 
 			const pids = createSamplePids();
 			await manager.startLog(pids);
@@ -401,13 +404,9 @@ describe("LoggingManager", () => {
 		});
 
 		it("should silently ignore unknown PID names in columns array", async () => {
-			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
-				get: vi.fn((key: string) => {
-					if (key === "logsFolder") return "logs";
-					if (key === "logging.columns") return ["Engine RPM", "Unknown PID"];
-					return undefined;
-				}),
-			} as any);
+			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(
+				createLoggingConfiguration("logs", ["Engine RPM", "Unknown PID"]),
+			);
 
 			const pids = createSamplePids();
 			await manager.startLog(pids);
@@ -464,8 +463,10 @@ describe("LoggingManager", () => {
 			const lines = content.trim().split("\n");
 			// Data row should have 4 fields: timestamp, Engine RPM, Coolant Temp (empty), Throttle Position (empty)
 			const dataRow = lines[2]; // index 0=header, 1=units, 2=first data row
-			expect(dataRow).toBeDefined();
-			const fields = dataRow!.split(",");
+			if (dataRow === undefined) {
+				throw new Error("Expected first data row to exist");
+			}
+			const fields = dataRow.split(",");
 			expect(fields).toHaveLength(4); // timestamp + 3 PID columns
 			expect(fields[1]).toBe("850"); // Engine RPM value
 			expect(fields[2]).toBe(""); // Coolant Temp empty
@@ -481,17 +482,14 @@ describe("openLogsFolder", () => {
 		vi.clearAllMocks();
 
 		vi.spyOn(vscode.workspace, "workspaceFolders", "get").mockReturnValue([
-			{ uri: vscode.Uri.file("/workspace"), name: "workspace", index: 0 },
-		] as any);
+			...createWorkspaceFolders(),
+		]);
 
 		vi.mocked(vscode.workspace.fs.createDirectory).mockResolvedValue(undefined);
 
-		vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
-			get: vi.fn((key: string) => {
-				if (key === "logsFolder") return "logs";
-				return undefined;
-			}),
-		} as any);
+		vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(
+			createLoggingConfiguration("logs"),
+		);
 	});
 
 	it("should create the logs directory", async () => {
@@ -526,12 +524,9 @@ describe("openLogsFolder", () => {
 	});
 
 	it("should resolve relative logsFolder path against workspace root", async () => {
-		vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
-			get: vi.fn((key: string) => {
-				if (key === "logsFolder") return "data/logs";
-				return undefined;
-			}),
-		} as any);
+		vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(
+			createLoggingConfiguration("data/logs"),
+		);
 
 		await openLogsFolder();
 
@@ -541,12 +536,9 @@ describe("openLogsFolder", () => {
 	});
 
 	it("should use absolute logsFolder path as-is", async () => {
-		vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
-			get: vi.fn((key: string) => {
-				if (key === "logsFolder") return "/absolute/path/logs";
-				return undefined;
-			}),
-		} as any);
+		vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(
+			createLoggingConfiguration("/absolute/path/logs"),
+		);
 
 		await openLogsFolder();
 

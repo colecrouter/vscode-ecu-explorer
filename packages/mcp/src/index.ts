@@ -19,6 +19,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { loadConfig } from "./config.js";
 import { setupContextIpc } from "./context-ipc.js";
+import type { PatchTableOptions } from "./tools/patch-table.js";
 
 /**
  * Open documents context shared state
@@ -90,13 +91,12 @@ const server = new McpServer({
 setupContextIpc((data: Record<string, unknown>) => {
 	// Update the current open context with new data from the extension
 	if (typeof data === "object" && data !== null) {
-		if ("roms" in data && Array.isArray(data["roms"])) {
-			currentOpenContext.roms = data["roms"] as typeof currentOpenContext.roms;
+		if ("roms" in data && Array.isArray(data.roms)) {
+			currentOpenContext.roms = data.roms as typeof currentOpenContext.roms;
 		}
-		if ("tables" in data && Array.isArray(data["tables"])) {
-			currentOpenContext.tables = data[
-				"tables"
-			] as typeof currentOpenContext.tables;
+		if ("tables" in data && Array.isArray(data.tables)) {
+			currentOpenContext.tables =
+				data.tables as typeof currentOpenContext.tables;
 		}
 		currentOpenContext.timestamp = new Date().toISOString();
 	}
@@ -224,7 +224,7 @@ server.tool(
 	},
 	async ({ rom, table, op, value, min, max, row, col }) => {
 		try {
-			const opts: import("./tools/patch-table.js").PatchTableOptions = {
+			const opts: PatchTableOptions = {
 				rom,
 				table,
 				op,

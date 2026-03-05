@@ -41,7 +41,7 @@ describe("Color Map Heatmap Generation", () => {
 
 		it("should handle NaN values", () => {
 			const data = [10, NaN, 90];
-			const validData = data.filter((v) => !isNaN(v));
+			const validData = data.filter((v) => !Number.isNaN(v));
 
 			expect(validData.length).toBe(2);
 		});

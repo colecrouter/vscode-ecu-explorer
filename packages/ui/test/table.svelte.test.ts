@@ -6,6 +6,13 @@ import type {
 import { describe, expect, it } from "vitest";
 import { TableView } from "../src/lib/views/table.svelte";
 
+type UndoRedoOperation = {
+	row: number;
+	col: number;
+	oldValue: number;
+	newValue: number;
+};
+
 /**
  * Helper to create a simple 1D table definition
  */
@@ -151,7 +158,7 @@ describe("TableView Svelte Reactive State", () => {
 			staged.forEach((value, key) => {
 				const indexStr = key.split("_")[1];
 				if (indexStr) {
-					const index = parseInt(indexStr);
+					const index = parseInt(indexStr, 10);
 					data[index] = value;
 				}
 			});
@@ -288,7 +295,7 @@ describe("TableView Svelte Reactive State", () => {
 
 	describe("Undo/Redo UI Integration", () => {
 		it("should enable undo button when history exists", () => {
-			const undoStack: any[] = [];
+			const undoStack: UndoRedoOperation[] = [];
 			undoStack.push({ row: 0, col: 0, oldValue: 10, newValue: 20 });
 
 			const canUndo = undoStack.length > 0;
@@ -296,14 +303,14 @@ describe("TableView Svelte Reactive State", () => {
 		});
 
 		it("should disable undo button when history is empty", () => {
-			const undoStack: any[] = [];
+			const undoStack: UndoRedoOperation[] = [];
 
 			const canUndo = undoStack.length > 0;
 			expect(canUndo).toBe(false);
 		});
 
 		it("should enable redo button when undone operations exist", () => {
-			const redoStack: any[] = [];
+			const redoStack: UndoRedoOperation[] = [];
 			redoStack.push({ row: 0, col: 0, oldValue: 20, newValue: 10 });
 
 			const canRedo = redoStack.length > 0;
@@ -311,7 +318,7 @@ describe("TableView Svelte Reactive State", () => {
 		});
 
 		it("should disable redo button when no undone operations", () => {
-			const redoStack: any[] = [];
+			const redoStack: UndoRedoOperation[] = [];
 
 			const canRedo = redoStack.length > 0;
 			expect(canRedo).toBe(false);
@@ -366,8 +373,8 @@ describe("TableView Svelte Reactive State", () => {
 		});
 
 		it("should update UI state after undo", () => {
-			const undoStack: any[] = [];
-			const redoStack: any[] = [];
+			const undoStack: UndoRedoOperation[] = [];
+			const redoStack: UndoRedoOperation[] = [];
 
 			const operation = { row: 0, col: 0, oldValue: 10, newValue: 20 };
 			undoStack.push(operation);
@@ -381,8 +388,8 @@ describe("TableView Svelte Reactive State", () => {
 		});
 
 		it("should update UI state after redo", () => {
-			const undoStack: any[] = [];
-			const redoStack: any[] = [];
+			const undoStack: UndoRedoOperation[] = [];
+			const redoStack: UndoRedoOperation[] = [];
 
 			const operation = { row: 0, col: 0, oldValue: 10, newValue: 20 };
 			redoStack.push(operation);
@@ -396,8 +403,8 @@ describe("TableView Svelte Reactive State", () => {
 		});
 
 		it("should clear redo stack on new edit", () => {
-			const undoStack: any[] = [];
-			const redoStack: any[] = [];
+			const undoStack: UndoRedoOperation[] = [];
+			const redoStack: UndoRedoOperation[] = [];
 
 			// Add to undo and redo
 			undoStack.push({ row: 0, col: 0, oldValue: 10, newValue: 20 });
@@ -413,8 +420,8 @@ describe("TableView Svelte Reactive State", () => {
 		});
 
 		it("should handle rapid undo/redo operations", () => {
-			const undoStack: any[] = [];
-			const redoStack: any[] = [];
+			const undoStack: UndoRedoOperation[] = [];
+			const redoStack: UndoRedoOperation[] = [];
 
 			// Add multiple operations
 			for (let i = 0; i < 5; i++) {

@@ -81,7 +81,7 @@ describe("TableView Clipboard Operations", () => {
 			// Middle cells should be NaN
 			const middleRow = matrix[1];
 			if (!middleRow) throw new Error("Expected middle row to be defined");
-			expect(isNaN(middleRow[1] as number)).toBe(true);
+			expect(Number.isNaN(middleRow[1] as number)).toBe(true);
 		});
 
 		it("should apply scale and offset to values", () => {

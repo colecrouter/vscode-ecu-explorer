@@ -70,9 +70,15 @@ const RAX_PID_BASE = 0x8000;
 function buildRaxPidDescriptors(): PidDescriptor[] {
 	const descriptors: PidDescriptor[] = [];
 	for (let blockIdx = 0; blockIdx < RAX_BLOCKS.length; blockIdx++) {
-		const block = RAX_BLOCKS[blockIdx]!;
+		const block = RAX_BLOCKS[blockIdx];
+		if (block === undefined) {
+			continue;
+		}
 		for (let paramIdx = 0; paramIdx < block.parameters.length; paramIdx++) {
-			const param = block.parameters[paramIdx]!;
+			const param = block.parameters[paramIdx];
+			if (param === undefined) {
+				continue;
+			}
 			descriptors.push({
 				pid: RAX_PID_BASE + blockIdx * 100 + paramIdx,
 				name: param.name,
@@ -102,7 +108,8 @@ function decodeRaxPid(
 	const blockIdx = Math.floor(offset / 100);
 	const paramIdx = offset % 100;
 	if (blockIdx >= RAX_BLOCKS.length) return null;
-	const block = RAX_BLOCKS[blockIdx]!;
+	const block = RAX_BLOCKS[blockIdx];
+	if (block === undefined) return null;
 	if (paramIdx >= block.parameters.length) return null;
 	return { blockIdx, paramIdx };
 }
@@ -255,11 +262,12 @@ export class Mut3Protocol implements EcuProtocol {
 		>();
 		for (const pid of pids) {
 			const decoded = decodeRaxPid(pid);
-			if (decoded) {
-				const param =
-					RAX_BLOCKS[decoded.blockIdx]!.parameters[decoded.paramIdx]!;
-				pidMap.set(pid, { ...decoded, unit: param.unit });
-			}
+			if (!decoded) continue;
+
+			const param = RAX_BLOCKS[decoded.blockIdx]?.parameters[decoded.paramIdx];
+			if (!param) continue;
+
+			pidMap.set(pid, { ...decoded, unit: param.unit });
 		}
 
 		// Derive the unique set of block indices needed for requested pids
@@ -281,7 +289,8 @@ export class Mut3Protocol implements EcuProtocol {
 				for (const blockIdx of requiredBlockIndices) {
 					if (!running) break;
 
-					const block = RAX_BLOCKS[blockIdx]!;
+					const block = RAX_BLOCKS[blockIdx];
+					if (!block) continue;
 
 					try {
 						const blockStart = Date.now();
@@ -302,7 +311,8 @@ export class Mut3Protocol implements EcuProtocol {
 						for (const [pid, { blockIdx: bIdx, paramIdx, unit }] of pidMap) {
 							if (bIdx === blockIdx) {
 								const paramName =
-									RAX_BLOCKS[blockIdx]!.parameters[paramIdx]!.name;
+									RAX_BLOCKS[blockIdx]?.parameters[paramIdx]?.name;
+								if (paramName === undefined) continue;
 								const value = values[paramName];
 								if (value !== undefined) {
 									onFrame({ timestamp, pid, value, unit });
@@ -424,7 +434,7 @@ export class Mut3Protocol implements EcuProtocol {
 		if (keyResponse[0] !== 0x67 || keyResponse[1] !== 0x02) {
 			throw new Error(
 				`Security access denied: ECU returned [${Array.from(keyResponse)
-					.map((b) => "0x" + b.toString(16))
+					.map((b) => `0x${b.toString(16)}`)
 					.join(", ")}]`,
 			);
 		}

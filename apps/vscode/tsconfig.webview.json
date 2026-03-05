@@ -1,7 +1,7 @@
 {
 	"extends": "../../tsconfig.base.json",
 	"compilerOptions": {
-		"types": ["svelte", "vite/client"],
+		"types": ["svelte", "vite/client", "@types/vscode-webview"],
 		"module": "ESNext",
 		"moduleResolution": "bundler",
 		"target": "ES2020",

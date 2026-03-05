@@ -3,7 +3,10 @@ import type {
 	DefinitionProvider,
 } from "@ecu-explorer/core";
 import * as vscode from "vscode";
-import { OpenContextTracker } from "../open-context-tracker.js";
+import {
+	OpenContextTracker,
+	type OpenDocumentsContext,
+} from "../open-context-tracker.js";
 import { TableDocument } from "../table-document.js";
 import { isTableUri, parseTableUri } from "../table-fs-uri.js";
 import type { RomExplorerTreeProvider } from "../tree/rom-tree-provider.js";
@@ -138,9 +141,7 @@ export class RomEditorProvider
 	 * Listen for context updates
 	 */
 	onOpenContextUpdate(
-		listener: (
-			context: import("../open-context-tracker.js").OpenDocumentsContext,
-		) => void,
+		listener: (context: OpenDocumentsContext) => void,
 	): vscode.Disposable {
 		return this.contextTracker.onContextUpdate(listener);
 	}

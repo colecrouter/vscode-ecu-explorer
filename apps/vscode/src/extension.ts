@@ -93,14 +93,20 @@ function getActiveRomPathForCacheClear(): string | null {
 /**
  * Manages selection synchronization across different panels for the same ROM.
  */
+
+/**
+ * Represents a cell selection in a table
+ */
+type TableSelection = { row: number; col: number } | null;
+
 class SelectionManager {
 	// ROM Path -> Table ID -> Selection
-	private selections = new Map<string, Map<string, any>>();
+	private selections = new Map<string, Map<string, TableSelection>>();
 
 	/**
 	 * Update selection for a specific table in a ROM
 	 */
-	updateSelection(romPath: string, tableId: string, selection: any) {
+	updateSelection(romPath: string, tableId: string, selection: TableSelection) {
 		let romSelections = this.selections.get(romPath);
 		if (!romSelections) {
 			romSelections = new Map();
@@ -115,11 +121,15 @@ class SelectionManager {
 	/**
 	 * Get current selection for a table
 	 */
-	getSelection(romPath: string, tableId: string) {
+	getSelection(romPath: string, tableId: string): TableSelection | undefined {
 		return this.selections.get(romPath)?.get(tableId);
 	}
 
-	private broadcast(romPath: string, tableId: string, selection: any) {
+	private broadcast(
+		romPath: string,
+		tableId: string,
+		selection: TableSelection,
+	) {
 		// Forward to GraphPanelManager
 		if (graphPanelManager) {
 			graphPanelManager.handleExternalSelectionChange(

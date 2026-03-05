@@ -14,6 +14,38 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
 import { readConfig } from "../src/config";
 
+type ConfigValue = string | string[];
+
+type WorkspaceConfigurationLike = Pick<
+	vscode.WorkspaceConfiguration,
+	"get" | "has" | "inspect" | "update"
+>;
+
+function createConfigurationMock(
+	resolver: (key: string, defaultValue: unknown) => unknown,
+): WorkspaceConfigurationLike {
+	return {
+		get: <T>(key: string, defaultValue?: T): T => {
+			return resolver(key, defaultValue) as T;
+		},
+		has: () => false,
+		inspect: () => undefined,
+		update: vi.fn(async () => {}),
+	};
+}
+
+function createDefaultingConfigurationMock(): WorkspaceConfigurationLike {
+	return createConfigurationMock((_, defaultValue) => defaultValue);
+}
+
+function createMappedConfigurationMock(
+	values: Partial<Record<string, ConfigValue>>,
+): WorkspaceConfigurationLike {
+	return createConfigurationMock((key, defaultValue) => {
+		return values[key] ?? defaultValue;
+	});
+}
+
 // ---------------------------------------------------------------------------
 // Helpers that mirror the logic in extension.ts
 // ---------------------------------------------------------------------------
@@ -404,9 +436,9 @@ describe("Workspace Settings", () => {
 		});
 
 		it("returns correct defaults when no settings are configured", () => {
-			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
-				get: vi.fn((_key: string, defaultValue: unknown) => defaultValue),
-			} as any);
+			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(
+				createDefaultingConfigurationMock(),
+			);
 
 			const cfg = readConfig();
 
@@ -418,16 +450,15 @@ describe("Workspace Settings", () => {
 		});
 
 		it("returns user-configured values when settings are set", () => {
-			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
-				get: vi.fn((_key: string, defaultValue: unknown) => {
-					if (_key === "definitions.paths") return ["/custom/defs"];
-					if (_key === "definitions.ecuflash.paths") return ["/ecuflash/defs"];
-					if (_key === "providers.enabled") return ["ecuflash", "custom"];
-					if (_key === "logsFolder") return "my-logs";
-					if (_key === "logging.columns") return ["Engine RPM", "Coolant Temp"];
-					return defaultValue;
+			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(
+				createMappedConfigurationMock({
+					"definitions.paths": ["/custom/defs"],
+					"definitions.ecuflash.paths": ["/ecuflash/defs"],
+					"providers.enabled": ["ecuflash", "custom"],
+					logsFolder: "my-logs",
+					"logging.columns": ["Engine RPM", "Coolant Temp"],
 				}),
-			} as any);
+			);
 
 			const cfg = readConfig();
 
@@ -439,9 +470,9 @@ describe("Workspace Settings", () => {
 		});
 
 		it("returns an object with the correct nested shape", () => {
-			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
-				get: vi.fn((_key: string, defaultValue: unknown) => defaultValue),
-			} as any);
+			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(
+				createDefaultingConfigurationMock(),
+			);
 
 			const cfg = readConfig();
 
@@ -457,9 +488,9 @@ describe("Workspace Settings", () => {
 		});
 
 		it("calls getConfiguration with 'ecuExplorer' namespace", () => {
-			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
-				get: vi.fn((_key: string, defaultValue: unknown) => defaultValue),
-			} as any);
+			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(
+				createDefaultingConfigurationMock(),
+			);
 
 			readConfig();
 

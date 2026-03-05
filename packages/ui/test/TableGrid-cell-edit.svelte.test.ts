@@ -33,7 +33,7 @@ describe("TableGrid cell editing — index correctness", () => {
 
 			// A 1D table with 8 rows is displayed as 1 row × 8 columns
 			const cells = screen.getByRole("cell");
-			await expect.poll(() => cells.all().length).toBe(8);
+			await expect(() => cells.all().length).toBe(8);
 
 			// Edit the 4th cell (colIndex=3)
 			const targetInput = cells.nth(3).getByRole("spinbutton");
@@ -46,7 +46,8 @@ describe("TableGrid cell editing — index correctness", () => {
 			await expect
 				.poll(() => {
 					const data = view.data as Uint8Array[];
-					const bytes = data[3]!;
+					const bytes = data[3];
+					if (!bytes) throw new Error("Expected bytes at index 3");
 					return new DataView(
 						bytes.buffer,
 						bytes.byteOffset,
@@ -58,9 +59,9 @@ describe("TableGrid cell editing — index correctness", () => {
 			// Commit and verify the transaction targets the correct address (3)
 			const tx = view.commit("Test");
 			expect(tx).not.toBeNull();
-			expect(tx!.edits.length).toBe(1);
-			expect(tx!.edits[0]!.address).toBe(3);
-			expect(tx!.edits[0]!.after[0]).toBe(99);
+			expect(tx?.edits.length).toBe(1);
+			expect(tx?.edits[0]?.address).toBe(3);
+			expect(tx?.edits[0]?.after[0]).toBe(99);
 
 			// The first cell (address 0) should NOT have been modified
 			expect(rom[0]).toBe(0);
@@ -80,7 +81,7 @@ describe("TableGrid cell editing — index correctness", () => {
 			const screen = render(TableGrid, { view, definition: def });
 
 			const cells = screen.getByRole("cell");
-			await expect.poll(() => cells.all().length).toBe(5);
+			await expect(() => cells.all().length).toBe(5);
 
 			// Edit the last cell (colIndex=4)
 			const lastInput = cells.nth(4).getByRole("spinbutton");
@@ -91,7 +92,8 @@ describe("TableGrid cell editing — index correctness", () => {
 			await expect
 				.poll(() => {
 					const data = view.data as Uint8Array[];
-					const bytes = data[4]!;
+					const bytes = data[4];
+					if (!bytes) throw new Error("Expected bytes at index 4");
 					return new DataView(
 						bytes.buffer,
 						bytes.byteOffset,
@@ -102,8 +104,8 @@ describe("TableGrid cell editing — index correctness", () => {
 
 			const tx = view.commit("Test");
 			expect(tx).not.toBeNull();
-			expect(tx!.edits[0]!.address).toBe(4);
-			expect(tx!.edits[0]!.after[0]).toBe(127);
+			expect(tx?.edits[0]?.address).toBe(4);
+			expect(tx?.edits[0]?.after[0]).toBe(127);
 			expect(rom[0]).toBe(0); // first cell must be untouched
 		});
 	});
@@ -122,7 +124,7 @@ describe("TableGrid cell editing — index correctness", () => {
 			const screen = render(TableGrid, { view, definition: def });
 
 			const cells = screen.getByRole("cell");
-			await expect.poll(() => cells.all().length).toBe(16);
+			await expect(() => cells.all().length).toBe(16);
 
 			// row=1, col=2 → linear index = 1*4+2 = 6 (7th cell)
 			const targetInput = cells.nth(6).getByRole("spinbutton");
@@ -133,7 +135,9 @@ describe("TableGrid cell editing — index correctness", () => {
 			await expect
 				.poll(() => {
 					const data = view.data as Uint8Array[][];
-					const bytes = data[1]![2]!;
+					const row = data[1];
+					const bytes = row?.[2];
+					if (!bytes) throw new Error("Expected bytes at row 1, col 2");
 					return new DataView(
 						bytes.buffer,
 						bytes.byteOffset,
@@ -144,7 +148,7 @@ describe("TableGrid cell editing — index correctness", () => {
 
 			const tx = view.commit("Test");
 			expect(tx).not.toBeNull();
-			expect(tx!.edits[0]!.address).toBe(6);
+			expect(tx?.edits[0]?.address).toBe(6);
 			expect(rom[0]).toBe(0);
 		});
 	});

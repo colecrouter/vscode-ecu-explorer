@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { ScalarType } from "../src/binary";
 import {
 	getScalarTypeRange,
 	validateDataType,
@@ -15,6 +16,8 @@ import {
 	validateValue,
 	validateValues,
 } from "../src/validation/validator";
+
+const INVALID_SCALAR_TYPE = "unknown" as ScalarType;
 
 describe("Validation Rules", () => {
 	describe("getScalarTypeRange", () => {
@@ -56,7 +59,7 @@ describe("Validation Rules", () => {
 
 		it("throws error for unknown type", () => {
 			expect(() => {
-				getScalarTypeRange("unknown" as any);
+				getScalarTypeRange(INVALID_SCALAR_TYPE);
 			}).toThrow();
 		});
 	});

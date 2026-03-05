@@ -25,6 +25,7 @@ describe("Chart Component", () => {
 		originalGetComputedStyle = window.getComputedStyle;
 		// Provide a mock that resolves known VSCode CSS variables to test colors
 		window.getComputedStyle = vi.fn((_element: Element) => {
+			// biome-ignore lint: Need to properly mock this later
 			return {
 				getPropertyValue: (varName: string) => CSS_VAR_MAP[varName] ?? "",
 			} as unknown as CSSStyleDeclaration;

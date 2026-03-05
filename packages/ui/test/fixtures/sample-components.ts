@@ -56,7 +56,7 @@ export function createLayerSelectorProps(
 	return {
 		currentLayer,
 		totalLayers,
-		onLayerChange: (layer: number) => {},
+		onLayerChange: (_layer: number) => {},
 	};
 }
 
@@ -72,7 +72,7 @@ export function createCellProps(
 		value,
 		isEditing,
 		onEdit: () => {},
-		onCommit: (value: number) => {},
+		onCommit: (_value: number) => {},
 		onCancel: () => {},
 	};
 }

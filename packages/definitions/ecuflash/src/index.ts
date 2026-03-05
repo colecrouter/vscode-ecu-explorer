@@ -13,6 +13,7 @@ import type {
 	Table1DDefinition,
 	Table2DDefinition,
 	TableDefinition,
+	Unit,
 } from "@ecu-explorer/core";
 import { mitsucanChecksum } from "@ecu-explorer/core";
 import { XMLParser } from "fast-xml-parser";
@@ -45,6 +46,20 @@ type ScalingNode = {
 };
 
 type Affine = { scale: number; offset: number };
+
+function unitFromSymbol(symbol: string | undefined): Unit | undefined {
+	if (!symbol) return undefined;
+	return {
+		symbol,
+		min: Number.NEGATIVE_INFINITY,
+		max: Number.POSITIVE_INFINITY,
+		step: 1,
+		type: "f32",
+		order: "le",
+		to: (raw) => raw,
+		from: (scaled) => scaled,
+	};
+}
 
 const xml = new XMLParser({
 	ignoreAttributes: false,
@@ -231,7 +246,7 @@ function parseChecksumModule(
 }
 
 function extractRom(obj: Raw): Raw | undefined {
-	const rom = obj["rom"];
+	const rom = obj.rom;
 	return (rom as Raw | undefined) ?? undefined;
 }
 
@@ -268,9 +283,7 @@ async function readRomXmlId(fsPath: string): Promise<string | undefined> {
 }
 
 function buildScalingIndex(rom: Raw): Map<string, ScalingNode> {
-	const scalings = asArray(
-		(rom as Raw)["scaling"] as ScalingNode | ScalingNode[],
-	);
+	const scalings = asArray((rom as Raw).scaling as ScalingNode | ScalingNode[]);
 	const map = new Map<string, ScalingNode>();
 	for (const s of scalings) {
 		const name = s?.name;
@@ -336,7 +349,7 @@ function parseTemplateTable(node: TableNode): TemplateTable | null {
 
 function buildTemplateIndex(rom: Raw): Map<string, TemplateTable> {
 	const out = new Map<string, TemplateTable>();
-	const tables = asArray((rom as Raw)["table"] as TableNode | TableNode[]);
+	const tables = asArray((rom as Raw).table as TableNode | TableNode[]);
 	for (const t of tables) {
 		const parsed = parseTemplateTable(t);
 		if (!parsed) continue;
@@ -507,10 +520,10 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 			};
 		}
 
-		const romid = (rom as Raw)["romid"] as Raw | undefined;
-		const xmlid = extractText(romid?.["xmlid"]);
-		const internalidaddress = extractText(romid?.["internalidaddress"]);
-		const internalidhex = extractText(romid?.["internalidhex"]);
+		const romid = (rom as Raw).romid as Raw | undefined;
+		const xmlid = extractText(romid?.xmlid);
+		const internalidaddress = extractText(romid?.internalidaddress);
+		const internalidhex = extractText(romid?.internalidhex);
 
 		const name = xmlid ?? internalidhex ?? "ECUFlash Definition";
 		const fingerprints: ROMFingerprint[] = [];
@@ -547,14 +560,14 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 			...buildScalingIndex(rom).entries(),
 		]);
 
-		const romid = (rom as Raw)["romid"] as Raw | undefined;
+		const romid = (rom as Raw).romid as Raw | undefined;
 		const platform: ROMDefinition["platform"] = {};
-		const make = extractText(romid?.["make"]);
-		const model = extractText(romid?.["model"]);
-		const submodel = extractText(romid?.["submodel"]);
-		const market = extractText(romid?.["market"]);
-		const transmission = extractText(romid?.["transmission"]);
-		const yearText = extractText(romid?.["year"]);
+		const make = extractText(romid?.make);
+		const model = extractText(romid?.model);
+		const submodel = extractText(romid?.submodel);
+		const market = extractText(romid?.market);
+		const transmission = extractText(romid?.transmission);
+		const yearText = extractText(romid?.year);
 		const yearNum = yearText ? Number.parseInt(yearText, 10) : NaN;
 		if (make) platform.make = make;
 		if (model) platform.model = model;
@@ -567,7 +580,7 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 		const tables = this.parseTablesFromDoc(rom, templates, scalingIndex);
 
 		// Parse checksum module if present
-		const checksumModule = extractText(romid?.["checksummodule"]);
+		const checksumModule = extractText(romid?.checksummodule);
 		const checksum = parseChecksumModule(checksumModule);
 
 		return {
@@ -608,7 +621,7 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 		const fileXmlIdCache = new Map<string, string | null>();
 
 		const includeTokensFrom = (parentRom: Raw): string[] =>
-			asArray((parentRom as Raw)["include"] as string | string[])
+			asArray((parentRom as Raw).include as string | string[])
 				.map((s) => String(s).trim())
 				.filter(Boolean);
 
@@ -746,7 +759,7 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 		scalings: Map<string, ScalingNode>,
 	): TableDefinition[] {
 		const out: TableDefinition[] = [];
-		const nodes = asArray((rom as Raw)["table"] as TableNode | TableNode[]);
+		const nodes = asArray((rom as Raw).table as TableNode | TableNode[]);
 
 		for (const node of nodes) {
 			const name = node.name;
@@ -760,6 +773,7 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 			const scalingName = node.scaling ?? tmpl?.scaling;
 			const scaling = scalingName ? scalings.get(scalingName) : undefined;
 			const affine = affineFromScaling(scaling);
+			const zUnit = unitFromSymbol(scaling?.units);
 
 			const z: Table1DDefinition["z"] = {
 				name,
@@ -769,7 +783,7 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 				// v0: apply simple affine (linear) scalings when possible, otherwise keep raw.
 				scale: affine?.scale ?? 1,
 				offset: affine?.offset ?? 0,
-				...(scaling?.units ? { unit: { symbol: scaling.units } as any } : {}),
+				...(zUnit ? { unit: zUnit } : {}),
 			};
 
 			if (type === "1D") {
@@ -883,11 +897,12 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 		if (!axisNode && template?.data && template.data.length) {
 			const scalingName = template.scaling;
 			const scaling = scalingName ? scalings.get(scalingName) : undefined;
+			const unit = unitFromSymbol(scaling?.units);
 			return {
 				kind: "static",
 				name: template.name ?? "Axis",
 				values: template.data,
-				...(scaling?.units ? { unit: { symbol: scaling.units } as any } : {}),
+				...(unit ? { unit } : {}),
 			};
 		}
 		if (!axisNode) return undefined;
@@ -905,11 +920,12 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 				.map((d) => Number.parseFloat(String(d)))
 				.filter((n) => Number.isFinite(n));
 			if (!values.length) return undefined;
+			const unit = unitFromSymbol(scaling?.units);
 			return {
 				kind: "static",
 				name: axisNode.name ?? "Axis",
 				values,
-				...(scaling?.units ? { unit: { symbol: scaling.units } as any } : {}),
+				...(unit ? { unit } : {}),
 			};
 		}
 
@@ -922,6 +938,7 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 		const inferredDynamicAxisEndianness = hasUnresolvedNamedScaling
 			? "be"
 			: scalingEndianness(scaling?.endian);
+		const unit = unitFromSymbol(scaling?.units);
 		return {
 			kind: "dynamic",
 			name: axisNode.name ?? template?.name ?? "Axis",
@@ -931,7 +948,7 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 			endianness: inferredDynamicAxisEndianness,
 			scale: affine?.scale ?? 1,
 			offset: affine?.offset ?? 0,
-			...(scaling?.units ? { unit: { symbol: scaling.units } as any } : {}),
+			...(unit ? { unit } : {}),
 		};
 	}
 }

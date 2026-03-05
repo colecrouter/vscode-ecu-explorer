@@ -170,7 +170,10 @@ describe("UndoRedoManager", () => {
 
 			const entry = manager.undo();
 			expect(entry).not.toBeNull();
-			expect(isBatchEdit(entry!)).toBe(true);
+			if (entry === null) {
+				throw new Error("Expected batch entry to exist");
+			}
+			expect(isBatchEdit(entry)).toBe(true);
 
 			const batch = entry as BatchEditOperation;
 			expect(batch.ops).toHaveLength(2);
@@ -207,7 +210,10 @@ describe("UndoRedoManager", () => {
 			manager.pushBatch(ops, "batch");
 
 			const undone = manager.undo();
-			expect(isBatchEdit(undone!)).toBe(true);
+			if (undone === null) {
+				throw new Error("Expected batch entry to exist");
+			}
+			expect(isBatchEdit(undone)).toBe(true);
 
 			const redone = manager.redo() as BatchEditOperation;
 			expect(isBatchEdit(redone)).toBe(true);

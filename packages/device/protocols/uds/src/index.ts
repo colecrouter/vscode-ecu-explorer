@@ -151,8 +151,13 @@ export function parseNegativeResponse(response: Uint8Array): string {
 			.join(" ")}`;
 	}
 
-	const requestSid = response[1]!;
-	const nrc = response[2]!;
+	const requestSid = response[1];
+	const nrc = response[2];
+	if (requestSid === undefined || nrc === undefined) {
+		return `Invalid negative response: ${Array.from(response)
+			.map((b) => `0x${b.toString(16).padStart(2, "0").toUpperCase()}`)
+			.join(" ")}`;
+	}
 
 	const nrcMessages: Record<number, string> = {
 		[UDS_NRC.GENERAL_REJECT]: "General reject",
@@ -416,8 +421,8 @@ export class UdsProtocol implements EcuProtocol {
 		// Default stub: XOR each byte with 0xFF
 		// Subclasses must override this with the actual ECU-specific algorithm
 		const key = new Uint8Array(seed.length);
-		for (let i = 0; i < seed.length; i++) {
-			key[i] = (seed[i]! ^ 0xff) & 0xff;
+		for (const [i, seedByte] of seed.entries()) {
+			key[i] = (seedByte ^ 0xff) & 0xff;
 		}
 		return key;
 	}

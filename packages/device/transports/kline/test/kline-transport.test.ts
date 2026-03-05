@@ -74,10 +74,11 @@ describe("KLineTransport", () => {
 		const devices = await transport.listDevices();
 		const first = devices[0];
 		expect(first).toBeDefined();
+		if (!first) throw new Error("Expected at least one device");
 
-		const connection = await transport.connect(first!.id);
+		const connection = await transport.connect(first.id);
 		expect(connection).toBeDefined();
-		expect(connection.deviceInfo.id).toBe(first!.id);
+		expect(connection.deviceInfo.id).toBe(first.id);
 	});
 
 	it("throws on invalid device ID", async () => {
@@ -86,7 +87,10 @@ describe("KLineTransport", () => {
 
 	it("connection has deviceInfo", async () => {
 		const devices = await transport.listDevices();
-		const connection = await transport.connect(devices[0]!.id);
+		const first = devices[0];
+		expect(first).toBeDefined();
+		if (!first) throw new Error("Expected at least one device");
+		const connection = await transport.connect(first.id);
 
 		expect(connection.deviceInfo).toBeDefined();
 		expect(connection.deviceInfo.transportName).toBe("k-line");
@@ -114,7 +118,9 @@ describe("KLineConnection", () => {
 	beforeEach(async () => {
 		transport = new KLineTransport();
 		const devices = await transport.listDevices();
-		deviceInfo = devices[0]!;
+		const device = devices[0];
+		if (!device) throw new Error("Expected at least one device for testing");
+		deviceInfo = device;
 		connection = await transport.connect(deviceInfo.id);
 	});
 
@@ -215,8 +221,11 @@ describe("K-line transport full flow", () => {
 		const devices = await transport.listDevices();
 
 		expect(devices.length).toBeGreaterThan(0);
+		const first = devices[0];
+		expect(first).toBeDefined();
+		if (!first) throw new Error("Expected at least one device");
 
-		const connection = await transport.connect(devices[0]!.id);
+		const connection = await transport.connect(first.id);
 		expect(connection).toBeDefined();
 
 		await connection.close();
@@ -228,8 +237,13 @@ describe("K-line transport full flow", () => {
 		transport.addMockDevice("kline:test:05", "/dev/ttyUSB4");
 
 		const devices = await transport.listDevices();
-		const conn1 = await transport.connect(devices[0]!.id);
-		const conn2 = await transport.connect(devices[1]!.id);
+		const first = devices[0];
+		const second = devices[1];
+		expect(first).toBeDefined();
+		expect(second).toBeDefined();
+		if (!first || !second) throw new Error("Expected at least two devices");
+		const conn1 = await transport.connect(first.id);
+		const conn2 = await transport.connect(second.id);
 
 		expect(conn1.deviceInfo.id).not.toBe(conn2.deviceInfo.id);
 

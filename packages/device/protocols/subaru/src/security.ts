@@ -53,7 +53,10 @@ export function computeSubaruKey(seed: Uint8Array): Uint8Array {
 	const key = new Uint8Array(2);
 
 	for (let i = 0; i < 2; i++) {
-		const byte = seed[i]!;
+		const byte = seed[i];
+		if (byte === undefined) {
+			throw new RangeError("computeSubaruKey: seed byte missing");
+		}
 
 		// Split into nibbles
 		const highNibble = (byte >> 4) & 0xf;
@@ -61,7 +64,12 @@ export function computeSubaruKey(seed: Uint8Array): Uint8Array {
 
 		// Apply S-box A to high nibble
 		// Ref: HANDSHAKE_ANALYSIS.md — §4.5 (flag=false → sbox_A path)
-		const newHigh = SBOX_A[highNibble]!;
+		const newHigh = SBOX_A[highNibble];
+		if (newHigh === undefined) {
+			throw new RangeError(
+				`computeSubaruKey: SBOX lookup failed for nibble ${highNibble}`,
+			);
+		}
 
 		// XOR low nibble with 0x5
 		// Ref: HANDSHAKE_ANALYSIS.md — §4.5 new_low = low_nibble XOR 0x5

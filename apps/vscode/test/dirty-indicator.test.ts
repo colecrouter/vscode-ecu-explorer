@@ -18,12 +18,8 @@ import { RomDocument } from "../src/rom/document";
 import { TableDocument } from "../src/table-document";
 
 // Minimal vscode.Uri-compatible object
-function makeUri(path: string) {
-	return {
-		fsPath: path,
-		toString: () => `file://${path}`,
-		scheme: "file",
-	} as any;
+function makeUri(path: string): vscode.Uri {
+	return vscode.Uri.file(path);
 }
 
 describe("RomDocument dirty-state tracking", () => {
@@ -280,7 +276,7 @@ describe("TableDocument swapped-axis (swapxy) dirty propagation regression", () 
 	// Simulates "Throttle Map #2" style ECUFlash table with swapped axes:
 	//   rows=16, cols=49, colStrideBytes=32, rowStrideBytes=2, dtype=u16
 	//   z.address=0x5130e
-	const SWAPXY_TABLE_DEF = {
+	const SWAPXY_TABLE_DEF: TableDefinition = {
 		name: "Throttle Map",
 		kind: "table2d",
 		rows: 16,
@@ -292,7 +288,7 @@ describe("TableDocument swapped-axis (swapxy) dirty propagation regression", () 
 			colStrideBytes: 32,
 			rowStrideBytes: 2,
 		},
-	} as unknown as import("@ecu-explorer/core").TableDefinition;
+	};
 
 	let romDoc: RomDocument;
 	let throttleDoc: TableDocument;
@@ -301,11 +297,7 @@ describe("TableDocument swapped-axis (swapxy) dirty propagation regression", () 
 	beforeEach(() => {
 		// ROM large enough to hold the table at 0x5130e + span(1568 bytes)
 		romDoc = new RomDocument(
-			{
-				fsPath: "/test/rom.bin",
-				toString: () => "file:///test/rom.bin",
-				scheme: "file",
-			} as any,
+			vscode.Uri.file("/test/rom.bin"),
 			new Uint8Array(0x60000),
 		);
 		throttleDoc = new TableDocument(

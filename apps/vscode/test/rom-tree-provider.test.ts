@@ -1,10 +1,72 @@
 import type { ROMDefinition, TableDefinition } from "@ecu-explorer/core";
+import type { Mock } from "vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
 import { RomDocument } from "../src/rom/document";
 import type { RomEditorProvider } from "../src/rom/editor-provider";
 import { RomExplorerTreeProvider } from "../src/tree/rom-tree-provider";
 import { WorkspaceState } from "../src/workspace-state";
+
+type MockEditorProvider = Pick<RomEditorProvider, "onDidChangeCustomDocument">;
+type MockMemento = Pick<vscode.Memento, "get" | "update" | "keys">;
+type TableKind = TableDefinition["kind"];
+
+function createMockMemento(): MockMemento {
+	return {
+		get: vi.fn(() => undefined),
+		update: vi.fn(async () => {}),
+		keys: vi.fn(() => []),
+	};
+}
+
+function createBaseTable(kind: TableKind, name: string): TableDefinition {
+	const z = {
+		name: "z",
+		address: 0x1000,
+		dtype: "u8" as const,
+	};
+
+	if (kind === "table1d") {
+		return {
+			name,
+			kind,
+			rows: 10,
+			z,
+		};
+	}
+
+	if (kind === "table2d") {
+		return {
+			name,
+			kind,
+			rows: 10,
+			cols: 10,
+			z,
+		};
+	}
+
+	return {
+		name,
+		kind,
+		rows: 10,
+		cols: 10,
+		depth: 2,
+		z,
+	};
+}
+
+function setTreeRefreshSpy(
+	provider: RomExplorerTreeProvider,
+	refreshSpy: Mock,
+): void {
+	const fire: (data: unknown) => void = (data) => {
+		refreshSpy(data);
+	};
+
+	Reflect.set(provider, "_onDidChangeTreeData", {
+		fire,
+	} satisfies Pick<vscode.EventEmitter<unknown>, "fire">);
+}
 
 describe("RomExplorerTreeProvider", () => {
 	let treeProvider: RomExplorerTreeProvider;
@@ -15,13 +77,10 @@ describe("RomExplorerTreeProvider", () => {
 		// Create mock editor provider
 		mockEditorProvider = {
 			onDidChangeCustomDocument: vi.fn(() => ({ dispose: vi.fn() })),
-		} as any;
+		} as MockEditorProvider as RomEditorProvider;
 
 		// Create mock workspace state
-		const mockMemento = {
-			get: vi.fn(() => undefined),
-			update: vi.fn(),
-		} as any;
+		const mockMemento = createMockMemento();
 		mockWorkspaceState = new WorkspaceState(mockMemento);
 
 		// Create tree provider
@@ -39,22 +98,13 @@ describe("RomExplorerTreeProvider", () => {
 		category?: string,
 		kind: "table1d" | "table2d" | "table3d" = "table1d",
 	): TableDefinition {
-		const baseTable = {
-			name,
-			kind,
-			rows: 10,
-			z: {
-				name: "z",
-				address: 0x1000,
-				dtype: "u8" as const,
-			},
-		};
+		const baseTable = createBaseTable(kind, name);
 
 		if (category) {
-			return { ...baseTable, category } as any;
+			return { ...baseTable, category };
 		}
 
-		return baseTable as any;
+		return baseTable;
 	}
 
 	/**
@@ -127,7 +177,7 @@ describe("RomExplorerTreeProvider", () => {
 
 	it("should refresh tree when refresh() is called", () => {
 		const refreshSpy = vi.fn();
-		(treeProvider as any)._onDidChangeTreeData.fire = refreshSpy;
+		setTreeRefreshSpy(treeProvider, refreshSpy);
 
 		treeProvider.refresh();
 

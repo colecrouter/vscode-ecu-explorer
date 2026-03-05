@@ -519,10 +519,10 @@ describe("Generic SST Decoder Functions", () => {
 		};
 
 		const result = decodeSstBlockSet(blocks);
-		expect(result["TRANS"]).toBeDefined();
-		expect(result["PRES"]).toBeDefined();
-		expect((result["TRANS"] as SstTransData).transmissionTemperature).toBe(40);
-		expect((result["PRES"] as SstPresData).clutch1Pressure).toBe(50);
+		expect(result.TRANS).toBeDefined();
+		expect(result.PRES).toBeDefined();
+		expect((result.TRANS as SstTransData).transmissionTemperature).toBe(40);
+		expect((result.PRES as SstPresData).clutch1Pressure).toBe(50);
 	});
 });
 

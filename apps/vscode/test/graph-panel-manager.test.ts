@@ -4,18 +4,91 @@
  * Tests panel creation, lifecycle, snapshot broadcasting, and cell selection
  */
 
-import type { TableSnapshot } from "@ecu-explorer/ui";
+import type { ROMDefinition, TableSnapshot } from "@ecu-explorer/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
 import { GraphPanelManager } from "../src/graph-panel-manager";
 import type { RomDocument } from "../src/rom/document";
-import { createMockWebviewPanel } from "./mocks/webview-mock";
+import {
+	createMockWebviewPanel,
+	type GraphCompatibleWebview,
+	type GraphCompatibleWebviewPanel,
+	type MockGraphWebview,
+	type MockWebview,
+} from "./mocks/webview-mock";
+
+type MockExtensionContext = Pick<
+	vscode.ExtensionContext,
+	"subscriptions" | "extensionUri"
+>;
+
+type GetDocument = (romPath: string) => RomDocument | undefined;
+type CellSelectHandler = (
+	romPath: string,
+	tableId: string,
+	row: number,
+	col: number,
+) => void;
+
+type MockDocument = Pick<
+	RomDocument,
+	"uri" | "onDidUpdateBytes" | "definition"
+>;
+
+type CompatibleRomDocument = RomDocument & MockDocument;
+
+type MockRomDefinition = Pick<
+	ROMDefinition,
+	"name" | "platform" | "uri" | "fingerprints" | "tables"
+>;
+
+function toWebviewPanel(
+	panel: GraphCompatibleWebviewPanel,
+): vscode.WebviewPanel {
+	return panel as vscode.WebviewPanel;
+}
+
+function asMockWebview(webview: vscode.Webview): MockWebview {
+	return webview as GraphCompatibleWebview & MockGraphWebview & MockWebview;
+}
+
+function toExtensionContext(
+	context: MockExtensionContext,
+): vscode.ExtensionContext {
+	return context as vscode.ExtensionContext;
+}
+
+function toRomDocument(document: MockDocument): RomDocument {
+	return document as CompatibleRomDocument;
+}
+
+function createMockDefinition(): MockRomDefinition {
+	return {
+		name: "Test ROM",
+		platform: { make: "Subaru" },
+		uri: "file:///test/definition.xml",
+		fingerprints: [],
+		tables: [
+			{
+				kind: "table2d",
+				name: "table1",
+				rows: 2,
+				cols: 2,
+				z: {
+					name: "table1-z",
+					address: 0x1000,
+					dtype: "u8",
+				},
+			},
+		],
+	};
+}
 
 describe("GraphPanelManager", () => {
 	let manager: GraphPanelManager;
-	let mockContext: any;
-	let mockGetDocument: any;
-	let mockOnCellSelect: any;
+	let mockContext: MockExtensionContext;
+	let mockGetDocument: GetDocument;
+	let mockOnCellSelect: CellSelectHandler;
 
 	const createMockSnapshot = (): TableSnapshot => ({
 		kind: "table2d",
@@ -38,7 +111,7 @@ describe("GraphPanelManager", () => {
 		// Mock vscode.window.createWebviewPanel
 		vi.mocked(vscode.window.createWebviewPanel).mockImplementation(
 			(_viewType, title) => {
-				return createMockWebviewPanel(title) as any;
+				return toWebviewPanel(createMockWebviewPanel(title));
 			},
 		);
 
@@ -51,32 +124,21 @@ describe("GraphPanelManager", () => {
 		// Create mock getDocument function
 		mockGetDocument = vi.fn((romPath: string): RomDocument | undefined => {
 			if (romPath === "/test/rom.hex") {
-				return {
-					uri: { path: romPath },
+				return toRomDocument({
+					uri: vscode.Uri.file(romPath),
 					onDidUpdateBytes: vi.fn(() => ({ dispose: vi.fn() })),
-					definition: {
-						name: "Test ROM",
-						tables: [
-							{
-								name: "table1",
-								description: "Test Table 1",
-								address: 0x1000,
-								rows: 2,
-								cols: 2,
-							},
-						],
-					},
-				} as any;
+					definition: createMockDefinition(),
+				});
 			}
 			return undefined;
-		});
+		}) as GetDocument;
 
 		// Create mock onCellSelect callback
-		mockOnCellSelect = vi.fn();
+		mockOnCellSelect = vi.fn<CellSelectHandler>();
 
 		// Create manager
 		manager = new GraphPanelManager(
-			mockContext,
+			toExtensionContext(mockContext),
 			mockGetDocument,
 			undefined,
 			mockOnCellSelect,
@@ -200,7 +262,7 @@ describe("GraphPanelManager", () => {
 			);
 
 			// Clear previous messages
-			(panel.webview as any)._clearMessages();
+			asMockWebview(panel.webview)._clearMessages();
 
 			// Create again with updated snapshot
 			const snapshot2: TableSnapshot = {
@@ -311,7 +373,7 @@ describe("GraphPanelManager", () => {
 			);
 
 			// Clear previous messages
-			(panel.webview as any)._clearMessages();
+			asMockWebview(panel.webview)._clearMessages();
 
 			// Broadcast update
 			const updatedSnapshot: TableSnapshot = {
@@ -349,7 +411,7 @@ describe("GraphPanelManager", () => {
 			);
 
 			// Clear messages
-			(panel.webview as any)._clearMessages();
+			asMockWebview(panel.webview)._clearMessages();
 
 			// Broadcast update
 			const updatedSnapshot: TableSnapshot = {
@@ -399,8 +461,8 @@ describe("GraphPanelManager", () => {
 			);
 
 			// Clear messages
-			(panel1.webview as any)._clearMessages();
-			(panel2.webview as any)._clearMessages();
+			asMockWebview(panel1.webview)._clearMessages();
+			asMockWebview(panel2.webview)._clearMessages();
 
 			// Broadcast to table1 only
 			manager.broadcastSnapshot("/test/rom.hex", "table1", snapshot);
@@ -421,7 +483,7 @@ describe("GraphPanelManager", () => {
 			);
 
 			// Clear previous messages
-			(panel.webview as any)._clearMessages();
+			asMockWebview(panel.webview)._clearMessages();
 
 			// Select cell
 			manager.selectCell("/test/rom.hex", "table1", 1, 2);
@@ -455,8 +517,8 @@ describe("GraphPanelManager", () => {
 			);
 
 			// Clear messages
-			(panel1.webview as any)._clearMessages();
-			(panel2.webview as any)._clearMessages();
+			asMockWebview(panel1.webview)._clearMessages();
+			asMockWebview(panel2.webview)._clearMessages();
 
 			// Select cell in table1
 			manager.selectCell("/test/rom.hex", "table1", 1, 2);
@@ -477,10 +539,10 @@ describe("GraphPanelManager", () => {
 			);
 
 			// Clear previous messages
-			(panel.webview as any)._clearMessages();
+			asMockWebview(panel.webview)._clearMessages();
 
 			// Simulate ready message from webview
-			(panel.webview as any)._simulateMessage({ type: "ready" });
+			asMockWebview(panel.webview)._simulateMessage({ type: "ready" });
 
 			expect(panel.webview.postMessage).toHaveBeenCalledWith({
 				type: "init",
@@ -509,7 +571,7 @@ describe("GraphPanelManager", () => {
 			);
 
 			// Simulate cell selection from webview
-			(panel.webview as any)._simulateMessage({
+			asMockWebview(panel.webview)._simulateMessage({
 				type: "cellSelect",
 				row: 1,
 				col: 2,
@@ -537,7 +599,7 @@ describe("GraphPanelManager", () => {
 
 			// Try to send message
 			expect(() => {
-				(panel.webview as any)._simulateMessage({ type: "ready" });
+				asMockWebview(panel.webview)._simulateMessage({ type: "ready" });
 			}).not.toThrow();
 		});
 	});
@@ -580,7 +642,7 @@ describe("GraphPanelManager", () => {
 			);
 
 			// Simulate message
-			(panel.webview as any)._simulateMessage({
+			asMockWebview(panel.webview)._simulateMessage({
 				type: "cellSelect",
 				row: 0,
 				col: 0,

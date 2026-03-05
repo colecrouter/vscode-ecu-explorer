@@ -89,7 +89,11 @@ function makeUdsMock(
 			expect(data[1]).toBe(SECURITY_LEVEL + 1);
 			// Default XOR key: each seed byte XOR 0xFF
 			for (let i = 0; i < SEED_BYTES.length; i++) {
-				expect(data[2 + i]).toBe((SEED_BYTES[i]! ^ 0xff) & 0xff);
+				const seedByte = SEED_BYTES[i];
+				if (seedByte === undefined) {
+					throw new Error(`Seed byte missing at index ${i}`);
+				}
+				expect(data[2 + i]).toBe((seedByte ^ 0xff) & 0xff);
 			}
 			return new Uint8Array([0x67, SECURITY_LEVEL + 1]);
 		}
@@ -103,6 +107,26 @@ function makeUdsMock(
 		}
 		throw new Error(`Unexpected sendFrame call #${call}`);
 	};
+}
+
+function getRequiredFrame(frames: Uint8Array[], index: number): Uint8Array {
+	const frame = frames[index];
+	if (!frame) {
+		throw new Error(`Expected frame at index ${index}`);
+	}
+	return frame;
+}
+
+function getRequiredByte(
+	data: Uint8Array,
+	index: number,
+	context: string,
+): number {
+	const byte = data[index];
+	if (byte === undefined) {
+		throw new Error(`${context} missing byte at index ${index}`);
+	}
+	return byte;
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -164,7 +188,7 @@ describe("UdsProtocol", () => {
 
 			await protocol.readRom(connection);
 
-			expect(Array.from(frames[0]!)).toEqual([0x10, 0x03]);
+			expect(Array.from(getRequiredFrame(frames, 0))).toEqual([0x10, 0x03]);
 		});
 
 		it("sends security access seed request [0x27, 0x01] as the second frame", async () => {
@@ -183,7 +207,7 @@ describe("UdsProtocol", () => {
 
 			await protocol.readRom(connection);
 
-			expect(Array.from(frames[1]!)).toEqual([0x27, 0x01]);
+			expect(Array.from(getRequiredFrame(frames, 1))).toEqual([0x27, 0x01]);
 		});
 
 		it("sends security access key [0x27, 0x02, key...] as the third frame", async () => {
@@ -204,11 +228,11 @@ describe("UdsProtocol", () => {
 			await protocol.readRom(connection);
 
 			// Frame 2: [0x27, 0x02, key0, key1]
-			expect(frames[2]![0]).toBe(0x27);
-			expect(frames[2]![1]).toBe(0x02);
+			expect(frames[2]?.[0]).toBe(0x27);
+			expect(frames[2]?.[1]).toBe(0x02);
 			// Default XOR key for seed 0xAB 0xCD: 0xAB^0xFF=0x54, 0xCD^0xFF=0x32
-			expect(frames[2]![2]).toBe(0x54);
-			expect(frames[2]![3]).toBe(0x32);
+			expect(frames[2]?.[2]).toBe(0x54);
+			expect(frames[2]?.[3]).toBe(0x32);
 		});
 
 		it("sends ROM block read [0x23, 0x14, addr2, addr1, addr0, 0x80] for first block", async () => {
@@ -228,7 +252,7 @@ describe("UdsProtocol", () => {
 			await protocol.readRom(connection);
 
 			// Frame 3 is the first ROM block read (addr = 0x000000)
-			expect(Array.from(frames[3]!)).toEqual([
+			expect(Array.from(getRequiredFrame(frames, 3))).toEqual([
 				0x23, 0x14, 0x00, 0x00, 0x00, 0x80,
 			]);
 		});
@@ -250,7 +274,7 @@ describe("UdsProtocol", () => {
 			await protocol.readRom(connection);
 
 			// Frame 4 is the second ROM block read (addr = 0x000080)
-			expect(Array.from(frames[4]!)).toEqual([
+			expect(Array.from(getRequiredFrame(frames, 4))).toEqual([
 				0x23, 0x14, 0x00, 0x00, 0x80, 0x80,
 			]);
 		});
@@ -400,8 +424,8 @@ describe("UdsProtocol", () => {
 				protected override computeKey(seed: Uint8Array): Uint8Array {
 					// Custom algorithm: XOR with 0xAA instead of 0xFF
 					const key = new Uint8Array(seed.length);
-					for (let i = 0; i < seed.length; i++) {
-						key[i] = (seed[i]! ^ 0xaa) & 0xff;
+					for (const [i, seedByte] of seed.entries()) {
+						key[i] = (seedByte ^ 0xaa) & 0xff;
 					}
 					return key;
 				}
@@ -424,8 +448,8 @@ describe("UdsProtocol", () => {
 			await protocol.readRom(connection);
 
 			// Custom XOR key for seed 0x12 0x34: 0x12^0xAA=0xB8, 0x34^0xAA=0x9E
-			expect(frames[2]![2]).toBe(0xb8);
-			expect(frames[2]![3]).toBe(0x9e);
+			expect(frames[2]?.[2]).toBe(0xb8);
+			expect(frames[2]?.[3]).toBe(0x9e);
 		});
 
 		it("subclass can override ROM_START, ROM_SIZE, BLOCK_SIZE", async () => {
@@ -457,7 +481,7 @@ describe("UdsProtocol", () => {
 
 			// First block read should use ROM_START = 0x010000
 			// Frame format: [0x23, 0x14, addr2, addr1, addr0, 0x40]
-			expect(Array.from(frames[3]!)).toEqual([
+			expect(Array.from(getRequiredFrame(frames, 3))).toEqual([
 				0x23, 0x14, 0x01, 0x00, 0x00, 0x40,
 			]);
 		});
@@ -485,7 +509,7 @@ describe("UdsProtocol", () => {
 			await protocol.readRom(connection);
 
 			// First frame should use SESSION_TYPE = 0x02 (programming)
-			expect(Array.from(frames[0]!)).toEqual([0x10, 0x02]);
+			expect(Array.from(getRequiredFrame(frames, 0))).toEqual([0x10, 0x02]);
 		});
 
 		it("subclass can override SECURITY_ACCESS_LEVEL", async () => {
@@ -510,10 +534,10 @@ describe("UdsProtocol", () => {
 			await protocol.readRom(connection);
 
 			// Security access seed request should use level 0x03
-			expect(Array.from(frames[1]!)).toEqual([0x27, 0x03]);
+			expect(Array.from(getRequiredFrame(frames, 1))).toEqual([0x27, 0x03]);
 			// Security access key send should use level + 1 = 0x04
-			expect(frames[2]![0]).toBe(0x27);
-			expect(frames[2]![1]).toBe(0x04);
+			expect(frames[2]?.[0]).toBe(0x27);
+			expect(frames[2]?.[1]).toBe(0x04);
 		});
 	});
 
@@ -532,7 +556,7 @@ describe("UdsProtocol", () => {
 				await vi.runOnlyPendingTimersAsync();
 
 				expect(frames.length).toBeGreaterThan(0);
-				expect(Array.from(frames[0]!)).toEqual([
+				expect(Array.from(getRequiredFrame(frames, 0))).toEqual([
 					UDS_SERVICES.TESTER_PRESENT,
 					0x00,
 				]);
@@ -585,7 +609,10 @@ describe("UdsProtocol", () => {
 				const connection = makeMockConnection("openport2", async (data) => {
 					frames.push(data);
 					if (data[0] === UDS_SERVICES.ECU_RESET) {
-						return new Uint8Array([0x51, data[1]!]);
+						return new Uint8Array([
+							0x51,
+							getRequiredByte(data, 1, "ECU_RESET"),
+						]);
 					}
 					if (data[0] === UDS_SERVICES.DIAGNOSTIC_SESSION_CONTROL) {
 						return new Uint8Array([0x50, 0x03]);
@@ -608,7 +635,7 @@ describe("UdsProtocol", () => {
 				await vi.advanceTimersByTimeAsync(1000);
 				await resetPromise;
 
-				expect(Array.from(frames[0]!)).toEqual([0x11, 0x03]);
+				expect(Array.from(getRequiredFrame(frames, 0))).toEqual([0x11, 0x03]);
 				expect(
 					frames.some((f) => f[0] === UDS_SERVICES.DIAGNOSTIC_SESSION_CONTROL),
 				).toBe(true);
@@ -886,7 +913,7 @@ describe("UdsProtocol.writeRom()", () => {
 			}
 			if (data[0] === 0x36) {
 				transferFrames.push(data);
-				return new Uint8Array([0x76, data[1]!]);
+				return new Uint8Array([0x76, getRequiredByte(data, 1, "TransferData")]);
 			}
 			if (data[0] === 0x37) {
 				exitFrames.push(data);
@@ -944,7 +971,7 @@ describe("UdsProtocol.writeRom()", () => {
 			}
 			if (data[0] === 0x36) {
 				transferFrames.push(data);
-				return new Uint8Array([0x76, data[1]!]);
+				return new Uint8Array([0x76, getRequiredByte(data, 1, "TransferData")]);
 			}
 			if (data[0] === 0x37) {
 				exitFrames.push(data);
@@ -965,10 +992,10 @@ describe("UdsProtocol.writeRom()", () => {
 		expect(exitFrames.length).toBe(1);
 
 		// Download frame should contain sector 3 address (0x030000)
-		expect(downloadFrames[0]![0]).toBe(0x34); // REQUEST_DOWNLOAD
-		expect(downloadFrames[0]![3]).toBe(0x03); // addr byte 0 (0x030000 >> 16)
-		expect(downloadFrames[0]![4]).toBe(0x00); // addr byte 1
-		expect(downloadFrames[0]![5]).toBe(0x00); // addr byte 2
+		expect(downloadFrames[0]?.[0]).toBe(0x34); // REQUEST_DOWNLOAD
+		expect(downloadFrames[0]?.[3]).toBe(0x03); // addr byte 0 (0x030000 >> 16)
+		expect(downloadFrames[0]?.[4]).toBe(0x00); // addr byte 1
+		expect(downloadFrames[0]?.[5]).toBe(0x00); // addr byte 2
 	});
 
 	it("skips all sectors when originalRom is identical to modified ROM", async () => {
@@ -991,7 +1018,7 @@ describe("UdsProtocol.writeRom()", () => {
 			}
 			if (data[0] === 0x36) {
 				transferFrames.push(data);
-				return new Uint8Array([0x76, data[1]!]);
+				return new Uint8Array([0x76, getRequiredByte(data, 1, "TransferData")]);
 			}
 			if (data[0] === 0x37) return new Uint8Array([0x77]);
 			return new Uint8Array([]);
@@ -1092,8 +1119,9 @@ describe("UdsProtocol.writeRom()", () => {
 			if (call === 2) return new Uint8Array([0x67, 0x02]);
 			if (data[0] === 0x34) return new Uint8Array([0x74, 0x20]);
 			if (data[0] === 0x36) {
-				blockCounters.push(data[1]!);
-				return new Uint8Array([0x76, data[1]!]);
+				const blockCounter = getRequiredByte(data, 1, "TransferData");
+				blockCounters.push(blockCounter);
+				return new Uint8Array([0x76, blockCounter]);
 			}
 			if (data[0] === 0x37) return new Uint8Array([0x77]);
 			return new Uint8Array([]);
@@ -1155,7 +1183,9 @@ describe("UdsProtocol onEvent callbacks", () => {
 			if (call === 1) return new Uint8Array([0x67, 0x01, 0xab, 0xcd]); // seed
 			if (call === 2) return new Uint8Array([0x67, 0x02]); // key accepted
 			if (data[0] === 0x34) return new Uint8Array([0x74, 0x20]); // RequestDownload
-			if (data[0] === 0x36) return new Uint8Array([0x76, data[1]!]); // TransferData
+			if (data[0] === 0x36) {
+				return new Uint8Array([0x76, getRequiredByte(data, 1, "TransferData")]);
+			}
 			if (data[0] === 0x37) return new Uint8Array([0x77]); // RequestTransferExit
 			return new Uint8Array([]);
 		};

@@ -1,5 +1,22 @@
 import { vi } from "vitest";
 
+type RelativePatternBase =
+	| import("vscode").Uri
+	| import("vscode").WorkspaceFolder;
+
+type MockVscodeAugmentation = {
+	lm?: {
+		registerMcpServerDefinitionProvider: ReturnType<typeof vi.fn>;
+	};
+	RelativePattern?: new (
+		base: RelativePatternBase,
+		pattern: string,
+	) => {
+		base: RelativePatternBase;
+		pattern: string;
+	};
+};
+
 // Mock the vscode module
 vi.mock("vscode", async () => {
 	const { createVSCodeMock } =
@@ -12,22 +29,19 @@ vi.mock("vscode", async () => {
 
 	// Add proposed/newer APIs not included in jest-mock-vscode
 	// vscode.lm — Language Model / MCP APIs (used by mcp-provider.ts)
-	const mockAsAny = mock as Record<string, unknown>;
-	mockAsAny.lm = {
+	const mockWithAugmentation = mock as typeof mock & MockVscodeAugmentation;
+	mockWithAugmentation.lm = {
 		registerMcpServerDefinitionProvider: vi
 			.fn()
 			.mockReturnValue({ dispose: vi.fn() }),
 	};
 
 	// vscode.RelativePattern — used by per-document file watchers
-	if (!mockAsAny.RelativePattern) {
-		mockAsAny.RelativePattern = class RelativePattern {
-			base: import("vscode").Uri | import("vscode").WorkspaceFolder;
+	if (!mockWithAugmentation.RelativePattern) {
+		mockWithAugmentation.RelativePattern = class RelativePattern {
+			base: RelativePatternBase;
 			pattern: string;
-			constructor(
-				base: import("vscode").Uri | import("vscode").WorkspaceFolder,
-				pattern: string,
-			) {
+			constructor(base: RelativePatternBase, pattern: string) {
 				this.base = base;
 				this.pattern = pattern;
 			}

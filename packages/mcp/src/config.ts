@@ -87,7 +87,7 @@ export function loadConfig(): McpConfig {
 	}
 
 	// Environment variable
-	const envDefinitionsPath = process.env["ECU_DEFINITIONS_PATH"];
+	const envDefinitionsPath = process.env.ECU_DEFINITIONS_PATH;
 	if (envDefinitionsPath !== undefined) {
 		definitionsPaths.push(envDefinitionsPath);
 	}
@@ -113,8 +113,8 @@ export function loadConfig(): McpConfig {
 
 	if (cli.logsDir !== undefined) {
 		logsDir = cli.logsDir;
-	} else if (process.env["ECU_LOGS_DIR"] !== undefined) {
-		logsDir = process.env["ECU_LOGS_DIR"];
+	} else if (process.env.ECU_LOGS_DIR !== undefined) {
+		logsDir = process.env.ECU_LOGS_DIR;
 	} else {
 		const wsLogsFolder = settings["ecuExplorer.logsFolder"];
 		if (typeof wsLogsFolder === "string") {

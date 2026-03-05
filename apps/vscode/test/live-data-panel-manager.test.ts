@@ -4,27 +4,57 @@
  * Tests panel creation, lifecycle, PID selection, data streaming, and CSV recording.
  */
 
+import type { LiveDataFrame } from "@ecu-explorer/device";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
+import type { DeviceManagerImpl } from "../src/device-manager";
 import { LiveDataPanelManager } from "../src/live-data-panel-manager";
+import type {
+	GraphCompatibleWebviewPanel,
+	MockWebviewMessage,
+} from "./mocks/webview-mock";
 import { createMockWebviewPanel } from "./mocks/webview-mock";
+
+// Mock interface for testing - only includes methods actually used by LiveDataPanelManager
+interface MockDeviceManager {
+	selectDeviceAndProtocol: typeof mockSelectDeviceAndProtocol;
+}
+
+type DeviceManagerLike = Pick<DeviceManagerImpl, "selectDeviceAndProtocol">;
+
+function createExtensionContext(): Pick<
+	vscode.ExtensionContext,
+	"subscriptions" | "extensionUri"
+> {
+	return {
+		subscriptions: [],
+		extensionUri: vscode.Uri.file("/test/extension"),
+	};
+}
+
+function asWebviewPanel(
+	panel: GraphCompatibleWebviewPanel,
+): vscode.WebviewPanel {
+	return panel as vscode.WebviewPanel;
+}
+
+function asDeviceManager(deviceManager: DeviceManagerLike): DeviceManagerImpl {
+	return deviceManager as DeviceManagerImpl;
+}
 
 // Mock the DeviceManagerImpl
 const mockSelectDeviceAndProtocol = vi.fn();
-const mockDeviceManager = {
+const mockDeviceManager: MockDeviceManager = {
 	selectDeviceAndProtocol: mockSelectDeviceAndProtocol,
-	registerTransport: vi.fn(),
-	registerProtocol: vi.fn(),
-	listAllDevices: vi.fn(async () => []),
-	getTransport: vi.fn(),
-	getProtocols: vi.fn(() => []),
-	dispose: vi.fn(),
 };
 
 describe("LiveDataPanelManager", () => {
 	let manager: LiveDataPanelManager;
-	let mockContext: any;
-	let mockPanel: ReturnType<typeof createMockWebviewPanel>;
+	let mockPanel: GraphCompatibleWebviewPanel;
+	let mockContext: Pick<
+		vscode.ExtensionContext,
+		"subscriptions" | "extensionUri"
+	>;
 
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -32,18 +62,18 @@ describe("LiveDataPanelManager", () => {
 		mockPanel = createMockWebviewPanel("Live Data");
 
 		vi.mocked(vscode.window.createWebviewPanel).mockReturnValue(
-			mockPanel as any,
+			asWebviewPanel(mockPanel),
 		);
 
 		// Mock writeFile to prevent actual filesystem access
 		vi.mocked(vscode.workspace.fs.writeFile).mockResolvedValue(undefined);
 
-		mockContext = {
-			subscriptions: [],
-			extensionUri: vscode.Uri.file("/test/extension"),
-		};
+		mockContext = createExtensionContext();
 
-		manager = new LiveDataPanelManager(mockContext, mockDeviceManager as any);
+		manager = new LiveDataPanelManager(
+			mockContext as vscode.ExtensionContext,
+			asDeviceManager(mockDeviceManager),
+		);
 	});
 
 	describe("showPanel", () => {
@@ -114,7 +144,7 @@ describe("LiveDataPanelManager", () => {
 			await manager.showPanel();
 
 			// Simulate ready message from webview
-			(mockPanel.webview as any)._simulateMessage({ type: "ready" });
+			mockPanel.webview._simulateMessage({ type: "ready" });
 
 			// Wait for async operations
 			await new Promise((resolve) => setTimeout(resolve, 50));
@@ -163,16 +193,19 @@ describe("LiveDataPanelManager", () => {
 			});
 
 			await manager.showPanel();
-			(mockPanel.webview as any)._simulateMessage({ type: "ready" });
+			mockPanel.webview._simulateMessage({ type: "ready" });
 
 			await new Promise((resolve) => setTimeout(resolve, 50));
 
-			const messages = (mockPanel.webview as any)._getSentMessages();
+			const messages = mockPanel.webview._getSentMessages();
 			const supportedPidsMsg = messages.find(
-				(m: any) => m.type === "supportedPids",
+				(m: MockWebviewMessage) => m.type === "supportedPids",
 			);
 			expect(supportedPidsMsg).toBeDefined();
-			expect(supportedPidsMsg?.pids).toEqual(mockPids);
+			expect(
+				(supportedPidsMsg as MockWebviewMessage & { pids: typeof mockPids })
+					.pids,
+			).toEqual(mockPids);
 		});
 
 		it("should show error message when selectDeviceAndProtocol fails", async () => {
@@ -181,7 +214,7 @@ describe("LiveDataPanelManager", () => {
 			);
 
 			await manager.showPanel();
-			(mockPanel.webview as any)._simulateMessage({ type: "ready" });
+			mockPanel.webview._simulateMessage({ type: "ready" });
 
 			await new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -217,10 +250,10 @@ describe("LiveDataPanelManager", () => {
 			});
 
 			await manager.showPanel();
-			(mockPanel.webview as any)._simulateMessage({ type: "ready" });
+			mockPanel.webview._simulateMessage({ type: "ready" });
 			await new Promise((resolve) => setTimeout(resolve, 50));
 
-			(mockPanel.webview as any)._simulateMessage({
+			mockPanel.webview._simulateMessage({
 				type: "startStreaming",
 				pids: [0x0c, 0x0d],
 				record: false,
@@ -235,9 +268,9 @@ describe("LiveDataPanelManager", () => {
 				expect.any(Function),
 			);
 
-			const messages = (mockPanel.webview as any)._getSentMessages();
+			const messages = mockPanel.webview._getSentMessages();
 			const streamingStartedMsg = messages.find(
-				(m: any) => m.type === "streamingStarted",
+				(m: MockWebviewMessage) => m.type === "streamingStarted",
 			);
 			expect(streamingStartedMsg).toBeDefined();
 		});
@@ -269,24 +302,26 @@ describe("LiveDataPanelManager", () => {
 			});
 
 			await manager.showPanel();
-			(mockPanel.webview as any)._simulateMessage({ type: "ready" });
+			mockPanel.webview._simulateMessage({ type: "ready" });
 			await new Promise((resolve) => setTimeout(resolve, 50));
 
-			(mockPanel.webview as any)._simulateMessage({
+			mockPanel.webview._simulateMessage({
 				type: "startStreaming",
 				pids: [0x0c],
 				record: false,
 			});
 			await new Promise((resolve) => setTimeout(resolve, 50));
 
-			(mockPanel.webview as any)._simulateMessage({ type: "stopStreaming" });
+			mockPanel.webview._simulateMessage({
+				type: "stopStreaming",
+			});
 			await new Promise((resolve) => setTimeout(resolve, 50));
 
 			expect(mockSession.stop).toHaveBeenCalled();
 
-			const messages = (mockPanel.webview as any)._getSentMessages();
+			const messages = mockPanel.webview._getSentMessages();
 			const streamingStoppedMsg = messages.find(
-				(m: any) => m.type === "streamingStopped",
+				(m: MockWebviewMessage) => m.type === "streamingStopped",
 			);
 			expect(streamingStoppedMsg).toBeDefined();
 		});
@@ -308,15 +343,21 @@ describe("LiveDataPanelManager", () => {
 				close: vi.fn(async () => {}),
 			};
 
-			let capturedOnFrame: ((frame: any) => void) | undefined;
+			let capturedOnFrame: ((frame: LiveDataFrame) => void) | undefined;
 			const mockProtocol = {
 				name: "Test Protocol",
 				canHandle: vi.fn(async () => true),
 				getSupportedPids: vi.fn(async () => []),
-				streamLiveData: vi.fn((_conn: any, _pids: any, onFrame: any) => {
-					capturedOnFrame = onFrame;
-					return mockSession;
-				}),
+				streamLiveData: vi.fn(
+					(
+						_conn: unknown,
+						_pids: unknown,
+						onFrame: (frame: LiveDataFrame) => void,
+					) => {
+						capturedOnFrame = onFrame;
+						return mockSession;
+					},
+				),
 			};
 
 			mockSelectDeviceAndProtocol.mockResolvedValue({
@@ -327,13 +368,13 @@ describe("LiveDataPanelManager", () => {
 			// Mock workspace folders
 			vi.spyOn(vscode.workspace, "workspaceFolders", "get").mockReturnValue([
 				{ uri: vscode.Uri.file("/workspace"), name: "workspace", index: 0 },
-			] as any);
+			] as readonly vscode.WorkspaceFolder[] | undefined);
 
 			await manager.showPanel();
-			(mockPanel.webview as any)._simulateMessage({ type: "ready" });
+			mockPanel.webview._simulateMessage({ type: "ready" });
 			await new Promise((resolve) => setTimeout(resolve, 50));
 
-			(mockPanel.webview as any)._simulateMessage({
+			mockPanel.webview._simulateMessage({
 				type: "startStreaming",
 				pids: [0x0c],
 				record: true, // deprecated — should be ignored
@@ -348,7 +389,7 @@ describe("LiveDataPanelManager", () => {
 				unit: "rpm",
 			});
 
-			(mockPanel.webview as any)._simulateMessage({ type: "stopStreaming" });
+			mockPanel.webview._simulateMessage({ type: "stopStreaming" });
 			await new Promise((resolve) => setTimeout(resolve, 50));
 
 			// CSV should NOT be written by the panel — logging is now handled by LoggingManager
@@ -387,10 +428,10 @@ describe("LiveDataPanelManager", () => {
 			);
 
 			await manager.showPanel();
-			(mockPanel.webview as any)._simulateMessage({ type: "ready" });
+			mockPanel.webview._simulateMessage({ type: "ready" });
 			await new Promise((resolve) => setTimeout(resolve, 50));
 
-			(mockPanel.webview as any)._simulateMessage({
+			mockPanel.webview._simulateMessage({
 				type: "startStreaming",
 				pids: [0x0c],
 				record: true, // deprecated — should be ignored
@@ -419,15 +460,21 @@ describe("LiveDataPanelManager", () => {
 				close: vi.fn(async () => {}),
 			};
 
-			let capturedOnFrame: ((frame: any) => void) | undefined;
+			let capturedOnFrame: ((frame: LiveDataFrame) => void) | undefined;
 			const mockProtocol = {
 				name: "Test Protocol",
 				canHandle: vi.fn(async () => true),
 				getSupportedPids: vi.fn(async () => []),
-				streamLiveData: vi.fn((_conn: any, _pids: any, onFrame: any) => {
-					capturedOnFrame = onFrame;
-					return mockSession;
-				}),
+				streamLiveData: vi.fn(
+					(
+						_conn: unknown,
+						_pids: unknown,
+						onFrame: (frame: LiveDataFrame) => void,
+					) => {
+						capturedOnFrame = onFrame;
+						return mockSession;
+					},
+				),
 			};
 
 			mockSelectDeviceAndProtocol.mockResolvedValue({
@@ -436,18 +483,18 @@ describe("LiveDataPanelManager", () => {
 			});
 
 			await manager.showPanel();
-			(mockPanel.webview as any)._simulateMessage({ type: "ready" });
+			mockPanel.webview._simulateMessage({ type: "ready" });
 			await new Promise((resolve) => setTimeout(resolve, 50));
 
-			(mockPanel.webview as any)._simulateMessage({
+			mockPanel.webview._simulateMessage({
 				type: "startStreaming",
 				pids: [0x0c],
 				record: false,
 			});
 			await new Promise((resolve) => setTimeout(resolve, 50));
 
-			const receivedFrames: any[] = [];
-			manager.onFrame((frame) => receivedFrames.push(frame));
+			const receivedFrames: LiveDataFrame[] = [];
+			manager.onFrame((frame: LiveDataFrame) => receivedFrames.push(frame));
 
 			const testFrame = { timestamp: 100, pid: 0x0c, value: 1000, unit: "rpm" };
 			capturedOnFrame?.(testFrame);
@@ -485,10 +532,10 @@ describe("LiveDataPanelManager", () => {
 			});
 
 			await manager.showPanel();
-			(mockPanel.webview as any)._simulateMessage({ type: "ready" });
+			mockPanel.webview._simulateMessage({ type: "ready" });
 			await new Promise((resolve) => setTimeout(resolve, 50));
 
-			(mockPanel.webview as any)._simulateMessage({
+			mockPanel.webview._simulateMessage({
 				type: "startStreaming",
 				pids: [0x0c],
 				record: false,

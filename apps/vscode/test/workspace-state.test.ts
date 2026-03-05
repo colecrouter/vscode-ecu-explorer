@@ -1,19 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
 import type * as vscode from "vscode";
 import { type TableEditorState, WorkspaceState } from "../src/workspace-state";
 
 describe("workspace-state", () => {
 	let memento: vscode.Memento;
 	let workspaceState: WorkspaceState;
-	let storage: Map<string, any>;
+	type StoredValue = Awaited<ReturnType<vscode.Memento["get"]>>;
+	let storage: Map<string, StoredValue>;
 
 	beforeEach(() => {
 		// Create a mock memento with in-memory storage
 		storage = new Map();
 		memento = {
 			get: (key: string) => storage.get(key),
-			update: async (key: string, value: any) => {
+			update: async (key: string, value: StoredValue) => {
 				storage.set(key, value);
 			},
 			keys: () => Array.from(storage.keys()),

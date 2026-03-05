@@ -171,7 +171,7 @@ export async function resolveRomDefinition(
 		defaultUri: vscode.Uri.joinPath(romUri, ".."),
 	});
 
-	if (picked && picked[0]) {
+	if (picked?.[0]) {
 		// Use the first available provider to parse the manually selected file
 		const provider = providerRegistry.list()[0];
 		if (provider) {

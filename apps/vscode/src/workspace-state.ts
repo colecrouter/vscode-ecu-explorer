@@ -270,12 +270,22 @@ export class WorkspaceState {
 	 * @param state - State to sanitize
 	 * @returns Sanitized state
 	 */
-	private sanitizeState(state: any): WorkspaceStateData {
+	private sanitizeState(state: unknown): WorkspaceStateData {
+		if (typeof state !== "object" || state === null) {
+			return {
+				romDefinitions: {},
+				lastOpenedTables: {},
+				tableStates: {},
+				dirtyTables: {},
+			};
+		}
+
+		const obj = state as Record<string, unknown>;
 		return {
-			romDefinitions: this.sanitizeRecord(state.romDefinitions),
-			lastOpenedTables: this.sanitizeRecord(state.lastOpenedTables),
-			tableStates: this.sanitizeTableStates(state.tableStates),
-			dirtyTables: this.sanitizeDirtyTables(state.dirtyTables),
+			romDefinitions: this.sanitizeRecord(obj.romDefinitions),
+			lastOpenedTables: this.sanitizeRecord(obj.lastOpenedTables),
+			tableStates: this.sanitizeTableStates(obj.tableStates),
+			dirtyTables: this.sanitizeDirtyTables(obj.dirtyTables),
 		};
 	}
 
@@ -285,13 +295,14 @@ export class WorkspaceState {
 	 * @param record - Record to sanitize
 	 * @returns Sanitized record
 	 */
-	private sanitizeRecord(record: any): Record<string, string> {
+	private sanitizeRecord(record: unknown): Record<string, string> {
 		if (typeof record !== "object" || record === null) {
 			return {};
 		}
 
+		const obj = record as Record<string, unknown>;
 		const result: Record<string, string> = {};
-		for (const [key, value] of Object.entries(record)) {
+		for (const [key, value] of Object.entries(obj)) {
 			if (typeof key === "string" && typeof value === "string") {
 				result[key] = value;
 			}
@@ -306,14 +317,15 @@ export class WorkspaceState {
 	 * @returns Sanitized table states
 	 */
 	private sanitizeTableStates(
-		tableStates: any,
+		tableStates: unknown,
 	): Record<string, TableEditorState> {
 		if (typeof tableStates !== "object" || tableStates === null) {
 			return {};
 		}
 
+		const obj = tableStates as Record<string, unknown>;
 		const result: Record<string, TableEditorState> = {};
-		for (const [key, value] of Object.entries(tableStates)) {
+		for (const [key, value] of Object.entries(obj)) {
 			if (typeof key === "string" && this.isValidTableEditorState(value)) {
 				result[key] = value as TableEditorState;
 			}
@@ -327,46 +339,51 @@ export class WorkspaceState {
 	 * @param value - Value to check
 	 * @returns True if the value is a valid TableEditorState
 	 */
-	private isValidTableEditorState(value: any): boolean {
+	private isValidTableEditorState(value: unknown): boolean {
 		if (typeof value !== "object" || value === null) {
 			return false;
 		}
 
+		const obj = value as Record<string, unknown>;
+
 		// Check required fields
 		if (
-			typeof value.romPath !== "string" ||
-			typeof value.tableId !== "string" ||
-			typeof value.definitionUri !== "string"
+			typeof obj.romPath !== "string" ||
+			typeof obj.tableId !== "string" ||
+			typeof obj.definitionUri !== "string"
 		) {
 			return false;
 		}
 
 		// Check optional fields if present
-		if (value.scrollPosition !== undefined) {
+		if (obj.scrollPosition !== undefined) {
 			if (
-				typeof value.scrollPosition !== "object" ||
-				typeof value.scrollPosition.row !== "number" ||
-				typeof value.scrollPosition.col !== "number"
+				typeof obj.scrollPosition !== "object" ||
+				typeof (obj.scrollPosition as Record<string, unknown>).row !==
+					"number" ||
+				typeof (obj.scrollPosition as Record<string, unknown>).col !== "number"
 			) {
 				return false;
 			}
 		}
 
-		if (value.selection !== undefined) {
+		if (obj.selection !== undefined) {
 			if (
-				typeof value.selection !== "object" ||
-				typeof value.selection.startRow !== "number" ||
-				typeof value.selection.startCol !== "number" ||
-				typeof value.selection.endRow !== "number" ||
-				typeof value.selection.endCol !== "number"
+				typeof obj.selection !== "object" ||
+				typeof (obj.selection as Record<string, unknown>).startRow !==
+					"number" ||
+				typeof (obj.selection as Record<string, unknown>).startCol !==
+					"number" ||
+				typeof (obj.selection as Record<string, unknown>).endRow !== "number" ||
+				typeof (obj.selection as Record<string, unknown>).endCol !== "number"
 			) {
 				return false;
 			}
 		}
 
 		if (
-			value.lastModified !== undefined &&
-			typeof value.lastModified !== "number"
+			obj.lastModified !== undefined &&
+			typeof obj.lastModified !== "number"
 		) {
 			return false;
 		}
@@ -380,18 +397,21 @@ export class WorkspaceState {
 	 * @param dirtyTables - Dirty tables to sanitize
 	 * @returns Sanitized dirty tables
 	 */
-	private sanitizeDirtyTables(dirtyTables: any): Record<string, string[]> {
+	private sanitizeDirtyTables(dirtyTables: unknown): Record<string, string[]> {
 		if (typeof dirtyTables !== "object" || dirtyTables === null) {
 			return {};
 		}
 
+		const obj = dirtyTables as Record<string, unknown>;
 		const result: Record<string, string[]> = {};
-		for (const [key, value] of Object.entries(dirtyTables)) {
+		for (const [key, value] of Object.entries(obj)) {
 			if (typeof key === "string" && Array.isArray(value)) {
 				// Filter to only include string values
-				const tableNames = value.filter((v) => typeof v === "string");
+				const tableNames = (value as unknown[]).filter(
+					(v) => typeof v === "string",
+				);
 				if (tableNames.length > 0) {
-					result[key] = tableNames;
+					result[key] = tableNames as string[];
 				}
 			}
 		}

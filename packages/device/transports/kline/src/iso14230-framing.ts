@@ -28,9 +28,8 @@ const MAX_PAYLOAD_LENGTH = 7;
  */
 export function calculateChecksum(data: Uint8Array): number {
 	let sum = 0;
-	for (let i = 0; i < data.length; i++) {
-		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-		sum += data[i]!;
+	for (const byte of data) {
+		sum += byte;
 	}
 	return sum & 0xff;
 }
@@ -114,8 +113,14 @@ export function decodeFrame(frameData: Uint8Array): Frame {
 	}
 
 	// Extract PCI byte
-	// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-	const pci = frameData[0]!;
+	const pci = frameData[0];
+	if (pci === undefined) {
+		return {
+			data: frameData,
+			payload: new Uint8Array(0),
+			isValid: false,
+		};
+	}
 	const payloadLength = pci & 0x0f; // Bits 0-3 = length
 
 	// Validate frame length: PCI + payload + checksum
@@ -158,8 +163,10 @@ export function parseFrames(buffer: Uint8Array): Frame[] {
 			break;
 		}
 
-		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-		const pci = buffer[offset]!;
+		const pci = buffer[offset];
+		if (pci === undefined) {
+			break;
+		}
 		const payloadLength = pci & 0x0f;
 		const expectedFrameLength = 1 + payloadLength + 1; // PCI + payload + checksum
 
@@ -202,8 +209,10 @@ export function extractPayload(frameData: Uint8Array): Uint8Array {
 		return new Uint8Array(0);
 	}
 
-	// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-	const pci = frameData[0]!;
+	const pci = frameData[0];
+	if (pci === undefined) {
+		return new Uint8Array(0);
+	}
 	const payloadLength = pci & 0x0f;
 
 	if (frameData.length < 1 + payloadLength + 1) {

@@ -49,3 +49,6 @@ coverage
 *.hex
 *.srf
 *.xml
+
+# TS build info
+*.tsbuildinfo

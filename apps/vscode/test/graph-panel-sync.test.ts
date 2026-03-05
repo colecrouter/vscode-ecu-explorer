@@ -13,13 +13,73 @@ import * as vscode from "vscode";
 // Import after mock
 import { GraphPanelManager } from "../src/graph-panel-manager";
 import type { RomDocument } from "../src/rom/document";
+import type {
+	GraphCompatibleWebview,
+	GraphCompatibleWebviewPanel,
+} from "./mocks/webview-mock";
 import { createMockWebviewPanel } from "./mocks/webview-mock";
+
+type MockRomDocument = Pick<
+	RomDocument,
+	"uri" | "onDidUpdateBytes" | "definition"
+>;
+
+type MinimalExtensionContext = Pick<
+	vscode.ExtensionContext,
+	"subscriptions" | "extensionUri"
+>;
+
+type PostedGraphMessage = {
+	type: string;
+	snapshot?: TableSnapshot;
+};
+
+type Table2DSnapshot = Extract<TableSnapshot, { kind: "table2d" }>;
+
+function asWebviewPanel(
+	panel: GraphCompatibleWebviewPanel,
+): vscode.WebviewPanel {
+	return panel as vscode.WebviewPanel;
+}
+
+function asGraphWebview(webview: vscode.Webview): GraphCompatibleWebview {
+	return webview as GraphCompatibleWebview;
+}
+
+function clearMessages(panel: vscode.WebviewPanel): void {
+	asGraphWebview(panel.webview)._clearMessages();
+}
+
+function simulateMessage(panel: vscode.WebviewPanel, message: unknown): void {
+	asGraphWebview(panel.webview)._simulateMessage(message);
+}
+
+function getMessages(panel: vscode.WebviewPanel) {
+	return asGraphWebview(panel.webview)._getMessages();
+}
+
+function createExtensionContext(): MinimalExtensionContext {
+	return {
+		subscriptions: [],
+		extensionUri: vscode.Uri.file("/test/extension"),
+	};
+}
 
 describe("Graph Panel Synchronization", () => {
 	let manager: GraphPanelManager;
-	let mockContext: any;
-	let mockGetDocument: any;
-	let cellSelectionCallback: any;
+	let mockContext: MinimalExtensionContext;
+	let mockGetDocument: (romPath: string) => RomDocument | undefined;
+	let cellSelectionCallback: ReturnType<
+		typeof vi.fn<
+			(romPath: string, tableId: string, row: number, col: number) => void
+		>
+	>;
+	let onCellSelect: (
+		romPath: string,
+		tableId: string,
+		row: number,
+		col: number,
+	) => void;
 
 	const createMockSnapshot = (value: number = 10): TableSnapshot => ({
 		kind: "table2d",
@@ -42,48 +102,58 @@ describe("Graph Panel Synchronization", () => {
 		// Mock vscode.window.createWebviewPanel
 		vi.mocked(vscode.window.createWebviewPanel).mockImplementation(
 			(_viewType, title) => {
-				return createMockWebviewPanel(title) as any;
+				return asWebviewPanel(createMockWebviewPanel(title));
 			},
 		);
 
 		// Create mock context
-		mockContext = {
-			subscriptions: [],
-			extensionUri: vscode.Uri.file("/test/extension"),
-		};
+		mockContext = createExtensionContext();
 
 		// Create mock getDocument function
 		mockGetDocument = vi.fn((romPath: string): RomDocument | undefined => {
 			if (romPath.includes("test")) {
-				return {
-					uri: { path: romPath },
+				const document: MockRomDocument = {
+					uri: vscode.Uri.file(romPath),
 					onDidUpdateBytes: vi.fn(() => ({ dispose: vi.fn() })),
 					definition: {
+						uri: "file:///test/definition.xml",
 						name: "Test ROM",
+						fingerprints: [],
+						platform: {},
 						tables: [
 							{
 								name: "table1",
-								description: "Test Table 1",
-								address: 0x1000,
+								kind: "table2d",
 								rows: 2,
 								cols: 2,
+								z: {
+									name: "z",
+									address: 0x1000,
+									dtype: "u8",
+								},
 							},
 						],
 					},
-				} as any;
+				};
+				return document as RomDocument;
 			}
 			return undefined;
 		});
 
 		// Create cell selection callback
-		cellSelectionCallback = vi.fn();
+		cellSelectionCallback = vi.fn<
+			(romPath: string, tableId: string, row: number, col: number) => void
+		>((_romPath: string, _tableId: string, _row: number, _col: number) => {});
+		onCellSelect = (romPath, tableId, row, col) => {
+			cellSelectionCallback(romPath, tableId, row, col);
+		};
 
 		// Create manager
 		manager = new GraphPanelManager(
-			mockContext,
+			mockContext as vscode.ExtensionContext,
 			mockGetDocument,
 			undefined,
-			cellSelectionCallback,
+			onCellSelect,
 		);
 	});
 
@@ -98,7 +168,7 @@ describe("Graph Panel Synchronization", () => {
 			);
 
 			// Clear initial messages
-			(panel.webview as any)._clearMessages();
+			clearMessages(panel);
 
 			// Simulate cell edit in table
 			const updatedSnapshot = createMockSnapshot(999);
@@ -121,7 +191,7 @@ describe("Graph Panel Synchronization", () => {
 			);
 
 			// Clear initial messages
-			(panel.webview as any)._clearMessages();
+			clearMessages(panel);
 
 			// Simulate undo (snapshot with canUndo = true)
 			const undoSnapshot = createMockSnapshot(5);
@@ -143,7 +213,7 @@ describe("Graph Panel Synchronization", () => {
 			);
 
 			// Clear initial messages
-			(panel.webview as any)._clearMessages();
+			clearMessages(panel);
 
 			// Simulate redo (snapshot with canRedo = true)
 			const redoSnapshot = createMockSnapshot(15);
@@ -169,7 +239,7 @@ describe("Graph Panel Synchronization", () => {
 			// Close and reopen to simulate multiple windows
 			// (In real scenario, user might have multiple windows open)
 			// For this test, we'll just verify the same panel gets updates
-			(panel1.webview as any)._clearMessages();
+			clearMessages(panel1);
 
 			// Broadcast update
 			const updatedSnapshot = createMockSnapshot(999);
@@ -200,8 +270,8 @@ describe("Graph Panel Synchronization", () => {
 			);
 
 			// Clear messages
-			(panel1.webview as any)._clearMessages();
-			(panel2.webview as any)._clearMessages();
+			clearMessages(panel1);
+			clearMessages(panel2);
 
 			// Update only table1
 			const updatedSnapshot = createMockSnapshot(999);
@@ -233,8 +303,8 @@ describe("Graph Panel Synchronization", () => {
 			);
 
 			// Clear messages
-			(panel1.webview as any)._clearMessages();
-			(panel2.webview as any)._clearMessages();
+			clearMessages(panel1);
+			clearMessages(panel2);
 
 			// Update only rom1
 			const updatedSnapshot = createMockSnapshot(999);
@@ -258,7 +328,7 @@ describe("Graph Panel Synchronization", () => {
 			);
 
 			// Clear initial messages
-			(panel.webview as any)._clearMessages();
+			clearMessages(panel);
 
 			// Send multiple rapid updates
 			for (let i = 0; i < 10; i++) {
@@ -282,7 +352,7 @@ describe("Graph Panel Synchronization", () => {
 			);
 
 			// Simulate cell selection in graph
-			(panel.webview as any)._simulateMessage({
+			simulateMessage(panel, {
 				type: "cellSelect",
 				row: 1,
 				col: 1,
@@ -315,7 +385,7 @@ describe("Graph Panel Synchronization", () => {
 			);
 
 			// Select cell in panel1
-			(panel1.webview as any)._simulateMessage({
+			simulateMessage(panel1, {
 				type: "cellSelect",
 				row: 0,
 				col: 0,
@@ -330,7 +400,7 @@ describe("Graph Panel Synchronization", () => {
 			);
 
 			// Select cell in panel2
-			(panel2.webview as any)._simulateMessage({
+			simulateMessage(panel2, {
 				type: "cellSelect",
 				row: 1,
 				col: 1,
@@ -355,7 +425,7 @@ describe("Graph Panel Synchronization", () => {
 			);
 
 			// Select first cell
-			(panel.webview as any)._simulateMessage({
+			simulateMessage(panel, {
 				type: "cellSelect",
 				row: 0,
 				col: 0,
@@ -369,7 +439,7 @@ describe("Graph Panel Synchronization", () => {
 			);
 
 			// Select last cell
-			(panel.webview as any)._simulateMessage({
+			simulateMessage(panel, {
 				type: "cellSelect",
 				row: 1,
 				col: 1,
@@ -395,7 +465,7 @@ describe("Graph Panel Synchronization", () => {
 			);
 
 			// Clear initial messages
-			(panel.webview as any)._clearMessages();
+			clearMessages(panel);
 
 			// 1. Edit cell in table
 			const updatedSnapshot = createMockSnapshot(999);
@@ -408,7 +478,7 @@ describe("Graph Panel Synchronization", () => {
 			});
 
 			// 2. Select cell in graph
-			(panel.webview as any)._simulateMessage({
+			simulateMessage(panel, {
 				type: "cellSelect",
 				row: 1,
 				col: 0,
@@ -433,7 +503,7 @@ describe("Graph Panel Synchronization", () => {
 			);
 
 			// Clear initial messages
-			(panel.webview as any)._clearMessages();
+			clearMessages(panel);
 
 			// Select cell in table (simulated by extension)
 			manager.selectCell("/test/rom.hex", "table1", 0, 1);
@@ -469,7 +539,7 @@ describe("Graph Panel Synchronization", () => {
 			);
 
 			// Clear messages
-			(panel.webview as any)._clearMessages();
+			clearMessages(panel);
 
 			// Update should still work
 			const updatedSnapshot = createMockSnapshot(999);
@@ -495,7 +565,7 @@ describe("Graph Panel Synchronization", () => {
 			);
 
 			// Clear messages
-			(panel.webview as any)._clearMessages();
+			clearMessages(panel);
 
 			// Update table
 			const updatedSnapshot = createMockSnapshot(999);
@@ -526,8 +596,8 @@ describe("Graph Panel Synchronization", () => {
 			);
 
 			// Clear messages
-			(panel1.webview as any)._clearMessages();
-			(panel2.webview as any)._clearMessages();
+			clearMessages(panel1);
+			clearMessages(panel2);
 
 			// Update rom1
 			const updatedSnapshot1 = createMockSnapshot(111);
@@ -538,14 +608,16 @@ describe("Graph Panel Synchronization", () => {
 			manager.broadcastSnapshot("/test/rom2.hex", "table1", updatedSnapshot2);
 
 			// Each panel should receive only its update
-			const messages1 = (panel1.webview as any)._getMessages();
-			const messages2 = (panel2.webview as any)._getMessages();
+			const messages1 = getMessages(panel1) as PostedGraphMessage[];
+			const messages2 = getMessages(panel2) as PostedGraphMessage[];
+			const snapshot1 = messages1[0]?.snapshot as Table2DSnapshot | undefined;
+			const snapshot2 = messages2[0]?.snapshot as Table2DSnapshot | undefined;
 
 			expect(messages1).toHaveLength(1);
-			expect(messages1[0].snapshot.z[0][0]).toBe(111);
+			expect(snapshot1?.z[0]?.[0]).toBe(111);
 
 			expect(messages2).toHaveLength(1);
-			expect(messages2[0].snapshot.z[0][0]).toBe(222);
+			expect(snapshot2?.z[0]?.[0]).toBe(222);
 		});
 
 		it("should handle complex workflow with multiple tables and ROMs", () => {
@@ -572,9 +644,9 @@ describe("Graph Panel Synchronization", () => {
 			);
 
 			// Clear messages
-			(panel1.webview as any)._clearMessages();
-			(panel2.webview as any)._clearMessages();
-			(panel3.webview as any)._clearMessages();
+			clearMessages(panel1);
+			clearMessages(panel2);
+			clearMessages(panel3);
 
 			// Update rom1/table1
 			const update1 = createMockSnapshot(111);
@@ -655,7 +727,7 @@ describe("Graph Panel Synchronization", () => {
 
 			// Try to send message
 			expect(() => {
-				(panel.webview as any)._simulateMessage({
+				simulateMessage(panel, {
 					type: "cellSelect",
 					row: 0,
 					col: 0,

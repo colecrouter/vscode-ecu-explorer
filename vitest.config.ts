@@ -5,7 +5,6 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
 	test: {
 		setupFiles: ["./apps/vscode/test/setup.ts"],
-		globals: true,
 		coverage: {
 			reporter: ["text"],
 			include: ["**/*.ts", "**/*.svelte"],

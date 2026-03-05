@@ -6,6 +6,13 @@ import type { RomEditorProvider } from "../src/rom/editor-provider";
 import { RomExplorerTreeProvider } from "../src/tree/rom-tree-provider";
 import { WorkspaceState } from "../src/workspace-state";
 
+type MockEditorProvider = Pick<
+	RomEditorProvider,
+	"onDidChangeCustomDocument" | "getDocument"
+>;
+
+type MockMemento = Pick<vscode.Memento, "get" | "update" | "keys">;
+
 describe("ECU Explorer Commands - Phase 2", () => {
 	let treeProvider: RomExplorerTreeProvider;
 	let mockEditorProvider: RomEditorProvider;
@@ -16,13 +23,14 @@ describe("ECU Explorer Commands - Phase 2", () => {
 		mockEditorProvider = {
 			onDidChangeCustomDocument: vi.fn(() => ({ dispose: vi.fn() })),
 			getDocument: vi.fn(),
-		} as any;
+		} as MockEditorProvider as RomEditorProvider;
 
 		// Create mock workspace state
 		const mockMemento = {
 			get: vi.fn(() => undefined),
 			update: vi.fn(),
-		} as any;
+			keys: vi.fn(() => []),
+		} satisfies MockMemento;
 		mockWorkspaceState = new WorkspaceState(mockMemento);
 
 		// Create tree provider
@@ -51,11 +59,9 @@ describe("ECU Explorer Commands - Phase 2", () => {
 			},
 		};
 
-		if (category) {
-			return { ...baseTable, category } as any;
-		}
-
-		return baseTable as any;
+		return category
+			? ({ ...baseTable, category } as TableDefinition)
+			: (baseTable as TableDefinition);
 	}
 
 	/**
@@ -233,7 +239,7 @@ describe("ECU Explorer Commands - Phase 2", () => {
 		});
 
 		it("should handle opening table from different ROM", async () => {
-			const mockUri1 = vscode.Uri.file("/test/rom1.hex") as any;
+			const mockUri1 = vscode.Uri.file("/test/rom1.hex");
 			const mockUri2 = vscode.Uri.file("/test/rom2.hex");
 			const mockBytes = new Uint8Array([0x01, 0x02, 0x03]);
 
@@ -271,7 +277,7 @@ describe("ECU Explorer Commands - Phase 2", () => {
 			const tableName = "Table1";
 
 			// Mock editor provider to return null
-			(mockEditorProvider.getDocument as any).mockReturnValue(null);
+			vi.mocked(mockEditorProvider.getDocument).mockReturnValue(undefined);
 
 			// Command should handle this gracefully
 			// (actual error handling would be in the command handler)

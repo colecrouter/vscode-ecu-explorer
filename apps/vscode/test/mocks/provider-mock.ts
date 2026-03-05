@@ -2,6 +2,8 @@
  * Mock DefinitionProvider for testing
  */
 
+type MockRecord = Record<string, unknown>;
+
 export function createMockProvider(overrides: Record<string, unknown> = {}) {
 	return {
 		id: "test-provider",
@@ -44,7 +46,7 @@ export function createMockProviderRegistry() {
 	};
 }
 
-export function createMockDefinition(overrides: Record<string, any> = {}) {
+export function createMockDefinition(overrides: MockRecord = {}) {
 	return {
 		id: "def1",
 		name: "Test Definition",
@@ -56,7 +58,7 @@ export function createMockDefinition(overrides: Record<string, any> = {}) {
 	};
 }
 
-export function createMockTable(overrides: Record<string, any> = {}) {
+export function createMockTable(overrides: MockRecord = {}) {
 	return {
 		name: "Test Table",
 		address: 0x1000,
@@ -77,7 +79,7 @@ export function createMockTable(overrides: Record<string, any> = {}) {
 	};
 }
 
-export function createMockAxis(overrides: Record<string, any> = {}) {
+export function createMockAxis(overrides: MockRecord = {}) {
 	return {
 		name: "Test Axis",
 		address: 0x2000,
@@ -88,7 +90,7 @@ export function createMockAxis(overrides: Record<string, any> = {}) {
 	};
 }
 
-export function createMockFingerprint(overrides: Record<string, any> = {}) {
+export function createMockFingerprint(overrides: MockRecord = {}) {
 	return {
 		address: 0x0,
 		bytes: [0x4d, 0x5a, 0x90, 0x00],
@@ -96,7 +98,7 @@ export function createMockFingerprint(overrides: Record<string, any> = {}) {
 	};
 }
 
-export function createMockRomInstance(overrides: Record<string, any> = {}) {
+export function createMockRomInstance(overrides: MockRecord = {}) {
 	return {
 		id: "rom1",
 		romUri: "file:///path/to/rom.hex",
@@ -108,7 +110,7 @@ export function createMockRomInstance(overrides: Record<string, any> = {}) {
 	};
 }
 
-export function createMockRomAssociation(overrides: Record<string, any> = {}) {
+export function createMockRomAssociation(overrides: MockRecord = {}) {
 	return {
 		romUri: "file:///path/to/rom.hex",
 		providerId: "test-provider",
@@ -118,7 +120,7 @@ export function createMockRomAssociation(overrides: Record<string, any> = {}) {
 	};
 }
 
-export function createMockMatchResult(overrides: Record<string, any> = {}) {
+export function createMockMatchResult(overrides: MockRecord = {}) {
 	return {
 		defUri: "test://def1",
 		score: 95,
@@ -126,7 +128,9 @@ export function createMockMatchResult(overrides: Record<string, any> = {}) {
 	};
 }
 
-export function createMockProviderWithDefinitions(definitions: any[] = []) {
+export function createMockProviderWithDefinitions(
+	definitions: MockRecord[] = [],
+) {
 	return {
 		id: "test-provider",
 		name: "Test Provider",
@@ -154,7 +158,7 @@ export function createMockProviderWithError(error: Error) {
 	};
 }
 
-export function createMockProviderWithMatches(matches: any[] = []) {
+export function createMockProviderWithMatches(matches: MockRecord[] = []) {
 	return {
 		id: "test-provider",
 		name: "Test Provider",

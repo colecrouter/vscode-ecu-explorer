@@ -1,10 +1,48 @@
 import type { ROMDefinition, TableDefinition } from "@ecu-explorer/core";
+import type { Mock } from "vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
 import { RomDocument } from "../src/rom/document";
 import type { RomEditorProvider } from "../src/rom/editor-provider";
 import { RomExplorerTreeProvider } from "../src/tree/rom-tree-provider";
 import { WorkspaceState } from "../src/workspace-state";
+
+type MockEditorProvider = Pick<RomEditorProvider, "onDidChangeCustomDocument">;
+
+type MockMemento = Pick<vscode.Memento, "get" | "update" | "keys">;
+
+function createMockEditorProvider(): RomEditorProvider {
+	const editorProvider = new Map<string, unknown>();
+	editorProvider.set(
+		"onDidChangeCustomDocument",
+		vi.fn(() => ({ dispose: vi.fn() })),
+	);
+
+	return editorProvider.get("onDidChangeCustomDocument")
+		? ({
+				get onDidChangeCustomDocument() {
+					return editorProvider.get(
+						"onDidChangeCustomDocument",
+					) as MockEditorProvider["onDidChangeCustomDocument"];
+				},
+			} as RomEditorProvider)
+		: (() => {
+				throw new Error("Mock editor provider was not initialized");
+			})();
+}
+
+function setTreeRefreshSpy(
+	provider: RomExplorerTreeProvider,
+	refreshSpy: Mock,
+): void {
+	const fire: (data: unknown) => void = (data) => {
+		refreshSpy(data);
+	};
+
+	Reflect.set(provider, "_onDidChangeTreeData", {
+		fire,
+	} satisfies Pick<vscode.EventEmitter<unknown>, "fire">);
+}
 
 describe("RomExplorerTreeProvider - Phase 2: Active Table Tracking", () => {
 	let treeProvider: RomExplorerTreeProvider;
@@ -13,15 +51,14 @@ describe("RomExplorerTreeProvider - Phase 2: Active Table Tracking", () => {
 
 	beforeEach(() => {
 		// Create mock editor provider
-		mockEditorProvider = {
-			onDidChangeCustomDocument: vi.fn(() => ({ dispose: vi.fn() })),
-		} as any;
+		mockEditorProvider = createMockEditorProvider();
 
 		// Create mock workspace state
 		const mockMemento = {
 			get: vi.fn(() => undefined),
 			update: vi.fn(),
-		} as any;
+			keys: vi.fn(() => []),
+		} satisfies MockMemento;
 		mockWorkspaceState = new WorkspaceState(mockMemento);
 
 		// Create tree provider
@@ -39,7 +76,42 @@ describe("RomExplorerTreeProvider - Phase 2: Active Table Tracking", () => {
 		category?: string,
 		kind: "table1d" | "table2d" | "table3d" = "table1d",
 	): TableDefinition {
-		const baseTable = {
+		if (kind === "table3d") {
+			const table = {
+				name,
+				kind,
+				rows: 10,
+				cols: 10,
+				depth: 10,
+				z: {
+					name: "z",
+					address: 0x1000,
+					dtype: "u8" as const,
+				},
+				...(category ? { category } : {}),
+			} satisfies TableDefinition;
+
+			return table;
+		}
+
+		if (kind === "table2d") {
+			const table = {
+				name,
+				kind,
+				rows: 10,
+				cols: 10,
+				z: {
+					name: "z",
+					address: 0x1000,
+					dtype: "u8" as const,
+				},
+				...(category ? { category } : {}),
+			} satisfies TableDefinition;
+
+			return table;
+		}
+
+		const table = {
 			name,
 			kind,
 			rows: 10,
@@ -48,13 +120,10 @@ describe("RomExplorerTreeProvider - Phase 2: Active Table Tracking", () => {
 				address: 0x1000,
 				dtype: "u8" as const,
 			},
-		};
+			...(category ? { category } : {}),
+		} satisfies TableDefinition;
 
-		if (category) {
-			return { ...baseTable, category } as any;
-		}
-
-		return baseTable as any;
+		return table;
 	}
 
 	/**
@@ -239,7 +308,7 @@ describe("RomExplorerTreeProvider - Phase 2: Active Table Tracking", () => {
 		});
 
 		it("should handle multiple ROMs with different active tables", async () => {
-			const mockUri1 = vscode.Uri.file("/test/rom1.hex") as any;
+			const mockUri1 = vscode.Uri.file("/test/rom1.hex");
 			const mockUri2 = vscode.Uri.file("/test/rom2.hex");
 			const mockBytes = new Uint8Array([0x01, 0x02, 0x03]);
 
@@ -340,7 +409,7 @@ describe("RomExplorerTreeProvider - Phase 2: Active Table Tracking", () => {
 	describe("Tree Refresh on Active Table Change", () => {
 		it("should trigger tree refresh when setActiveTable is called", () => {
 			const refreshSpy = vi.fn();
-			(treeProvider as any)._onDidChangeTreeData.fire = refreshSpy;
+			setTreeRefreshSpy(treeProvider, refreshSpy);
 
 			treeProvider.setActiveTable("file:///test/rom.hex", "Table1");
 
@@ -349,7 +418,7 @@ describe("RomExplorerTreeProvider - Phase 2: Active Table Tracking", () => {
 
 		it("should trigger tree refresh when clearActiveTable is called", () => {
 			const refreshSpy = vi.fn();
-			(treeProvider as any)._onDidChangeTreeData.fire = refreshSpy;
+			setTreeRefreshSpy(treeProvider, refreshSpy);
 
 			treeProvider.setActiveTable("file:///test/rom.hex", "Table1");
 			refreshSpy.mockClear();

@@ -1,4 +1,4 @@
-import { builtinModules } from "module";
+import { builtinModules } from "node:module";
 import { defineConfig } from "vitest/config";
 
 // Separate Vite build configuration that bundles the MCP server into a single

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { decodeScalar, decodeScalarBytes } from "../src/binary";
+import {
+	decodeScalar,
+	decodeScalarBytes,
+	type ScalarType,
+} from "../src/binary";
+
+const INVALID_SCALAR_TYPE = "invalid" as ScalarType;
 
 describe("Binary Scalar Decoding", () => {
 	describe("u8 (unsigned 8-bit)", () => {
@@ -254,7 +260,7 @@ describe("Binary Scalar Decoding", () => {
 
 		it("should throw on invalid type", () => {
 			const buffer = new Uint8Array([0x00]);
-			expect(() => decodeScalar(buffer, 0, "invalid" as any)).toThrow();
+			expect(() => decodeScalar(buffer, 0, INVALID_SCALAR_TYPE)).toThrow();
 		});
 	});
 });
@@ -526,7 +532,9 @@ describe("decodeScalarBytes", () => {
 
 		it("should throw on invalid type", () => {
 			const bytes = new Uint8Array([0x00]);
-			expect(() => decodeScalarBytes(bytes, "invalid" as any, "le")).toThrow();
+			expect(() =>
+				decodeScalarBytes(bytes, INVALID_SCALAR_TYPE, "le"),
+			).toThrow();
 		});
 	});
 });

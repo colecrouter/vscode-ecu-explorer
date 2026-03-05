@@ -490,14 +490,20 @@ describe("decodeRaxByRequestId", () => {
 		const buffer = new Uint8Array([0x80, 0x80, 0x80, 0x80]);
 		const result = decodeRaxByRequestId(buffer, 0x238051ac);
 		expect(result).not.toBeNull();
-		expect("stftBank1" in result!).toBe(true);
+		if (result === null) {
+			throw new Error("Expected a decoded block for RAX_A request ID");
+		}
+		expect("stftBank1" in result).toBe(true);
 	});
 
 	it("decodes RAX_C by RequestID 0x238051b0", () => {
 		const buffer = new Uint8Array([0x00, 0x00, 0x00, 0x00, 0x00]);
 		const result = decodeRaxByRequestId(buffer, 0x238051b0);
 		expect(result).not.toBeNull();
-		expect("rpm" in result!).toBe(true);
+		if (result === null) {
+			throw new Error("Expected a decoded block for RAX_C request ID");
+		}
+		expect("rpm" in result).toBe(true);
 	});
 
 	it("returns null for unknown RequestID", () => {

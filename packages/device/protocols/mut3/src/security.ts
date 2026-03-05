@@ -87,7 +87,12 @@ export function computeSecurityKey(seed: Uint8Array): Uint8Array {
 
 	// Step 1: Combine the 2-byte seed into a 16-bit big-endian unsigned integer.
 	// Ref: Community EvoScan documentation — seed is transmitted high-byte first.
-	const seed16 = ((seed[0]! << 8) | seed[1]!) & 0xffff;
+	const seedHigh = seed[0];
+	const seedLow = seed[1];
+	if (seedHigh === undefined || seedLow === undefined) {
+		throw new RangeError("computeSecurityKey: seed bytes missing");
+	}
+	const seed16 = ((seedHigh << 8) | seedLow) & 0xffff;
 
 	// Step 2: Multiply by 0x4081 and add 0x1234, truncated to 16 bits.
 	// This is the Mitsubishi/Denso security algorithm constant pair documented

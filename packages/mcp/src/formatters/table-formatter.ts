@@ -193,15 +193,15 @@ export function formatTable1D(
 	};
 
 	if (def.x) {
-		frontmatterData["x_axis_name"] = def.x.name;
-		frontmatterData["x_axis_unit"] = def.x.unit ?? "";
+		frontmatterData.x_axis_name = def.x.name;
+		frontmatterData.x_axis_unit = def.x.unit ?? "";
 	}
 
 	if (writeStatus) {
-		frontmatterData["write_status"] = writeStatus.status;
-		frontmatterData["cells_written"] = writeStatus.cellsWritten;
+		frontmatterData.write_status = writeStatus.status;
+		frontmatterData.cells_written = writeStatus.cellsWritten;
 	} else {
-		frontmatterData["dirty"] = false;
+		frontmatterData.dirty = false;
 	}
 
 	const frontmatter = toYamlFrontmatter(frontmatterData);
@@ -261,20 +261,20 @@ export function formatTable2D(
 	};
 
 	if (def.x) {
-		frontmatterData["x_axis_name"] = def.x.name;
-		frontmatterData["x_axis_unit"] = def.x.unit ?? "";
+		frontmatterData.x_axis_name = def.x.name;
+		frontmatterData.x_axis_unit = def.x.unit ?? "";
 	}
 
 	if (def.y) {
-		frontmatterData["y_axis_name"] = def.y.name;
-		frontmatterData["y_axis_unit"] = def.y.unit ?? "";
+		frontmatterData.y_axis_name = def.y.name;
+		frontmatterData.y_axis_unit = def.y.unit ?? "";
 	}
 
 	if (writeStatus) {
-		frontmatterData["write_status"] = writeStatus.status;
-		frontmatterData["cells_written"] = writeStatus.cellsWritten;
+		frontmatterData.write_status = writeStatus.status;
+		frontmatterData.cells_written = writeStatus.cellsWritten;
 	} else {
-		frontmatterData["dirty"] = false;
+		frontmatterData.dirty = false;
 	}
 
 	const frontmatter = toYamlFrontmatter(frontmatterData);

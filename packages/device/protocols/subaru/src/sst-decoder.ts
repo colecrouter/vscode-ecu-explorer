@@ -49,6 +49,19 @@ export {
 	getSstParameterCount,
 };
 
+function getRequiredParameter(
+	block: SstBlockDef,
+	index: number,
+): SstParameterDef {
+	const parameter = block.parameters[index];
+	if (!parameter) {
+		throw new Error(
+			`SST_${block.blockId} parameter definition missing at index ${index}`,
+		);
+	}
+	return parameter;
+}
+
 // ---------------------------------------------------------------------------
 // Typed result interfaces for each SST block
 // ---------------------------------------------------------------------------
@@ -191,14 +204,27 @@ export function decodeSstTrans(data: Uint8Array): SstTransData {
 			`SST_TRANS buffer too small: expected ${SST_TRANS_BLOCK.blockSize} bytes, got ${data.length}`,
 		);
 	}
-	const [tempDef, gearSelDef, actualGearDef, engagementDef, forkPosDef] =
-		SST_TRANS_BLOCK.parameters;
 	return {
-		transmissionTemperature: extractSstParameter(data, tempDef!),
-		gearSelection: extractSstParameter(data, gearSelDef!),
-		actualGear: extractSstParameter(data, actualGearDef!),
-		gearEngagementPercent: extractSstParameter(data, engagementDef!),
-		shiftForkPosition: extractSstParameter(data, forkPosDef!),
+		transmissionTemperature: extractSstParameter(
+			data,
+			getRequiredParameter(SST_TRANS_BLOCK, 0),
+		),
+		gearSelection: extractSstParameter(
+			data,
+			getRequiredParameter(SST_TRANS_BLOCK, 1),
+		),
+		actualGear: extractSstParameter(
+			data,
+			getRequiredParameter(SST_TRANS_BLOCK, 2),
+		),
+		gearEngagementPercent: extractSstParameter(
+			data,
+			getRequiredParameter(SST_TRANS_BLOCK, 3),
+		),
+		shiftForkPosition: extractSstParameter(
+			data,
+			getRequiredParameter(SST_TRANS_BLOCK, 4),
+		),
 	};
 }
 
@@ -219,13 +245,27 @@ export function decodeSstPres(data: Uint8Array): SstPresData {
 			`SST_PRES buffer too small: expected ${SST_PRES_BLOCK.blockSize} bytes, got ${data.length}`,
 		);
 	}
-	const [clk1Def, clk2Def, lineDef, actDef, pwmDef] = SST_PRES_BLOCK.parameters;
 	return {
-		clutch1Pressure: extractSstParameter(data, clk1Def!),
-		clutch2Pressure: extractSstParameter(data, clk2Def!),
-		linePressure: extractSstParameter(data, lineDef!),
-		actuatorPressure: extractSstParameter(data, actDef!),
-		pressureSolenoidDuty: extractSstParameter(data, pwmDef!),
+		clutch1Pressure: extractSstParameter(
+			data,
+			getRequiredParameter(SST_PRES_BLOCK, 0),
+		),
+		clutch2Pressure: extractSstParameter(
+			data,
+			getRequiredParameter(SST_PRES_BLOCK, 1),
+		),
+		linePressure: extractSstParameter(
+			data,
+			getRequiredParameter(SST_PRES_BLOCK, 2),
+		),
+		actuatorPressure: extractSstParameter(
+			data,
+			getRequiredParameter(SST_PRES_BLOCK, 3),
+		),
+		pressureSolenoidDuty: extractSstParameter(
+			data,
+			getRequiredParameter(SST_PRES_BLOCK, 4),
+		),
 	};
 }
 
@@ -246,15 +286,31 @@ export function decodeSstSlip(data: Uint8Array): SstSlipData {
 			`SST_SLIP buffer too small: expected ${SST_SLIP_BLOCK.blockSize} bytes, got ${data.length}`,
 		);
 	}
-	const [frDef, flDef, rrDef, rlDef, slipDef, vspeedDef] =
-		SST_SLIP_BLOCK.parameters;
 	return {
-		wheelSpeedFR: extractSstParameter(data, frDef!),
-		wheelSpeedFL: extractSstParameter(data, flDef!),
-		wheelSpeedRR: extractSstParameter(data, rrDef!),
-		wheelSpeedRL: extractSstParameter(data, rlDef!),
-		transmissionSlip: extractSstParameter(data, slipDef!),
-		vehicleSpeed: extractSstParameter(data, vspeedDef!),
+		wheelSpeedFR: extractSstParameter(
+			data,
+			getRequiredParameter(SST_SLIP_BLOCK, 0),
+		),
+		wheelSpeedFL: extractSstParameter(
+			data,
+			getRequiredParameter(SST_SLIP_BLOCK, 1),
+		),
+		wheelSpeedRR: extractSstParameter(
+			data,
+			getRequiredParameter(SST_SLIP_BLOCK, 2),
+		),
+		wheelSpeedRL: extractSstParameter(
+			data,
+			getRequiredParameter(SST_SLIP_BLOCK, 3),
+		),
+		transmissionSlip: extractSstParameter(
+			data,
+			getRequiredParameter(SST_SLIP_BLOCK, 4),
+		),
+		vehicleSpeed: extractSstParameter(
+			data,
+			getRequiredParameter(SST_SLIP_BLOCK, 5),
+		),
 	};
 }
 
@@ -275,12 +331,23 @@ export function decodeSstSol(data: Uint8Array): SstSolData {
 			`SST_SOL buffer too small: expected ${SST_SOL_BLOCK.blockSize} bytes, got ${data.length}`,
 		);
 	}
-	const [sol1Def, sol2Def, sol3Def, pwmDef] = SST_SOL_BLOCK.parameters;
 	return {
-		solenoid1Current: extractSstParameter(data, sol1Def!),
-		solenoid2Current: extractSstParameter(data, sol2Def!),
-		solenoid3Current: extractSstParameter(data, sol3Def!),
-		pwmDutyCycle: extractSstParameter(data, pwmDef!),
+		solenoid1Current: extractSstParameter(
+			data,
+			getRequiredParameter(SST_SOL_BLOCK, 0),
+		),
+		solenoid2Current: extractSstParameter(
+			data,
+			getRequiredParameter(SST_SOL_BLOCK, 1),
+		),
+		solenoid3Current: extractSstParameter(
+			data,
+			getRequiredParameter(SST_SOL_BLOCK, 2),
+		),
+		pwmDutyCycle: extractSstParameter(
+			data,
+			getRequiredParameter(SST_SOL_BLOCK, 3),
+		),
 	};
 }
 
@@ -301,16 +368,29 @@ export function decodeSstState(data: Uint8Array): SstStateData {
 			`SST_STATE buffer too small: expected ${SST_STATE_BLOCK.blockSize} bytes, got ${data.length}`,
 		);
 	}
-	const [modeDef, vinDef, faultDef, overheatDef, counterDef, shiftDef, oilDef] =
-		SST_STATE_BLOCK.parameters;
 	return {
-		transmissionMode: extractSstParameter(data, modeDef!) as TransMode,
-		vinLockState: extractSstParameter(data, vinDef!) === 1,
-		transmissionFault: extractSstParameter(data, faultDef!) === 1,
-		overheatWarning: extractSstParameter(data, overheatDef!) === 1,
-		vinWriteCounter: extractSstParameter(data, counterDef!),
-		shiftAttemptCounter: extractSstParameter(data, shiftDef!),
-		oilChangeCounter: extractSstParameter(data, oilDef!),
+		transmissionMode: extractSstParameter(
+			data,
+			getRequiredParameter(SST_STATE_BLOCK, 0),
+		) as TransMode,
+		vinLockState:
+			extractSstParameter(data, getRequiredParameter(SST_STATE_BLOCK, 1)) === 1,
+		transmissionFault:
+			extractSstParameter(data, getRequiredParameter(SST_STATE_BLOCK, 2)) === 1,
+		overheatWarning:
+			extractSstParameter(data, getRequiredParameter(SST_STATE_BLOCK, 3)) === 1,
+		vinWriteCounter: extractSstParameter(
+			data,
+			getRequiredParameter(SST_STATE_BLOCK, 4),
+		),
+		shiftAttemptCounter: extractSstParameter(
+			data,
+			getRequiredParameter(SST_STATE_BLOCK, 5),
+		),
+		oilChangeCounter: extractSstParameter(
+			data,
+			getRequiredParameter(SST_STATE_BLOCK, 6),
+		),
 	};
 }
 
@@ -331,14 +411,27 @@ export function decodeSstCalc(data: Uint8Array): SstCalcData {
 			`SST_CALC buffer too small: expected ${SST_CALC_BLOCK.blockSize} bytes, got ${data.length}`,
 		);
 	}
-	const [loadDef, effDef, timeDef, targetDef, qualityDef] =
-		SST_CALC_BLOCK.parameters;
 	return {
-		transmissionLoad: extractSstParameter(data, loadDef!),
-		transmissionEfficiency: extractSstParameter(data, effDef!),
-		currentShiftTime: extractSstParameter(data, timeDef!),
-		targetGear: extractSstParameter(data, targetDef!),
-		shiftQuality: extractSstParameter(data, qualityDef!),
+		transmissionLoad: extractSstParameter(
+			data,
+			getRequiredParameter(SST_CALC_BLOCK, 0),
+		),
+		transmissionEfficiency: extractSstParameter(
+			data,
+			getRequiredParameter(SST_CALC_BLOCK, 1),
+		),
+		currentShiftTime: extractSstParameter(
+			data,
+			getRequiredParameter(SST_CALC_BLOCK, 2),
+		),
+		targetGear: extractSstParameter(
+			data,
+			getRequiredParameter(SST_CALC_BLOCK, 3),
+		),
+		shiftQuality: extractSstParameter(
+			data,
+			getRequiredParameter(SST_CALC_BLOCK, 4),
+		),
 	};
 }
 

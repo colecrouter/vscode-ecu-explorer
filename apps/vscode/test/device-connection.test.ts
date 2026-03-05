@@ -6,6 +6,12 @@
  * connection reuse.
  */
 
+import type {
+	DeviceConnection,
+	DeviceInfo,
+	DeviceTransport,
+	EcuProtocol,
+} from "@ecu-explorer/device";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
 import { DeviceManagerImpl } from "../src/device-manager";
@@ -15,9 +21,20 @@ import { DeviceStatusBarManager } from "../src/device-status-bar";
 
 function createMockConnection() {
 	return {
+		deviceInfo: {
+			id: "test-device-id",
+			name: "Test Device",
+			transportName: "test-transport",
+			connected: true,
+		} satisfies DeviceInfo,
 		close: vi.fn().mockResolvedValue(undefined),
 		sendFrame: vi.fn(),
-	};
+		startStream: vi.fn(),
+		stopStream: vi.fn(),
+	} satisfies Pick<
+		DeviceConnection,
+		"close" | "sendFrame" | "deviceInfo" | "startStream" | "stopStream"
+	>;
 }
 
 function createMockProtocol(name = "TestProtocol") {
@@ -26,7 +43,7 @@ function createMockProtocol(name = "TestProtocol") {
 		canHandle: vi.fn().mockResolvedValue(true),
 		readRom: vi.fn(),
 		writeRom: vi.fn(),
-	};
+	} satisfies Pick<EcuProtocol, "name" | "canHandle" | "readRom" | "writeRom">;
 }
 
 function createMockStatusBarItem() {
@@ -38,6 +55,44 @@ function createMockStatusBarItem() {
 		hide: vi.fn(),
 		dispose: vi.fn(),
 	};
+}
+
+type TestConnection = ReturnType<typeof createMockConnection> &
+	DeviceConnection;
+type TestProtocol = ReturnType<typeof createMockProtocol> & EcuProtocol;
+type TestStatusBarItem = ReturnType<typeof createMockStatusBarItem> &
+	vscode.StatusBarItem;
+
+function createResolvedSelection(
+	connection: TestConnection,
+	protocol: TestProtocol,
+): {
+	connection: DeviceConnection;
+	protocol: EcuProtocol;
+} {
+	return {
+		connection,
+		protocol,
+	};
+}
+
+function createMockTransport(connection: TestConnection): DeviceTransport {
+	return {
+		name: "openport2",
+		listDevices: vi.fn().mockResolvedValue([]),
+		connect: vi.fn().mockResolvedValue(connection),
+	};
+}
+
+function getRequiredStatusBarItem(
+	items: ReturnType<typeof createMockStatusBarItem>[],
+	index: number,
+) {
+	const item = items[index];
+	if (item === undefined) {
+		throw new Error(`Missing status bar item at index ${index}`);
+	}
+	return item;
 }
 
 // ─── DeviceManagerImpl Tests ─────────────────────────────────────────────────
@@ -54,10 +109,9 @@ describe("DeviceManagerImpl", () => {
 		mockProtocol = createMockProtocol();
 
 		// Override selectDeviceAndProtocol to return mock connection/protocol
-		vi.spyOn(manager, "selectDeviceAndProtocol").mockResolvedValue({
-			connection: mockConnection as any,
-			protocol: mockProtocol as any,
-		});
+		vi.spyOn(manager, "selectDeviceAndProtocol").mockResolvedValue(
+			createResolvedSelection(mockConnection, mockProtocol),
+		);
 	});
 
 	describe("activeConnection getter", () => {
@@ -142,23 +196,29 @@ describe("DeviceManagerImpl", () => {
 
 			expect(ok).toBe(false);
 			expect(manager.activeConnection?.state).toBe("failed");
-			expect(manager.activeConnection?.lastFailure).toBe("transport_error");
+			expect(manager.activeConnection?.lastFailure).toBe("TRANSPORT_ERROR");
 		});
 
 		it("reconnects for read operations", async () => {
 			await manager.connect();
 
 			const nextConnection = createMockConnection();
-			manager.registerTransport("openport2", {
-				name: "openport2",
-				listDevices: vi.fn().mockResolvedValue([]),
-				connect: vi.fn().mockResolvedValue(nextConnection),
-			} as any);
+			manager.registerTransport(
+				"openport2",
+				createMockTransport(nextConnection),
+			);
 
-			(manager.activeConnection!.connection as any).deviceInfo = {
+			const activeConnection = manager.activeConnection?.connection;
+			if (!activeConnection) {
+				throw new Error("Expected active connection");
+			}
+
+			Object.assign(activeConnection.deviceInfo, {
 				id: "openport2:test",
 				transportName: "openport2",
-			};
+				name: "OpenPort 2.0",
+				connected: true,
+			});
 
 			const ok = await manager.reconnectActiveConnection("read");
 
@@ -260,17 +320,16 @@ describe("DeviceStatusBarManager", () => {
 		vi.mocked(vscode.window.createStatusBarItem).mockImplementation(() => {
 			const item = createMockStatusBarItem();
 			createdItems.push(item);
-			return item as any;
+			return item as TestStatusBarItem;
 		});
 
 		manager = new DeviceManagerImpl();
 		mockConnection = createMockConnection();
 		mockProtocol = createMockProtocol();
 
-		vi.spyOn(manager, "selectDeviceAndProtocol").mockResolvedValue({
-			connection: mockConnection as any,
-			protocol: mockProtocol as any,
-		});
+		vi.spyOn(manager, "selectDeviceAndProtocol").mockResolvedValue(
+			createResolvedSelection(mockConnection, mockProtocol),
+		);
 
 		statusBarManager = new DeviceStatusBarManager(manager);
 	});
@@ -281,21 +340,21 @@ describe("DeviceStatusBarManager", () => {
 
 	it("should show Connect item and hide others when disconnected", () => {
 		// connectItem is index 0 (first created)
-		const connectItem = createdItems[0]!;
+		const connectItem = getRequiredStatusBarItem(createdItems, 0);
 		expect(connectItem.show).toHaveBeenCalled();
 
 		// All other items should be hidden
 		for (let i = 1; i < createdItems.length; i++) {
-			expect(createdItems[i]!.hide).toHaveBeenCalled();
+			expect(createdItems[i]?.hide).toHaveBeenCalled();
 		}
 	});
 
 	it("should hide Connect item and show Disconnect + StartLog when connected", async () => {
 		await manager.connect();
 
-		const connectItem = createdItems[0]!;
-		const disconnectItem = createdItems[1]!;
-		const startLogItem = createdItems[2]!;
+		const connectItem = getRequiredStatusBarItem(createdItems, 0);
+		const disconnectItem = getRequiredStatusBarItem(createdItems, 1);
+		const startLogItem = getRequiredStatusBarItem(createdItems, 2);
 
 		// After connect, connectItem should be hidden
 		expect(connectItem.hide).toHaveBeenCalled();
@@ -308,7 +367,7 @@ describe("DeviceStatusBarManager", () => {
 		await manager.connect();
 		await manager.disconnect();
 
-		const connectItem = createdItems[0]!;
+		const connectItem = getRequiredStatusBarItem(createdItems, 0);
 		// After disconnect, connectItem should be shown again
 		const showCallCount = connectItem.show.mock.calls.length;
 		expect(showCallCount).toBeGreaterThanOrEqual(2); // initial + after disconnect
@@ -317,7 +376,7 @@ describe("DeviceStatusBarManager", () => {
 	it("should set disconnect tooltip to device name when connected", async () => {
 		await manager.connect();
 
-		const disconnectItem = createdItems[1]!;
+		const disconnectItem = getRequiredStatusBarItem(createdItems, 1);
 		expect(disconnectItem.tooltip).toContain("ECU Device");
 	});
 
@@ -339,9 +398,9 @@ describe("DeviceStatusBarManager", () => {
 		it("should show Pause + Stop items when recording", () => {
 			statusBarManager.updateLoggingState("recording");
 
-			const startLogItem = createdItems[2]!;
-			const pauseLogItem = createdItems[3]!;
-			const stopLogItem = createdItems[4]!;
+			const startLogItem = getRequiredStatusBarItem(createdItems, 2);
+			const pauseLogItem = getRequiredStatusBarItem(createdItems, 3);
+			const stopLogItem = getRequiredStatusBarItem(createdItems, 4);
 
 			expect(startLogItem.hide).toHaveBeenCalled();
 			expect(pauseLogItem.show).toHaveBeenCalled();
@@ -351,9 +410,9 @@ describe("DeviceStatusBarManager", () => {
 		it("should show Resume + Stop items when paused", () => {
 			statusBarManager.updateLoggingState("paused");
 
-			const startLogItem = createdItems[2]!;
-			const pauseLogItem = createdItems[3]!;
-			const stopLogItem = createdItems[4]!;
+			const startLogItem = getRequiredStatusBarItem(createdItems, 2);
+			const pauseLogItem = getRequiredStatusBarItem(createdItems, 3);
+			const stopLogItem = getRequiredStatusBarItem(createdItems, 4);
 
 			expect(startLogItem.hide).toHaveBeenCalled();
 			expect(pauseLogItem.show).toHaveBeenCalled();
@@ -365,7 +424,7 @@ describe("DeviceStatusBarManager", () => {
 			vi.clearAllMocks();
 			statusBarManager.updateLoggingState("idle");
 
-			const startLogItem = createdItems[2]!;
+			const startLogItem = getRequiredStatusBarItem(createdItems, 2);
 			expect(startLogItem.show).toHaveBeenCalled();
 		});
 	});
@@ -384,10 +443,9 @@ describe("ecuExplorer.deviceConnected context key", () => {
 		mockConnection = createMockConnection();
 		mockProtocol = createMockProtocol();
 
-		vi.spyOn(manager, "selectDeviceAndProtocol").mockResolvedValue({
-			connection: mockConnection as any,
-			protocol: mockProtocol as any,
-		});
+		vi.spyOn(manager, "selectDeviceAndProtocol").mockResolvedValue(
+			createResolvedSelection(mockConnection, mockProtocol),
+		);
 	});
 
 	it("should set context key to true when connected", async () => {
@@ -442,10 +500,9 @@ describe("readRomFromDevice connection reuse", () => {
 		mockConnection = createMockConnection();
 		mockProtocol = createMockProtocol();
 
-		vi.spyOn(manager, "selectDeviceAndProtocol").mockResolvedValue({
-			connection: mockConnection as any,
-			protocol: mockProtocol as any,
-		});
+		vi.spyOn(manager, "selectDeviceAndProtocol").mockResolvedValue(
+			createResolvedSelection(mockConnection, mockProtocol),
+		);
 	});
 
 	it("should reuse active connection when one exists", async () => {

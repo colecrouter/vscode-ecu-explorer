@@ -6,30 +6,6 @@ import { snapshotTable } from "@ecu-explorer/core";
 import { describe, expect, it } from "vitest";
 import { EcuFlashProvider } from "../src/index";
 
-function getProcessEnv(): Record<string, string | undefined> | undefined {
-	return (
-		globalThis as { process?: { env?: Record<string, string | undefined> } }
-	).process?.env;
-}
-
-function setProgramFilesX86(value: string): string | undefined {
-	const env = getProcessEnv();
-	if (!env) return undefined;
-	const previous = env["ProgramFiles(x86)"];
-	env["ProgramFiles(x86)"] = value;
-	return previous;
-}
-
-function restoreProgramFilesX86(previous: string | undefined): void {
-	const env = getProcessEnv();
-	if (!env) return;
-	if (previous === undefined) {
-		delete env["ProgramFiles(x86)"];
-		return;
-	}
-	env["ProgramFiles(x86)"] = previous;
-}
-
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const validFixtureDir = path.join(testDir, "fixtures", "valid-xml");
 const invalidFixtureDir = path.join(testDir, "fixtures", "invalid-xml");

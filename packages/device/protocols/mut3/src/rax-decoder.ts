@@ -45,6 +45,16 @@ export {
 	extractAllRaxParameters,
 };
 
+function getRequiredParameter(block: RaxBlockDef, index: number) {
+	const parameter = block.parameters[index];
+	if (parameter === undefined) {
+		throw new Error(
+			`RAX_${block.blockId} parameter definition missing at index ${index}`,
+		);
+	}
+	return parameter;
+}
+
 // ---------------------------------------------------------------------------
 // Typed result interfaces for each RAX block
 // ---------------------------------------------------------------------------
@@ -205,12 +215,15 @@ export function decodeRaxA(data: Uint8Array): RaxAData {
 			`RAX_A buffer too small: expected ${RAX_A_BLOCK.blockSize} bytes, got ${data.length}`,
 		);
 	}
-	const [stft1Def, ltft1Def, stft2Def, ltft2Def] = RAX_A_BLOCK.parameters;
+	const stft1Def = getRequiredParameter(RAX_A_BLOCK, 0);
+	const ltft1Def = getRequiredParameter(RAX_A_BLOCK, 1);
+	const stft2Def = getRequiredParameter(RAX_A_BLOCK, 2);
+	const ltft2Def = getRequiredParameter(RAX_A_BLOCK, 3);
 	return {
-		stftBank1: extractRaxParameter(data, stft1Def!),
-		ltftBank1: extractRaxParameter(data, ltft1Def!),
-		stftBank2: extractRaxParameter(data, stft2Def!),
-		ltftBank2: extractRaxParameter(data, ltft2Def!),
+		stftBank1: extractRaxParameter(data, stft1Def),
+		ltftBank1: extractRaxParameter(data, ltft1Def),
+		stftBank2: extractRaxParameter(data, stft2Def),
+		ltftBank2: extractRaxParameter(data, ltft2Def),
 	};
 }
 
@@ -232,13 +245,17 @@ export function decodeRaxB(data: Uint8Array): RaxBData {
 			`RAX_B buffer too small: expected ${RAX_B_BLOCK.blockSize} bytes, got ${data.length}`,
 		);
 	}
-	const [afrDef, loadDef, o2LDef, o2RDef, injDef] = RAX_B_BLOCK.parameters;
+	const afrDef = getRequiredParameter(RAX_B_BLOCK, 0);
+	const loadDef = getRequiredParameter(RAX_B_BLOCK, 1);
+	const o2LDef = getRequiredParameter(RAX_B_BLOCK, 2);
+	const o2RDef = getRequiredParameter(RAX_B_BLOCK, 3);
+	const injDef = getRequiredParameter(RAX_B_BLOCK, 4);
 	return {
-		afr: extractRaxParameter(data, afrDef!),
-		loadAfr: extractRaxParameter(data, loadDef!),
-		o2Left: extractRaxParameter(data, o2LDef!),
-		o2Right: extractRaxParameter(data, o2RDef!),
-		injectorPulseWidth: extractRaxParameter(data, injDef!),
+		afr: extractRaxParameter(data, afrDef),
+		loadAfr: extractRaxParameter(data, loadDef),
+		o2Left: extractRaxParameter(data, o2LDef),
+		o2Right: extractRaxParameter(data, o2RDef),
+		injectorPulseWidth: extractRaxParameter(data, injDef),
 	};
 }
 
@@ -260,12 +277,15 @@ export function decodeRaxC(data: Uint8Array): RaxCData {
 			`RAX_C buffer too small: expected ${RAX_C_BLOCK.blockSize} bytes, got ${data.length}`,
 		);
 	}
-	const [rpmDef, knockDef, timingDef, loadDef] = RAX_C_BLOCK.parameters;
+	const rpmDef = getRequiredParameter(RAX_C_BLOCK, 0);
+	const knockDef = getRequiredParameter(RAX_C_BLOCK, 1);
+	const timingDef = getRequiredParameter(RAX_C_BLOCK, 2);
+	const loadDef = getRequiredParameter(RAX_C_BLOCK, 3);
 	return {
-		rpm: extractRaxParameter(data, rpmDef!),
-		knockSum: extractRaxParameter(data, knockDef!),
-		timingAdvance: extractRaxParameter(data, timingDef!),
-		loadTiming: extractRaxParameter(data, loadDef!),
+		rpm: extractRaxParameter(data, rpmDef),
+		knockSum: extractRaxParameter(data, knockDef),
+		timingAdvance: extractRaxParameter(data, timingDef),
+		loadTiming: extractRaxParameter(data, loadDef),
 	};
 }
 
@@ -282,12 +302,15 @@ export function decodeRaxD(data: Uint8Array): RaxDData {
 			`RAX_D buffer too small: expected ${RAX_D_BLOCK.blockSize} bytes, got ${data.length}`,
 		);
 	}
-	const [baroDef, mapDef, boostDef, mafDef] = RAX_D_BLOCK.parameters;
+	const baroDef = getRequiredParameter(RAX_D_BLOCK, 0);
+	const mapDef = getRequiredParameter(RAX_D_BLOCK, 1);
+	const boostDef = getRequiredParameter(RAX_D_BLOCK, 2);
+	const mafDef = getRequiredParameter(RAX_D_BLOCK, 3);
 	return {
-		barometer: extractRaxParameter(data, baroDef!),
-		map: extractRaxParameter(data, mapDef!),
-		boostPressure: extractRaxParameter(data, boostDef!),
-		maf: extractRaxParameter(data, mafDef!),
+		barometer: extractRaxParameter(data, baroDef),
+		map: extractRaxParameter(data, mapDef),
+		boostPressure: extractRaxParameter(data, boostDef),
+		maf: extractRaxParameter(data, mafDef),
 	};
 }
 
@@ -304,12 +327,15 @@ export function decodeRaxE(data: Uint8Array): RaxEData {
 			`RAX_E buffer too small: expected ${RAX_E_BLOCK.blockSize} bytes, got ${data.length}`,
 		);
 	}
-	const [intakeDef, exhaustDef, oilPDef, statusDef] = RAX_E_BLOCK.parameters;
+	const intakeDef = getRequiredParameter(RAX_E_BLOCK, 0);
+	const exhaustDef = getRequiredParameter(RAX_E_BLOCK, 1);
+	const oilPDef = getRequiredParameter(RAX_E_BLOCK, 2);
+	const statusDef = getRequiredParameter(RAX_E_BLOCK, 3);
 	return {
-		intakeVvtAngle: extractRaxParameter(data, intakeDef!),
-		exhaustVvtAngle: extractRaxParameter(data, exhaustDef!),
-		vvtOilPressure: extractRaxParameter(data, oilPDef!),
-		vvtControlStatus: extractRaxParameter(data, statusDef!) as VvtStatus,
+		intakeVvtAngle: extractRaxParameter(data, intakeDef),
+		exhaustVvtAngle: extractRaxParameter(data, exhaustDef),
+		vvtOilPressure: extractRaxParameter(data, oilPDef),
+		vvtControlStatus: extractRaxParameter(data, statusDef) as VvtStatus,
 	};
 }
 
@@ -326,12 +352,15 @@ export function decodeRaxF(data: Uint8Array): RaxFData {
 			`RAX_F buffer too small: expected ${RAX_F_BLOCK.blockSize} bytes, got ${data.length}`,
 		);
 	}
-	const [tpsDef, appDef, iatDef, wgdcDef] = RAX_F_BLOCK.parameters;
+	const tpsDef = getRequiredParameter(RAX_F_BLOCK, 0);
+	const appDef = getRequiredParameter(RAX_F_BLOCK, 1);
+	const iatDef = getRequiredParameter(RAX_F_BLOCK, 2);
+	const wgdcDef = getRequiredParameter(RAX_F_BLOCK, 3);
 	return {
-		tps: extractRaxParameter(data, tpsDef!),
-		app: extractRaxParameter(data, appDef!),
-		iat: extractRaxParameter(data, iatDef!),
-		wgdc: extractRaxParameter(data, wgdcDef!),
+		tps: extractRaxParameter(data, tpsDef),
+		app: extractRaxParameter(data, appDef),
+		iat: extractRaxParameter(data, iatDef),
+		wgdc: extractRaxParameter(data, wgdcDef),
 	};
 }
 
@@ -348,12 +377,15 @@ export function decodeRaxG(data: Uint8Array): RaxGData {
 			`RAX_G buffer too small: expected ${RAX_G_BLOCK.blockSize} bytes, got ${data.length}`,
 		);
 	}
-	const [speedDef, battDef, ectDef, matDef] = RAX_G_BLOCK.parameters;
+	const speedDef = getRequiredParameter(RAX_G_BLOCK, 0);
+	const battDef = getRequiredParameter(RAX_G_BLOCK, 1);
+	const ectDef = getRequiredParameter(RAX_G_BLOCK, 2);
+	const matDef = getRequiredParameter(RAX_G_BLOCK, 3);
 	return {
-		vehicleSpeed: extractRaxParameter(data, speedDef!),
-		batteryVoltage: extractRaxParameter(data, battDef!),
-		ect: extractRaxParameter(data, ectDef!),
-		mat: extractRaxParameter(data, matDef!),
+		vehicleSpeed: extractRaxParameter(data, speedDef),
+		batteryVoltage: extractRaxParameter(data, battDef),
+		ect: extractRaxParameter(data, ectDef),
+		mat: extractRaxParameter(data, matDef),
 	};
 }
 
@@ -370,12 +402,15 @@ export function decodeRaxH(data: Uint8Array): RaxHData {
 			`RAX_H buffer too small: expected ${RAX_H_BLOCK.blockSize} bytes, got ${data.length}`,
 		);
 	}
-	const [mafDef, loadDef, targetAfrDef, afrDeltaDef] = RAX_H_BLOCK.parameters;
+	const mafDef = getRequiredParameter(RAX_H_BLOCK, 0);
+	const loadDef = getRequiredParameter(RAX_H_BLOCK, 1);
+	const targetAfrDef = getRequiredParameter(RAX_H_BLOCK, 2);
+	const afrDeltaDef = getRequiredParameter(RAX_H_BLOCK, 3);
 	return {
-		calculatedMaf: extractRaxParameter(data, mafDef!),
-		calculatedLoadPe: extractRaxParameter(data, loadDef!),
-		targetAfr: extractRaxParameter(data, targetAfrDef!),
-		actualAfrDelta: extractRaxParameter(data, afrDeltaDef!),
+		calculatedMaf: extractRaxParameter(data, mafDef),
+		calculatedLoadPe: extractRaxParameter(data, loadDef),
+		targetAfr: extractRaxParameter(data, targetAfrDef),
+		actualAfrDelta: extractRaxParameter(data, afrDeltaDef),
 	};
 }
 

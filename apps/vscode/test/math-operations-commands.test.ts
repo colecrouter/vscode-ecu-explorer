@@ -15,6 +15,104 @@ import {
 } from "../src/undo-redo-manager";
 import { WorkspaceState } from "../src/workspace-state";
 
+type RegisteredCommandHandler = (...args: readonly unknown[]) => unknown;
+
+type RegisteredCommandCall = readonly [
+	commandId: string,
+	handler: RegisteredCommandHandler,
+	...rest: readonly unknown[],
+];
+
+type MockedRegisterCommand = typeof vscode.commands.registerCommand & {
+	mock: {
+		calls: readonly RegisteredCommandCall[];
+	};
+	mockClear(): void;
+};
+
+type ActivateContext = Pick<
+	vscode.ExtensionContext,
+	"subscriptions" | "workspaceState" | "globalStorageUri"
+> & {
+	extensionPath: string;
+	extensionUri: vscode.Uri;
+	extension: {
+		packageJSON: {
+			version: string;
+		};
+	};
+};
+
+type MockWorkspaceState = Pick<
+	vscode.ExtensionContext["workspaceState"],
+	"get" | "update" | "keys"
+>;
+
+type MockFileSystemWatcher = Pick<
+	vscode.FileSystemWatcher,
+	| "onDidChange"
+	| "onDidCreate"
+	| "onDidDelete"
+	| "dispose"
+	| "ignoreCreateEvents"
+	| "ignoreChangeEvents"
+	| "ignoreDeleteEvents"
+>;
+
+type ActiveTab = Pick<vscode.Tab, "input">;
+
+type ActiveTabGroupShape = Pick<
+	vscode.TabGroup,
+	"activeTab" | "isActive" | "viewColumn" | "tabs"
+>;
+
+function createMockWorkspaceState(): MockWorkspaceState {
+	return {
+		get: vi.fn(),
+		update: vi.fn(),
+		keys: vi.fn().mockReturnValue([]),
+	};
+}
+
+function createMockExtensionContext(): ActivateContext {
+	return {
+		subscriptions: [],
+		extensionPath: "/test/path",
+		extensionUri: vscode.Uri.file("/test/path"),
+		extension: {
+			packageJSON: { version: "0.0.0" },
+		},
+		workspaceState: createMockWorkspaceState(),
+		globalStorageUri: vscode.Uri.file("/test/globalStorage"),
+	};
+}
+
+function createTabGroupWithUri(uri: vscode.Uri): ActiveTabGroupShape {
+	const activeTab: ActiveTab = {
+		input: { uri } as vscode.TabInputText,
+	};
+
+	return {
+		activeTab: activeTab as vscode.Tab,
+		isActive: true,
+		viewColumn: vscode.ViewColumn.One,
+		tabs: [],
+	};
+}
+
+function createTabGroupWithoutActiveTab(): ActiveTabGroupShape {
+	return {
+		activeTab: undefined,
+		isActive: true,
+		viewColumn: vscode.ViewColumn.One,
+		tabs: [],
+	};
+}
+
+function getMockedRegisterCommand(): MockedRegisterCommand {
+	return vscode.commands.registerCommand as MockedRegisterCommand;
+}
+
 // Mock fs module to avoid file system operations
 vi.mock("node:fs/promises", () => ({
 	default: {
@@ -39,7 +137,14 @@ function createMockFileSystemWatcher() {
 		ignoreCreateEvents: false,
 		ignoreChangeEvents: false,
 		ignoreDeleteEvents: false,
-	};
+	} satisfies MockFileSystemWatcher;
+}
+
+function getRequiredAddress(op: EditOperation): number {
+	if (op.address === undefined) {
+		throw new Error("Expected edit operation address to be defined");
+	}
+	return op.address;
 }
 
 /**
@@ -51,38 +156,19 @@ function createMockFileSystemWatcher() {
 describe("Math Operations Commands", () => {
 	beforeAll(async () => {
 		// Reset commands if possible
-		if (
-			vscode.commands.registerCommand &&
-			(vscode.commands.registerCommand as any).mock
-		) {
-			(vscode.commands.registerCommand as any).mockClear();
+		const registerCommand = getMockedRegisterCommand();
+		if (registerCommand.mock) {
+			registerCommand.mockClear();
 		}
 
 		// Mock createFileSystemWatcher so the ROM file watcher in activate() works
 		vi.mocked(vscode.workspace.createFileSystemWatcher).mockReturnValue(
-			createMockFileSystemWatcher() as any,
+			createMockFileSystemWatcher(),
 		);
 
 		// Create mock context and activate extension
-		const mockContext = {
-			subscriptions: [],
-			extensionPath: "/test/path",
-			extensionUri: vscode.Uri.file("/test/path"),
-			// Required by registerMcpProvider (mcp-provider.ts line 41)
-			extension: {
-				packageJSON: { version: "0.0.0" },
-			},
-			globalState: {
-				get: vi.fn(),
-				update: vi.fn(),
-			},
-			workspaceState: {
-				get: vi.fn(),
-				update: vi.fn(),
-			},
-			globalStorageUri: vscode.Uri.file("/test/globalStorage"),
-		};
-		await activate(mockContext as any);
+		const mockContext = createMockExtensionContext();
+		await activate(mockContext as vscode.ExtensionContext);
 	});
 	describe("Command Registration", () => {
 		it("should register ecuExplorer.clearDefinitionCache command", async () => {
@@ -133,9 +219,9 @@ describe("Math Operations Commands", () => {
 			vi.restoreAllMocks();
 		});
 
-		function getRegisteredHandler(commandId: string): (...args: any[]) => any {
-			const registerCalls = (vscode.commands.registerCommand as any).mock.calls;
-			const match = registerCalls.find((call: any[]) => call[0] === commandId);
+		function getRegisteredHandler(commandId: string): RegisteredCommandHandler {
+			const registerCalls = getMockedRegisterCommand().mock.calls;
+			const match = registerCalls.find((call) => call[0] === commandId);
 			if (!match) {
 				throw new Error(`Command not registered: ${commandId}`);
 			}
@@ -161,13 +247,11 @@ describe("Math Operations Commands", () => {
 		it("clears active ROM cached state for ecuExplorer.clearDefinitionCacheForActiveRom", async () => {
 			const activeTabGroupSpy = vi
 				.spyOn(vscode.window.tabGroups, "activeTabGroup", "get")
-				.mockReturnValue({
-					activeTab: {
-						input: {
-							uri: vscode.Uri.file("/test/active.rom"),
-						},
-					},
-				} as any);
+				.mockReturnValue(
+					createTabGroupWithUri(
+						vscode.Uri.file("/test/active.rom"),
+					) as vscode.TabGroup,
+				);
 
 			const clearRomStateSpy = vi.spyOn(
 				WorkspaceState.prototype,
@@ -197,7 +281,7 @@ describe("Math Operations Commands", () => {
 		it("shows warning when there is no active ROM for targeted clear", async () => {
 			const activeTabGroupSpy = vi
 				.spyOn(vscode.window.tabGroups, "activeTabGroup", "get")
-				.mockReturnValue({ activeTab: undefined } as any);
+				.mockReturnValue(createTabGroupWithoutActiveTab() as vscode.TabGroup);
 
 			const clearRomStateSpy = vi.spyOn(
 				WorkspaceState.prototype,
@@ -454,7 +538,7 @@ describe("Math Operations Commands", () => {
 
 				// Apply the math op
 				for (const op of ops) {
-					romBytes.set(op.newValue, op.address!);
+					romBytes.set(op.newValue, getRequiredAddress(op));
 				}
 				manager.pushBatch(ops, "Math op: add");
 
@@ -464,12 +548,15 @@ describe("Math Operations Commands", () => {
 				// Undo the batch
 				const entry = manager.undo();
 				expect(entry).not.toBeNull();
-				expect(isBatchEdit(entry!)).toBe(true);
+				if (entry === null) {
+					throw new Error("Expected batch entry to exist");
+				}
+				expect(isBatchEdit(entry)).toBe(true);
 
 				if (entry && isBatchEdit(entry)) {
 					// Revert all ops in reverse order
 					for (const op of [...entry.ops].reverse()) {
-						romBytes.set(op.oldValue, op.address!);
+						romBytes.set(op.oldValue, getRequiredAddress(op));
 					}
 				}
 
@@ -525,7 +612,7 @@ describe("Math Operations Commands", () => {
 
 				// Apply math op
 				for (const op of ops) {
-					romBytes.set(op.newValue, op.address!);
+					romBytes.set(op.newValue, getRequiredAddress(op));
 				}
 				manager.pushBatch(ops, "Math op: add");
 
@@ -533,7 +620,7 @@ describe("Math Operations Commands", () => {
 				const undoEntry = manager.undo();
 				if (undoEntry && isBatchEdit(undoEntry)) {
 					for (const op of [...undoEntry.ops].reverse()) {
-						romBytes.set(op.oldValue, op.address!);
+						romBytes.set(op.oldValue, getRequiredAddress(op));
 					}
 				}
 				expect(romBytes[0]).toBe(0x10);
@@ -542,11 +629,14 @@ describe("Math Operations Commands", () => {
 				// Redo
 				const redoEntry = manager.redo();
 				expect(redoEntry).not.toBeNull();
-				expect(isBatchEdit(redoEntry!)).toBe(true);
+				if (redoEntry === null) {
+					throw new Error("Expected batch entry to exist on redo");
+				}
+				expect(isBatchEdit(redoEntry)).toBe(true);
 
 				if (redoEntry && isBatchEdit(redoEntry)) {
 					for (const op of redoEntry.ops) {
-						romBytes.set(op.newValue, op.address!);
+						romBytes.set(op.newValue, getRequiredAddress(op));
 					}
 				}
 				expect(romBytes[0]).toBe(0xaa);
@@ -594,11 +684,14 @@ describe("Math Operations Commands", () => {
 				// Simulate undo
 				const entry = manager.undo();
 				expect(entry).not.toBeNull();
-				expect(isBatchEdit(entry!)).toBe(true);
+				if (entry === null) {
+					throw new Error("Expected batch entry to exist");
+				}
+				expect(isBatchEdit(entry)).toBe(true);
 
 				if (entry && isBatchEdit(entry)) {
 					for (const op of [...entry.ops].reverse()) {
-						romBytes.set(op.oldValue, op.address!);
+						romBytes.set(op.oldValue, getRequiredAddress(op));
 					}
 				}
 
@@ -677,19 +770,29 @@ describe("Math Operations Commands", () => {
 
 				// Undo math op (batch)
 				const batchEntry = manager.undo();
-				expect(isBatchEdit(batchEntry!)).toBe(true);
+				if (batchEntry === null) {
+					throw new Error("Expected batch entry to exist");
+				}
+				expect(isBatchEdit(batchEntry)).toBe(true);
 				if (batchEntry && isBatchEdit(batchEntry)) {
 					for (const op of [...batchEntry.ops].reverse()) {
-						romBytes.set(op.oldValue, op.address!);
+						romBytes.set(op.oldValue, getRequiredAddress(op));
 					}
 				}
 				expect(romBytes).toEqual(new Uint8Array([0x55, 0x20, 0x30]));
 
 				// Undo single cell edit
 				const singleEntry = manager.undo();
-				expect(isBatchEdit(singleEntry!)).toBe(false);
+				if (singleEntry === null) {
+					throw new Error("Expected single entry to exist");
+				}
+				expect(isBatchEdit(singleEntry)).toBe(false);
 				if (singleEntry && !isBatchEdit(singleEntry)) {
-					romBytes.set(singleEntry.oldValue, singleEntry.address!);
+					const address = singleEntry.address;
+					if (address === undefined) {
+						throw new Error("Expected single entry address to be defined");
+					}
+					romBytes.set(singleEntry.oldValue, address);
 				}
 				expect(romBytes).toEqual(new Uint8Array([0x10, 0x20, 0x30]));
 

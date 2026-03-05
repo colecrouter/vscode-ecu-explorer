@@ -4,6 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as vscode from "vscode";
+import type { OpenDocumentsContext } from "../src/open-context-tracker.js";
 import { OpenContextTracker } from "../src/open-context-tracker.js";
 import { RomDocument } from "../src/rom/document.js";
 
@@ -61,7 +62,7 @@ describe("OpenContextTracker", () => {
 		});
 
 		it("should emit context update when ROM is added", async () => {
-			const contextUpdates: any[] = [];
+			const contextUpdates: OpenDocumentsContext[] = [];
 			tracker.onContextUpdate((context) => {
 				contextUpdates.push(context);
 			});

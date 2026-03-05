@@ -309,7 +309,9 @@ export class TableView<T extends TableDefinition> {
 			return null;
 		}
 
-		const transaction = this.transactions.pop()!;
+		const transaction = this.transactions.at(-1);
+		if (!transaction) return null;
+		this.transactions.pop();
 		const inverse = transaction.edits.map((edit) => ({
 			address: edit.address,
 			before: edit.after,
@@ -338,7 +340,9 @@ export class TableView<T extends TableDefinition> {
 			return null;
 		}
 
-		const transaction = this.undone.pop()!;
+		const transaction = this.undone.at(-1);
+		if (!transaction) return null;
+		this.undone.pop();
 		this.applyEdits(transaction.edits);
 		this.transactions.push(transaction);
 		return transaction;
@@ -465,8 +469,7 @@ export class TableView<T extends TableDefinition> {
 			return;
 		}
 
-		const cells = this.data as unknown as Uint8Array[];
-		cells[location.row] = bytes;
+		this.data[location.row] = bytes;
 	}
 
 	/**
@@ -660,7 +663,9 @@ export class TableView<T extends TableDefinition> {
 	public getSelectedValuesAsTSV(): string {
 		const matrix = this.getSelectedValuesAsMatrix();
 		return matrix
-			.map((row) => row.map((v) => (isNaN(v) ? "" : v.toString())).join("\t"))
+			.map((row) =>
+				row.map((v) => (Number.isNaN(v) ? "" : v.toString())).join("\t"),
+			)
 			.join("\n");
 	}
 
@@ -735,7 +740,7 @@ export class TableView<T extends TableDefinition> {
 				if (rawValue === undefined) continue;
 
 				const scaledValue = parseFloat(rawValue.trim());
-				if (!isFinite(scaledValue)) continue;
+				if (!Number.isFinite(scaledValue)) continue;
 
 				// Unscale before encoding
 				const scale = def.z.scale ?? 1;

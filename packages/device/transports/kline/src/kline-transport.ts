@@ -198,7 +198,7 @@ export class KLineConnection implements DeviceConnection {
 		this.stopStream();
 		this.flowControl.dispose();
 
-		if (this.port && this.port.isOpen()) {
+		if (this.port?.isOpen()) {
 			await this.port.close();
 		}
 
@@ -245,7 +245,8 @@ export class KLineConnection implements DeviceConnection {
 				resolve(new Uint8Array(0)); // Timeout
 			}, timeoutMs);
 
-			this.port!.read(maxLength)
+			this.port
+				?.read(maxLength)
 				.then((data) => {
 					clearTimeout(timer);
 					resolve(data);

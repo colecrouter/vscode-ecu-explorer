@@ -155,7 +155,11 @@ describe("Mut3Protocol", () => {
 
 			await protocol.readRom(connection, vi.fn());
 
-			expect(Array.from(frames[0]!)).toEqual([0x10, 0x03]);
+			const firstFrame = frames[0];
+			if (firstFrame === undefined) {
+				throw new Error("Expected first frame to be recorded");
+			}
+			expect(Array.from(firstFrame)).toEqual([0x10, 0x03]);
 		});
 
 		it("sends security access seed request [0x27, 0x01] as the second frame", async () => {
@@ -174,7 +178,11 @@ describe("Mut3Protocol", () => {
 
 			await protocol.readRom(connection, vi.fn());
 
-			expect(Array.from(frames[1]!)).toEqual([0x27, 0x01]);
+			const secondFrame = frames[1];
+			if (secondFrame === undefined) {
+				throw new Error("Expected second frame to be recorded");
+			}
+			expect(Array.from(secondFrame)).toEqual([0x27, 0x01]);
 		});
 
 		it("sends security access key [0x27, 0x02, key...] as the third frame", async () => {
@@ -195,11 +203,11 @@ describe("Mut3Protocol", () => {
 			await protocol.readRom(connection, vi.fn());
 
 			// Frame 2: [0x27, 0x02, key0, key1]
-			expect(frames[2]![0]).toBe(0x27);
-			expect(frames[2]![1]).toBe(0x02);
+			expect(frames[2]?.[0]).toBe(0x27);
+			expect(frames[2]?.[1]).toBe(0x02);
 			// MUT-III key for seed 0xAB 0xCD: 0xE4 0x81
-			expect(frames[2]![2]).toBe(0xe4);
-			expect(frames[2]![3]).toBe(0x81);
+			expect(frames[2]?.[2]).toBe(0xe4);
+			expect(frames[2]?.[3]).toBe(0x81);
 		});
 
 		it("computes key from seed using MUT-III algorithm", async () => {
@@ -489,9 +497,9 @@ describe("decodeRaxPid()", () => {
 		for (const descriptor of RAX_PID_DESCRIPTORS) {
 			const result = decodeRaxPid(descriptor.pid);
 			expect(result).not.toBeNull();
-			expect(result!.blockIdx).toBeGreaterThanOrEqual(0);
-			expect(result!.blockIdx).toBeLessThan(RAX_BLOCKS.length);
-			expect(result!.paramIdx).toBeGreaterThanOrEqual(0);
+			expect(result?.blockIdx).toBeGreaterThanOrEqual(0);
+			expect(result?.blockIdx).toBeLessThan(RAX_BLOCKS.length);
+			expect(result?.paramIdx).toBeGreaterThanOrEqual(0);
 		}
 	});
 
@@ -502,7 +510,17 @@ describe("decodeRaxPid()", () => {
 		const rpmPid = RAX_PID_BASE + cBlockIdx * 100 + 0;
 		const result = decodeRaxPid(rpmPid);
 		expect(result).not.toBeNull();
-		const param = RAX_BLOCKS[result!.blockIdx]!.parameters[result!.paramIdx]!;
+		if (result === null) {
+			throw new Error("Expected RPM PID to decode to a valid RAX parameter");
+		}
+		const block = RAX_BLOCKS[result.blockIdx];
+		if (block === undefined) {
+			throw new Error("Expected decoded block index to exist");
+		}
+		const param = block.parameters[result.paramIdx];
+		if (param === undefined) {
+			throw new Error("Expected decoded parameter index to exist");
+		}
 		expect(param.name).toBe("RPM");
 	});
 });
@@ -637,7 +655,7 @@ describe("Mut3Protocol.getSupportedPids()", () => {
 	it("resolves to an array of PidDescriptors", async () => {
 		const protocol = new Mut3Protocol();
 		const connection = makeMockConnection("openport2");
-		const pids = await protocol.getSupportedPids!(connection);
+		const pids = await protocol.getSupportedPids?.(connection);
 		expect(Array.isArray(pids)).toBe(true);
 		expect(pids.length).toBeGreaterThan(0);
 	});
@@ -646,14 +664,14 @@ describe("Mut3Protocol.getSupportedPids()", () => {
 		const protocol = new Mut3Protocol();
 		const sendFrame = vi.fn().mockResolvedValue(new Uint8Array([]));
 		const connection = makeMockConnection("openport2", sendFrame);
-		await protocol.getSupportedPids!(connection);
+		await protocol.getSupportedPids?.(connection);
 		expect(sendFrame).not.toHaveBeenCalled();
 	});
 
 	it("includes a descriptor for RPM with unit 'RPM'", async () => {
 		const protocol = new Mut3Protocol();
 		const connection = makeMockConnection("openport2");
-		const pids = await protocol.getSupportedPids!(connection);
+		const pids = await protocol.getSupportedPids?.(connection);
 		const rpm = pids.find((p) => p.name === "RPM");
 		expect(rpm).toBeDefined();
 		expect(rpm?.unit).toBe("RPM");
@@ -662,7 +680,7 @@ describe("Mut3Protocol.getSupportedPids()", () => {
 	it("all PID numbers are in the RAX synthetic range (≥ 0x8000)", async () => {
 		const protocol = new Mut3Protocol();
 		const connection = makeMockConnection("openport2");
-		const pids = await protocol.getSupportedPids!(connection);
+		const pids = await protocol.getSupportedPids?.(connection);
 		for (const p of pids) {
 			expect(p.pid).toBeGreaterThanOrEqual(0x8000);
 		}
@@ -671,7 +689,7 @@ describe("Mut3Protocol.getSupportedPids()", () => {
 	it("contains exactly the same number of PIDs as total RAX parameters", async () => {
 		const protocol = new Mut3Protocol();
 		const connection = makeMockConnection("openport2");
-		const pids = await protocol.getSupportedPids!(connection);
+		const pids = await protocol.getSupportedPids?.(connection);
 		const expectedTotal = RAX_BLOCKS.reduce(
 			(acc, b) => acc + b.parameters.length,
 			0,
@@ -744,7 +762,7 @@ describe("Mut3Protocol.streamLiveData()", () => {
 	it("returns a LiveDataSession with a stop() method", () => {
 		const protocol = new Mut3Protocol();
 		const connection = makeRaxStreamMock(new Map());
-		const session = protocol.streamLiveData!(connection, [], vi.fn());
+		const session = protocol.streamLiveData?.(connection, [], vi.fn());
 		expect(typeof session.stop).toBe("function");
 		session.stop();
 	});
@@ -753,7 +771,7 @@ describe("Mut3Protocol.streamLiveData()", () => {
 		const protocol = new Mut3Protocol();
 		const connection = makeMockConnection("openport2");
 		const onFrame = vi.fn();
-		const session = protocol.streamLiveData!(connection, [], onFrame);
+		const session = protocol.streamLiveData?.(connection, [], onFrame);
 
 		// Let one polling cycle complete
 		await new Promise<void>((resolve) => setTimeout(resolve, 50));
@@ -778,7 +796,7 @@ describe("Mut3Protocol.streamLiveData()", () => {
 		const pid1 = RAX_PID_BASE + aBlockIdx * 100 + 1; // LTFT Bank 1
 
 		const frames: LiveDataFrame[] = [];
-		const session = protocol.streamLiveData!(
+		const session = protocol.streamLiveData?.(
 			connection,
 			[pid0, pid1],
 			(frame) => frames.push(frame),
@@ -806,7 +824,7 @@ describe("Mut3Protocol.streamLiveData()", () => {
 		const pid = RAX_PID_BASE + aBlockIdx * 100 + 0;
 
 		const frames: LiveDataFrame[] = [];
-		const session = protocol.streamLiveData!(connection, [pid], (f) =>
+		const session = protocol.streamLiveData?.(connection, [pid], (f) =>
 			frames.push(f),
 		);
 
@@ -830,7 +848,7 @@ describe("Mut3Protocol.streamLiveData()", () => {
 		const pid = RAX_PID_BASE + aBlockIdx * 100 + 0; // STFT Bank 1 = %
 
 		const frames: LiveDataFrame[] = [];
-		const session = protocol.streamLiveData!(connection, [pid], (f) =>
+		const session = protocol.streamLiveData?.(connection, [pid], (f) =>
 			frames.push(f),
 		);
 
@@ -856,7 +874,7 @@ describe("Mut3Protocol.streamLiveData()", () => {
 		// Do NOT request pid1 (LTFT Bank 1), pid2 (STFT Bank 2), pid3 (LTFT Bank 2)
 
 		const receivedPids = new Set<number>();
-		const session = protocol.streamLiveData!(connection, [pid0], (f) =>
+		const session = protocol.streamLiveData?.(connection, [pid0], (f) =>
 			receivedPids.add(f.pid),
 		);
 
@@ -883,7 +901,11 @@ describe("Mut3Protocol.streamLiveData()", () => {
 		]);
 		const connection = makeRaxStreamMock(blockDataMap);
 
-		const session = protocol.streamLiveData!(connection, [pidA, pidC], vi.fn());
+		const session = protocol.streamLiveData?.(
+			connection,
+			[pidA, pidC],
+			vi.fn(),
+		);
 
 		// Wait for at least one full cycle
 		await new Promise<void>((resolve) => setTimeout(resolve, 80));
@@ -895,7 +917,10 @@ describe("Mut3Protocol.streamLiveData()", () => {
 		).mock.calls
 			.filter((call: Uint8Array[]) => call[0]?.[0] === CMD_SET_ADDRESS)
 			.map((call: Uint8Array[]) => {
-				const d = call[0]!;
+				const d = call[0];
+				if (d === undefined) {
+					throw new Error("Expected sendFrame call argument");
+				}
 				return (
 					((d[1] ?? 0) << 24) |
 					((d[2] ?? 0) << 16) |
@@ -919,7 +944,7 @@ describe("Mut3Protocol.streamLiveData()", () => {
 		const pid = RAX_PID_BASE + aBlockIdx * 100 + 0;
 
 		const frames: LiveDataFrame[] = [];
-		const session = protocol.streamLiveData!(connection, [pid], (f) =>
+		const session = protocol.streamLiveData?.(connection, [pid], (f) =>
 			frames.push(f),
 		);
 
@@ -938,7 +963,7 @@ describe("Mut3Protocol.streamLiveData()", () => {
 		const connection = makeMockConnection("openport2");
 		// OBD-II PIDs that have no mapping
 		expect(() => {
-			const session = protocol.streamLiveData!(
+			const session = protocol.streamLiveData?.(
 				connection,
 				[0x0c, 0x0d],
 				vi.fn(),
@@ -961,7 +986,7 @@ describe("Mut3Protocol.streamLiveData()", () => {
 		const rpmPid = RAX_PID_BASE + cBlockIdx * 100 + 0; // RPM is first param
 
 		const frames: LiveDataFrame[] = [];
-		const session = protocol.streamLiveData!(connection, [rpmPid], (f) =>
+		const session = protocol.streamLiveData?.(connection, [rpmPid], (f) =>
 			frames.push(f),
 		);
 

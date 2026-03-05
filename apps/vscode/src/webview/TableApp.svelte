@@ -26,9 +26,7 @@
 	let definition: TableDefinition | null = $state(null);
 	let tableName = $state("");
 	let isReady = $state(false);
-	let isSaving = $state(false);
 	let saveStatus: "idle" | "saving" | "success" | "error" = $state("idle");
-	let saveError = $state("");
 	let isInitialLoad = $state(true); // Track if this is the initial load
 	let themeColors: ThemeColors | undefined = $state(undefined);
 
@@ -245,7 +243,6 @@
 	}
 
 	function handleSaveComplete() {
-		isSaving = false;
 		saveStatus = "success";
 		// Clear success status after 3 seconds
 		setTimeout(() => {
@@ -256,15 +253,12 @@
 	}
 
 	function handleSaveError(msg: { type: "saveError"; error: string }) {
-		isSaving = false;
 		saveStatus = "error";
-		saveError = msg.error;
 		console.error("Save error:", msg.error);
 		// Clear error status after 5 seconds
 		setTimeout(() => {
 			if (saveStatus === "error") {
 				saveStatus = "idle";
-				saveError = "";
 			}
 		}, 5000);
 	}
@@ -446,7 +440,16 @@
 			<h2>{tableName}</h2>
 		</div>
 		<div class="table-container">
-			<TableGrid view={tableView} {definition} {themeColors} disabled={false} />
+			{#if themeColors}
+				<TableGrid
+					view={tableView}
+					{definition}
+					{themeColors}
+					disabled={false}
+				/>
+			{:else}
+				<TableGrid view={tableView} {definition} disabled={false} />
+			{/if}
 		</div>
 	{:else}
 		<div class="loading">Loading table...</div>

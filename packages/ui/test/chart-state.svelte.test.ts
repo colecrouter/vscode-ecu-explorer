@@ -4,6 +4,10 @@ import {
 	type TableSnapshot,
 } from "../src/lib/views/chart-state.svelte";
 
+type ChartStateWithLayerOverride = ChartState & {
+	currentLayer: number;
+};
+
 describe("ChartState", () => {
 	const create1DSnapshot = (length: number): TableSnapshot => ({
 		kind: "table1d",
@@ -149,7 +153,8 @@ describe("ChartState", () => {
 			// Manually set invalid layer by modifying internal state
 			state.snapshot = snapshot;
 			// Force invalid layer by setting it directly (bypassing validation)
-			(state as any).currentLayer = 10;
+			const stateWithLayerOverride: ChartStateWithLayerOverride = state;
+			stateWithLayerOverride.currentLayer = 10;
 
 			const data = state.chartData;
 

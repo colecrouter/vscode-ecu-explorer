@@ -202,7 +202,11 @@ describe("MitsubishiBootloaderProtocol", () => {
 
 			await protocol.readRom(connection); // bootMode defaults to true
 
-			expect(Array.from(frames[2]!)).toEqual([
+			const challengeFrame = frames[2];
+			if (challengeFrame === undefined) {
+				throw new Error("Expected challenge frame at index 2");
+			}
+			expect(Array.from(challengeFrame)).toEqual([
 				0x9a, 0x88, 0x01, 0x08, 0xa0, 0x03,
 			]);
 		});
@@ -314,7 +318,11 @@ describe("MitsubishiBootloaderProtocol", () => {
 
 			await protocol.readRom(connection, undefined, undefined, false); // bootMode=false
 
-			expect(Array.from(frames[2]!)).toEqual([
+			const challengeFrame = frames[2];
+			if (challengeFrame === undefined) {
+				throw new Error("Expected challenge frame at index 2");
+			}
+			expect(Array.from(challengeFrame)).toEqual([
 				0x9b, 0xec, 0x2b, 0x8b, 0xd4, 0x86,
 			]);
 		});
@@ -591,10 +599,10 @@ describe("MitsubishiBootloaderProtocol", () => {
 			// Only sector 2 should be erased (1 erase frame)
 			expect(eraseFrames.length).toBe(1);
 			// Erase frame should contain sector 2 address (0x020000)
-			expect(eraseFrames[0]![0]).toBe(0x20); // CMD_ERASE
-			expect(eraseFrames[0]![1]).toBe(0x02); // addr byte 0 (0x020000 >> 16)
-			expect(eraseFrames[0]![2]).toBe(0x00); // addr byte 1
-			expect(eraseFrames[0]![3]).toBe(0x00); // addr byte 2
+			expect(eraseFrames[0]?.[0]).toBe(0x20); // CMD_ERASE
+			expect(eraseFrames[0]?.[1]).toBe(0x02); // addr byte 0 (0x020000 >> 16)
+			expect(eraseFrames[0]?.[2]).toBe(0x00); // addr byte 1
+			expect(eraseFrames[0]?.[3]).toBe(0x00); // addr byte 2
 
 			// Only blocks in sector 2 should be written
 			expect(writeFrames.length).toBe(BLOCKS_PER_SECTOR);
@@ -741,7 +749,11 @@ describe("MitsubishiBootloaderProtocol", () => {
 			);
 
 			// Frame index 2 should be CHALLENGE_B
-			expect(Array.from(frames[2]!)).toEqual([
+			const challengeFrame = frames[2];
+			if (challengeFrame === undefined) {
+				throw new Error("Expected challenge frame at index 2");
+			}
+			expect(Array.from(challengeFrame)).toEqual([
 				0x9b, 0xec, 0x2b, 0x8b, 0xd4, 0x86,
 			]);
 		});

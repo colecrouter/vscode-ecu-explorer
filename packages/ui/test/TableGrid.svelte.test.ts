@@ -1,9 +1,40 @@
-import type { Table2DDefinition, Table3DDefinition } from "@ecu-explorer/core";
+import type {
+	StaticArrayDefinition,
+	Table2DDefinition,
+	Table3DDefinition,
+	Unit,
+} from "@ecu-explorer/core";
 import { describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { render } from "vitest-browser-svelte";
 import TableGrid from "../src/lib/views/TableGrid.svelte";
 import { TableView } from "../src/lib/views/table.svelte";
+
+function createUnit(symbol: string): Unit {
+	return {
+		symbol,
+		min: Number.NEGATIVE_INFINITY,
+		max: Number.POSITIVE_INFINITY,
+		step: 1,
+		type: "u8",
+		order: "be",
+		to: (raw) => raw,
+		from: (scaled) => scaled,
+	};
+}
+
+function createStaticAxis(
+	name: string,
+	values: number[],
+	unit: Unit,
+): StaticArrayDefinition {
+	return {
+		kind: "static",
+		name,
+		values,
+		unit,
+	};
+}
 
 describe("TableGrid Component", () => {
 	const rom = new Uint8Array(1024).fill(0);
@@ -76,21 +107,11 @@ describe("TableGrid Component", () => {
 	it("should render units in headers", async () => {
 		const defWithUnits: Table2DDefinition = {
 			...def2d,
-			x: {
-				kind: "static",
-				name: "X Axis",
-				values: [1, 2, 3, 4],
-				unit: { symbol: "RPM" } as any,
-			},
-			y: {
-				kind: "static",
-				name: "Y Axis",
-				values: [10, 20, 30, 40],
-				unit: { symbol: "Load" } as any,
-			},
+			x: createStaticAxis("X Axis", [1, 2, 3, 4], createUnit("RPM")),
+			y: createStaticAxis("Y Axis", [10, 20, 30, 40], createUnit("Load")),
 			z: {
 				...def2d.z,
-				unit: { symbol: "%" } as any,
+				unit: createUnit("%"),
 			},
 		};
 		const view = new TableView(rom, defWithUnits);
