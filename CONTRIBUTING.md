@@ -59,7 +59,7 @@ Use descriptive branch names that reflect the feature or fix (e.g., `feature/add
 ### 4. Write Tests
 
 - Create tests before implementing (TDD approach)
-- Aim for >80% code coverage
+- Aim for code coverage
 - Test edge cases, error conditions, and boundary conditions
 - Run tests locally before committing:
   ```bash
@@ -147,62 +147,33 @@ npm run test
 
 # Run tests with coverage
 npm run test:coverage
-
-# Run tests in watch mode
-npm run test:watch
-
-# Coverage report location
-# After running test:coverage, check: coverage/index.html
 ```
 
 ## Documentation
 
 ### Update Documentation When Implementing Features
 
-1. **JSDoc comments**: Add detailed comments to all new functions
-   ```typescript
-   /**
-    * Brief description of function
-    * 
-    * Longer explanation of what it does and how
-    * 
-    * @param paramName - Description
-    * @returns Description of return value
-    * @throws Description of exceptions
-    * @example
-    * const result = myFunction(param);
-    */
-   function myFunction(param: string): Result {
-     // implementation
-   }
-   ```
-
-2. **Update specs**: Mark features as in-progress, add implementation notes
-3. **Update DEVELOPMENT.md**: Mark feature as complete with commit link
-4. **Update README.md**: Add user-facing features or major changes
-5. **Add code examples**: Include usage examples in JSDoc or spec files
+1. **JSDoc comments**: Add proportionally detailed comments to exported/reusable functions
+1. **Update specs**: Update/correct implementation notes
+1. **Update README.md**: Add user-facing features or major changes
+1. **Add code examples**: Include usage examples when relevant
 
 ## Code Style
 
 The project uses **Biome** for code formatting and **Prettier** as fallback. Configuration is in:
+
 - [`biome.json`](biome.json) - Primary formatter
 - [`.prettierrc`](.prettierrc) - Fallback formatter
 
-**Key guidelines**:
-- 2-space indentation
-- Single quotes for strings (JavaScript/TypeScript)
-- Semicolons at end of statements
-- Max line length: 100 characters
-- No unused variables or imports
-
 Run formatting automatically:
+
 ```bash
 npm run format
 ```
 
-## Type Safety Conventions
+## Conventions
 
-This project prioritizes type safety. We rely on strict TypeScript configuration to catch errors at compile time rather than runtime. Follow these conventions:
+### Error Handling
 
 ### Avoid `any`
 
@@ -231,11 +202,9 @@ const first = values[0]!;
 const values = [1, 2, 3] as const;
 const first = values[0]; // typed as 1 (readonly)
 
-// ✅ Or use conditional checks
+// ✅ Or use conditional checks to return early
 const first = values[0];
-if (first !== undefined) {
-  // first is narrowed to number here
-}
+if (first === undefined) return; // handle undefined case or throw error (when appropriate)
 ```
 
 ### Avoid Type Casting
@@ -246,7 +215,13 @@ Resist the urge to cast types to make the compiler happy. Instead, refactor to u
 // ❌ Avoid
 const data2d = data as Uint8Array[][];
 
-// ✅ Prefer: refactor to proper types
+// ✅ Prefer: allow TypeScript to infer types (when possible)
+const data2d = data;
+
+// ✅ Or use inline narrowing for simple, one-off cases (use only methods that TypeScript will narrow with)
+if (Array.isArray(data)) { }
+
+// ✅ Or create reusable type guards for complex cases
 function is2DArray(data: unknown): data is Uint8Array[][] {
   return Array.isArray(data) &&
          data.every(row => Array.isArray(row) && row.every(cell => typeof cell === 'number'));
@@ -265,9 +240,9 @@ type RawXmlData = { [key: string]: unknown };
 const rom = parsedXml as RawXmlData;
 ```
 
-### Prefer `satisfies` over `: Type`
+### Prefer Implicit Type Inference and `satisfies`
 
-When declaring constants, prefer `satisfies` to validate the shape while preserving literal types:
+When declaring constants, [prefer `satisfies`](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-9.html#the-satisfies-operator) to validate the shape while preserving literal types:
 
 ```typescript
 // ✅ Good: validates shape, keeps literal types
@@ -278,10 +253,6 @@ const config = { port: 3000 } satisfies ServerConfig;
 const config: ServerConfig = { port: 3000 };
 // config.port is now number
 ```
-
-### Test Fixtures
-
-Use `as const` for test data to preserve literal types and avoid assertions:
 
 ```typescript
 // ✅ Good
@@ -301,50 +272,40 @@ const sampleRom = {
 } as RomStub;
 ```
 
-## Architecture and Patterns
+```typescript
+// ✅ Good: allow inference
+const sampleRom2 = {
+	...sampleRom,
+	extraInfo: 'This is fine'
+}
 
-### Key Resources
+// ❌ Avoid: declaring types for inferrable objects
+interface RomStubWithExtra extends RomStub {
+	extraInfo: string;
+}
+const sampleRom2: RomStubWithExtra = {
+	...sampleRom,
+	extraInfo: 'This is fine'
+}
+```
 
-- **Architecture**: [`ARCHITECTURE.md`](ARCHITECTURE.md)
-- **Development Guide**: [`DEVELOPMENT.md`](DEVELOPMENT.md)
-- **Agent Workflows**: [`AGENTS.md`](AGENTS.md)
-- **Testing Philosophy**: [`TESTING_IDEOLOGY.md`](TESTING_IDEOLOGY.md)
+> [!NOTE]
+> Aggressive casting/typing causes headaches when testing and refactoring. By allowing TypeScript to infer types, you get better DX and more easily maintainable code.
 
-### Feature Implementation Process
+#### Prefer Early Returns
 
-1. Find available feature in [`DEVELOPMENT.md`](DEVELOPMENT.md)
-2. Read specification in [`specs/`](specs/) folder
-3. Use task templates from [`skills/`](skills/) folder:
-   - [`skills/add-new-table-type.md`](skills/add-new-table-type.md)
-   - [`skills/add-new-command.md`](skills/add-new-command.md)
-   - [`skills/implement-feature-from-spec.md`](skills/implement-feature-from-spec.md)
-   - And more...
+Instead of nested conditionals, use early returns to handle error cases and keep the "happy path" less indented:
 
-### Protocol Implementation
+```typescript
+// ✅ Good: early returns
+if (!data) return; // handle null/undefined case
+doSomething(data);
 
-- Device protocols: [`packages/device/protocols/`](packages/device/protocols/)
-- Protocol documentation: [`PROTOCOL_SUPPORT.md`](PROTOCOL_SUPPORT.md)
-- Transport layers: [`TRANSPORT_LAYERS.md`](TRANSPORT_LAYERS.md)
-
-### Checksum Algorithms
-
-- Core algorithms: [`packages/core/src/checksum/`](packages/core/src/checksum/)
-- Algorithm analysis: [`specs/mitsucan-checksum-implementation.md`](specs/mitsucan-checksum-implementation.md)
-- Coverage: See [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) for supported algorithms
-
-## Performance Considerations
-
-- Profile code before optimizing
-- Avoid unnecessary re-renders in UI components
-- Test with large ROM files (1MB+) and large datasets
-- Document performance characteristics in comments
-
-## Security
-
-- Never commit sensitive data (keys, tokens, credentials)
-- Validate all user input
-- Use environment variables for configuration (see `.env.example`)
-- Report security issues responsibly (see SECURITY.md when available)
+// ❌ Avoid: nested conditionals
+if (data) {
+  doSomething(data);
+}
+```
 
 ## Pull Request Review Process
 
@@ -367,35 +328,9 @@ Your PR will be reviewed against:
 - ✅ No breaking changes
 - ✅ Commits are clear and descriptive
 
-## Troubleshooting
-
-### Common Issues
-
-**Issue**: Tests fail locally but pass in CI
-- Solution: Clear node_modules and reinstall: `rm -rf node_modules package-lock.json && npm install`
-
-**Issue**: Type errors after pulling changes
-- Solution: Run `npm run check` to type-check all packages
-
-**Issue**: Biome formatter conflicts with VSCode
-- Solution: Install Biome VSCode extension and set as default formatter
-
-**Issue**: Build fails
-- Solution: Run `npm run build` to see detailed error, check [`SETUP.md`](SETUP.md)
-
-### Getting Help
-
-- **Questions**: Create a discussion or check existing issues
-- **Bug reports**: Use the GitHub issue template (bug_report.md)
-- **Architecture questions**: Reference [`ARCHITECTURE.md`](ARCHITECTURE.md) or ask in PR discussion
-
 ## Release Process
 
 For maintainers: See [`.github/workflows/release.yml`](.github/workflows/release.yml) for automated release workflow.
-
-## Recognition
-
-All contributors are recognized in the project. Your contributions help make ECU Explorer better for everyone!
 
 ---
 
