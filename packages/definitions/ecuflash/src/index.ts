@@ -89,6 +89,16 @@ function fsPathToUri(p: string): string {
 	return pathToFileURL(p).toString();
 }
 
+function formatIncludeResolutionError(
+	includeToken: string,
+	parentDefinitionPath: string,
+	searchRoots: string[],
+): Error {
+	return new Error(
+		`Failed to resolve include "${includeToken}" referenced by "${parentDefinitionPath}". Searched sibling/relative paths from the selected definition, configured search roots, and the default ECUFlash metadata path. Search roots: ${searchRoots.join(", ")}. Attempted filename and xmlid lookup in discovered XML files. If this definition was selected from an external/manual folder, also add the parent definition directory to the configured definition search paths or select the full definition set root.`,
+	);
+}
+
 async function fileExists(fsPath: string): Promise<boolean> {
 	try {
 		const stat = await fs.stat(fsPath);
@@ -305,6 +315,7 @@ type TemplateTable = {
 	category: string | undefined;
 	type: "1D" | "2D" | "3D" | undefined;
 	scaling: string | undefined;
+	address: number | undefined;
 	swapxy: boolean;
 	axes: TemplateAxis[];
 };
@@ -342,6 +353,7 @@ function parseTemplateTable(node: TableNode): TemplateTable | null {
 				? node.type
 				: undefined,
 		scaling: node.scaling,
+		address: parseAddress(node.address),
 		swapxy: node.swapxy === "true",
 		axes,
 	};
@@ -559,6 +571,13 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 			...includes.scalings.entries(),
 			...buildScalingIndex(rom).entries(),
 		]);
+		const inheritedRom = {
+			...rom,
+			table: [
+				...asArray(includes.tables),
+				...asArray((rom as Raw).table as TableNode | TableNode[]),
+			],
+		};
 
 		const romid = (rom as Raw).romid as Raw | undefined;
 		const platform: ROMDefinition["platform"] = {};
@@ -577,7 +596,11 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 		if (Number.isFinite(yearNum)) platform.year = yearNum;
 
 		const stub = await this.peek(definitionUri);
-		const tables = this.parseTablesFromDoc(rom, templates, scalingIndex);
+		const tables = this.parseTablesFromDoc(
+			inheritedRom,
+			templates,
+			scalingIndex,
+		);
 
 		// Parse checksum module if present
 		const checksumModule = extractText(romid?.checksummodule);
@@ -603,10 +626,22 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 	): Promise<{
 		templates: Map<string, TemplateTable>;
 		scalings: Map<string, ScalingNode>;
+		tables: TableNode[];
 	}> {
 		const rootDefinitionPath = path.resolve(uriToFsPath(definitionUri));
+		const parentDirectories: string[] = [];
+		let currentDirectory = path.dirname(rootDefinitionPath);
+		for (let i = 0; i < 3; i++) {
+			parentDirectories.push(currentDirectory);
+			const nextDirectory = path.dirname(currentDirectory);
+			if (nextDirectory === currentDirectory) {
+				break;
+			}
+			currentDirectory = nextDirectory;
+		}
+
 		const searchRoots = [
-			path.dirname(rootDefinitionPath),
+			...parentDirectories,
 			...this.additionalSearchPaths,
 			expandWindowsEnv(DEFAULT_WIN_DIR),
 		]
@@ -615,6 +650,7 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 
 		const templates = new Map<string, TemplateTable>();
 		const scalings = new Map<string, ScalingNode>();
+		const tables: TableNode[] = [];
 		const visited = new Set<string>([rootDefinitionPath]);
 		const recursiveFileCache = new Map<string, string[]>();
 		const includeXmlIdLookupCache = new Map<string, string | null>();
@@ -628,6 +664,11 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 		const includePathCandidates = (includeToken: string): string[] => {
 			const normalized = path.normalize(includeToken.trim());
 			if (!normalized) return [];
+			if (path.isAbsolute(normalized)) {
+				return normalized.toLowerCase().endsWith(".xml")
+					? [normalized]
+					: [normalized, `${normalized}.xml`];
+			}
 			if (normalized.toLowerCase().endsWith(".xml")) return [normalized];
 			return [normalized, `${normalized}.xml`];
 		};
@@ -656,8 +697,10 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 					return cachedPath;
 				}
 				if (cachedPath === null) {
-					throw new Error(
-						`Failed to resolve include "${includeToken}" referenced by "${parentDefinitionPath}". Searched roots: ${searchRoots.join(", ")}. Attempted xmlid lookup in discovered XML files.`,
+					throw formatIncludeResolutionError(
+						includeToken,
+						parentDefinitionPath,
+						searchRoots,
 					);
 				}
 			}
@@ -715,8 +758,10 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 
 			includeXmlIdLookupCache.set(normalizedLookupToken, null);
 
-			throw new Error(
-				`Failed to resolve include "${includeToken}" referenced by "${parentDefinitionPath}". Searched roots: ${searchRoots.join(", ")}. Attempted xmlid lookup in discovered XML files.`,
+			throw formatIncludeResolutionError(
+				includeToken,
+				parentDefinitionPath,
+				searchRoots,
 			);
 		};
 
@@ -737,6 +782,10 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 				const includeRom = extractRom(includeDoc);
 				if (!includeRom) continue;
 
+				tables.push(
+					...asArray((includeRom as Raw).table as TableNode | TableNode[]),
+				);
+
 				for (const [k, v] of buildTemplateIndex(includeRom).entries()) {
 					if (!templates.has(k)) templates.set(k, v);
 				}
@@ -750,7 +799,7 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 
 		await visitIncludes(rootDefinitionPath, rom);
 
-		return { templates, scalings };
+		return { templates, scalings, tables };
 	}
 
 	private parseTablesFromDoc(
@@ -763,10 +812,11 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 
 		for (const node of nodes) {
 			const name = node.name;
-			const address = parseAddress(node.address);
-			if (!name || address === undefined) continue;
+			if (!name) continue;
 
 			const tmpl = templates.get(name);
+			const address = parseAddress(node.address) ?? tmpl?.address;
+			if (address === undefined) continue;
 			const type =
 				tmpl?.type ?? (node.type as "1D" | "2D" | "3D" | undefined) ?? "1D";
 			const category = tmpl?.category ?? node.category;

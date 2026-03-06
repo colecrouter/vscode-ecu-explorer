@@ -61,6 +61,71 @@ describe("EcuFlashProvider", () => {
 		}
 	});
 
+	it("regression: materializes base-only tables from included definitions", async () => {
+		const provider = new EcuFlashProvider();
+
+		const tmpDir = await fs.mkdtemp(
+			path.join(os.tmpdir(), "ecuflash-base-only-table-"),
+		);
+		try {
+			const baseXmlPath = path.join(tmpDir, "evo10base.xml");
+			const midXmlPath = path.join(tmpDir, "56890013.xml");
+			const topLevelPath = path.join(tmpDir, "TephraMOD-56890313.xml");
+
+			const baseXml = `<?xml version="1.0"?>
+<rom>
+	<romid>
+		<xmlid>evo10base</xmlid>
+		<internalidaddress>0</internalidaddress>
+	</romid>
+	<scaling name="byte" units="raw" toexpr="x" storagetype="uint8" endian="little" />
+	<table name="MUT Table" category="MUT" type="1D" address="ffff" scaling="byte" />
+</rom>
+`;
+
+			const midXml = `<?xml version="1.0"?>
+<rom>
+	<romid>
+		<xmlid>56890013</xmlid>
+		<internalidaddress>0</internalidaddress>
+	</romid>
+	<include>evo10base</include>
+</rom>
+`;
+
+			const topLevelXml = `<?xml version="1.0"?>
+<rom>
+	<romid>
+		<xmlid>TephraMOD-56890313</xmlid>
+		<internalidaddress>5002a</internalidaddress>
+		<internalidhex>56890313</internalidhex>
+	</romid>
+	<include>56890013</include>
+	<table name="Boost Target Engine Load #1A (High Gear Range)" address="58ef1" type="1D" scaling="byte" />
+</rom>
+`;
+
+			await fs.writeFile(baseXmlPath, baseXml, "utf8");
+			await fs.writeFile(midXmlPath, midXml, "utf8");
+			await fs.writeFile(topLevelPath, topLevelXml, "utf8");
+
+			const def = await provider.parse(pathToFileURL(topLevelPath).toString());
+			const t = def.tables.find((x) => x.name === "MUT Table");
+
+			expect(t).toBeTruthy();
+			expect(t?.kind).toBe("table1d");
+			if (!t || t.kind !== "table1d") throw new Error("expected table1d");
+
+			expect(t.category).toBe("MUT");
+			expect(t.z.address).toBe(0xffff);
+			expect(t.z.dtype).toBe("u8");
+			expect(t.z.endianness).toBe("le");
+			expect(t.rows).toBe(1);
+		} finally {
+			await fs.rm(tmpDir, { recursive: true, force: true });
+		}
+	});
+
 	it("throws descriptive error for missing include using repository fixture file", async () => {
 		const provider = new EcuFlashProvider([invalidFixtureDir]);
 		const romXmlPath = path.join(
@@ -78,8 +143,64 @@ describe("EcuFlashProvider", () => {
 		expect(thrown).toBeTruthy();
 		expect(thrown?.message).toContain('include "does-not-exist"');
 		expect(thrown?.message).toContain(path.resolve(romXmlPath));
-		expect(thrown?.message).toContain("Searched roots:");
-		expect(thrown?.message).toContain("Attempted xmlid lookup");
+		expect(thrown?.message).toContain("configured search roots");
+		expect(thrown?.message).toContain("Search roots:");
+		expect(thrown?.message).toContain("Attempted filename and xmlid lookup");
+		expect(thrown?.message).toContain("external/manual folder");
+	});
+
+	it("resolves include from a parent directory for external/manual definition layouts", async () => {
+		const provider = new EcuFlashProvider();
+
+		const tmpDir = await fs.mkdtemp(
+			path.join(os.tmpdir(), "ecuflash-parent-include-"),
+		);
+		try {
+			const defsRoot = path.join(tmpDir, "defs");
+			const baseDir = path.join(defsRoot, "base");
+			const tephraDir = path.join(defsRoot, "tephra", "stage1");
+			await fs.mkdir(baseDir, { recursive: true });
+			await fs.mkdir(tephraDir, { recursive: true });
+
+			const baseXmlPath = path.join(baseDir, "56890013.xml");
+			const topLevelPath = path.join(tephraDir, "TephraMOD-56890313.xml");
+
+			const baseXml = `<?xml version="1.0"?>
+<rom>
+	<romid>
+		<xmlid>56890013</xmlid>
+		<internalidaddress>0</internalidaddress>
+	</romid>
+	<scaling name="byte" units="raw" toexpr="x" storagetype="uint8" endian="little" />
+	<table name="Base Table" category="Base" type="1D" address="ffff" scaling="byte" />
+</rom>
+`;
+
+			const topLevelXml = `<?xml version="1.0"?>
+<rom>
+	<romid>
+		<xmlid>TephraMOD-56890313</xmlid>
+		<internalidaddress>5002a</internalidaddress>
+		<internalidhex>56890313</internalidhex>
+	</romid>
+	<include>56890013</include>
+	<table name="Tephra Table" address="58ef1" type="1D" scaling="byte" />
+</rom>
+`;
+
+			await fs.writeFile(baseXmlPath, baseXml, "utf8");
+			await fs.writeFile(topLevelPath, topLevelXml, "utf8");
+
+			const def = await provider.parse(pathToFileURL(topLevelPath).toString());
+			expect(def.tables.some((table) => table.name === "Base Table")).toBe(
+				true,
+			);
+			expect(def.tables.some((table) => table.name === "Tephra Table")).toBe(
+				true,
+			);
+		} finally {
+			await fs.rm(tmpDir, { recursive: true, force: true });
+		}
 	});
 
 	it("handles include cycles without infinite loop", async () => {

@@ -16,6 +16,14 @@ import { scoreRomDefinition } from "@ecu-explorer/core";
 import * as vscode from "vscode";
 import type { WorkspaceState } from "../workspace-state.js";
 
+function formatDefinitionParseError(error: unknown): string {
+	const message = error instanceof Error ? error.message : String(error);
+	if (/Failed to resolve include/i.test(message)) {
+		return `Failed to load the selected ROM definition because an included parent definition could not be found. ${message}`;
+	}
+	return `Failed to parse definition file: ${message}`;
+}
+
 /**
  * Resolves a ROM definition for the given ROM file.
  * Checks saved definitions, auto-matches, or prompts the user.
@@ -51,6 +59,7 @@ export async function resolveRomDefinition(
 				"[DEBUG] Failed to load saved definition, will prompt user:",
 				error,
 			);
+			void vscode.window.showErrorMessage(formatDefinitionParseError(error));
 			// Clear invalid saved definition
 			stateManager.saveRomDefinition(romUri.fsPath, "");
 		}
@@ -110,11 +119,18 @@ export async function resolveRomDefinition(
 		});
 
 		if (picked) {
-			const definition = await picked.provider.parse(picked.peek.uri);
-			// Save the user-selected definition
-			stateManager.saveRomDefinition(romUri.fsPath, picked.peek.uri);
-			console.log(`[DEBUG] User-selected definition saved: ${picked.peek.uri}`);
-			return definition;
+			try {
+				const definition = await picked.provider.parse(picked.peek.uri);
+				// Save the user-selected definition
+				stateManager.saveRomDefinition(romUri.fsPath, picked.peek.uri);
+				console.log(
+					`[DEBUG] User-selected definition saved: ${picked.peek.uri}`,
+				);
+				return definition;
+			} catch (error) {
+				void vscode.window.showErrorMessage(formatDefinitionParseError(error));
+				return undefined;
+			}
 		}
 
 		return undefined;
@@ -153,11 +169,18 @@ export async function resolveRomDefinition(
 		});
 
 		if (picked) {
-			const definition = await picked.provider.parse(picked.peek.uri);
-			// Save the user-selected definition
-			stateManager.saveRomDefinition(romUri.fsPath, picked.peek.uri);
-			console.log(`[DEBUG] User-selected definition saved: ${picked.peek.uri}`);
-			return definition;
+			try {
+				const definition = await picked.provider.parse(picked.peek.uri);
+				// Save the user-selected definition
+				stateManager.saveRomDefinition(romUri.fsPath, picked.peek.uri);
+				console.log(
+					`[DEBUG] User-selected definition saved: ${picked.peek.uri}`,
+				);
+				return definition;
+			} catch (error) {
+				void vscode.window.showErrorMessage(formatDefinitionParseError(error));
+				return undefined;
+			}
 		}
 
 		return undefined;
@@ -184,9 +207,7 @@ export async function resolveRomDefinition(
 				);
 				return definition;
 			} catch (error) {
-				vscode.window.showErrorMessage(
-					`Failed to parse definition file: ${error instanceof Error ? error.message : String(error)}`,
-				);
+				void vscode.window.showErrorMessage(formatDefinitionParseError(error));
 			}
 		}
 	}
