@@ -1,8 +1,10 @@
-import type { Endianness, ScalarType } from "../binary";
-import type { Unit } from "../units";
+import type { Endianness, ScalarType } from "../binary.js";
+import type { Unit } from "../units.js";
 
 // Base traits
-interface Entity {
+export interface Entity {
+	/** Stable provider-generated identifier used for internal lookup/routing */
+	id: string;
 	/** Human-readable name */
 	name: string;
 }
@@ -74,8 +76,13 @@ export interface ZDataDefinition extends Entity, Measured, Addressed, Scalable {
 	indexer?: (r: number, c: number) => number;
 }
 
+export interface TableIdentity {
+	/** Stable provider-generated identifier used for internal lookup/routing */
+	id: string;
+}
+
 /** 1D table: only Z array, no axes required (can still have one axis if desired) */
-export interface Table1DDefinition extends Entity, Categorized {
+export interface Table1DDefinition extends TableIdentity, Entity, Categorized {
 	kind: "table1d";
 	rows: number;
 	z: ZDataDefinition;
@@ -84,7 +91,7 @@ export interface Table1DDefinition extends Entity, Categorized {
 }
 
 /** 2D table: X and Y axes define breakpoints; Z contains the cells */
-export interface Table2DDefinition extends Entity, Categorized {
+export interface Table2DDefinition extends TableIdentity, Entity, Categorized {
 	kind: "table2d";
 	rows: number;
 	cols: number;
@@ -94,7 +101,7 @@ export interface Table2DDefinition extends Entity, Categorized {
 }
 
 /** 3D table: X, Y axes; Z can be interpreted as a stack or surface—use rows*cols and optionally depth */
-export interface Table3DDefinition extends Entity, Categorized {
+export interface Table3DDefinition extends TableIdentity, Entity, Categorized {
 	kind: "table3d";
 	rows: number;
 	cols: number;

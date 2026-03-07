@@ -5,8 +5,8 @@ export type {
 	ChartType,
 	HoveredCell,
 	TableSnapshot,
-} from "./views/chart-state.svelte.js";
-export { ChartState } from "./views/chart-state.svelte.js";
+} from "./views/chart-state.svelte";
+export { ChartState } from "./views/chart-state.svelte";
 export {
 	debounce,
 	downsample2D,
@@ -14,8 +14,8 @@ export {
 	formatAxisLabel,
 	formatTooltipValue,
 	shouldDownsample,
-} from "./views/chartUtils";
-export type { ThemeColors } from "./views/colorMap";
+} from "./views/chartUtils.js";
+export type { ThemeColors } from "./views/colorMap.js";
 export { ROMView } from "./views/rom.svelte";
 export { default as SplitView } from "./views/SplitView.svelte";
 export { default as TableCell } from "./views/TableCell.svelte";

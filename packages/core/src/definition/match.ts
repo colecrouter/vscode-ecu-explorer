@@ -1,4 +1,4 @@
-import type { ROMDefinitionStub, ROMFingerprint } from "./rom";
+import type { ROMDefinitionStub, ROMFingerprint } from "./rom.js";
 
 /**
  * Normalize hex string by removing non-hex characters and converting to lowercase

@@ -1,7 +1,7 @@
 import type { TableDefinition } from "@ecu-explorer/core";
 import * as vscode from "vscode";
-import { createTableUri } from "../table-fs-uri";
-import type { RomExplorerTreeProvider } from "../tree/rom-tree-provider";
+import { createTableUri } from "../table-fs-uri.js";
+import type { RomExplorerTreeProvider } from "../tree/rom-tree-provider.js";
 
 /**
  * WorkspaceSymbolProvider for ROM tables
@@ -56,7 +56,7 @@ export class RomSymbolProvider implements vscode.WorkspaceSymbolProvider {
 				}
 
 				// Create table URI
-				const tableUri = createTableUri(romUri.fsPath, table.name);
+				const tableUri = createTableUri(romUri.fsPath, table.id, table.name);
 
 				// Create symbol information
 				const symbol = new vscode.SymbolInformation(

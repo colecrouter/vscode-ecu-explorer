@@ -7,13 +7,13 @@
 import type { LiveDataFrame } from "@ecu-explorer/device";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
-import type { DeviceManagerImpl } from "../src/device-manager";
-import { LiveDataPanelManager } from "../src/live-data-panel-manager";
+import type { DeviceManagerImpl } from "../src/device-manager.js";
+import { LiveDataPanelManager } from "../src/live-data-panel-manager.js";
 import type {
 	GraphCompatibleWebviewPanel,
 	MockWebviewMessage,
-} from "./mocks/webview-mock";
-import { createMockWebviewPanel } from "./mocks/webview-mock";
+} from "./mocks/webview-mock.js";
+import { createMockWebviewPanel } from "./mocks/webview-mock.js";
 
 // Mock interface for testing - only includes methods actually used by LiveDataPanelManager
 interface MockDeviceManager {

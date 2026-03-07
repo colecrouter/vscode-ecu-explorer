@@ -2,10 +2,10 @@ import type { ROMDefinition, TableDefinition } from "@ecu-explorer/core";
 import type { Mock } from "vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
-import { RomDocument } from "../src/rom/document";
-import type { RomEditorProvider } from "../src/rom/editor-provider";
-import { RomExplorerTreeProvider } from "../src/tree/rom-tree-provider";
-import { WorkspaceState } from "../src/workspace-state";
+import { RomDocument } from "../src/rom/document.js";
+import type { RomEditorProvider } from "../src/rom/editor-provider.js";
+import { RomExplorerTreeProvider } from "../src/tree/rom-tree-provider.js";
+import { WorkspaceState } from "../src/workspace-state.js";
 
 type MockEditorProvider = Pick<RomEditorProvider, "onDidChangeCustomDocument">;
 type MockMemento = Pick<vscode.Memento, "get" | "update" | "keys">;
@@ -21,6 +21,7 @@ function createMockMemento(): MockMemento {
 
 function createBaseTable(kind: TableKind, name: string): TableDefinition {
 	const z = {
+		id: `${name}-z`,
 		name: "z",
 		address: 0x1000,
 		dtype: "u8" as const,
@@ -28,6 +29,7 @@ function createBaseTable(kind: TableKind, name: string): TableDefinition {
 
 	if (kind === "table1d") {
 		return {
+			id: `${name}-table`,
 			name,
 			kind,
 			rows: 10,
@@ -37,6 +39,7 @@ function createBaseTable(kind: TableKind, name: string): TableDefinition {
 
 	if (kind === "table2d") {
 		return {
+			id: `${name}-table`,
 			name,
 			kind,
 			rows: 10,
@@ -46,6 +49,7 @@ function createBaseTable(kind: TableKind, name: string): TableDefinition {
 	}
 
 	return {
+		id: `${name}-table`,
 		name,
 		kind,
 		rows: 10,

@@ -1,5 +1,5 @@
-import type { ScalarType } from "../binary";
-import type { ValidationContext, ValidationResult } from "./types";
+import type { ScalarType } from "../binary.js";
+import type { ValidationContext, ValidationResult } from "./types.js";
 
 /**
  * Get the valid range for a scalar data type

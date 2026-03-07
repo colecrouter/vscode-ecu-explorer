@@ -5,7 +5,7 @@ import type {
 } from "@ecu-explorer/core";
 import { validateValue } from "@ecu-explorer/core";
 import * as vscode from "vscode";
-import type { TableSnapshot } from "./parser";
+import type { TableSnapshot } from "./parser.js";
 
 /**
  * Import preview data for user confirmation

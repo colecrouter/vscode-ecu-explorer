@@ -8,12 +8,13 @@ import {
 	vi,
 } from "vitest";
 import * as vscode from "vscode";
+import { activate } from "../src/extension.js";
 import {
 	type EditOperation,
 	isBatchEdit,
 	UndoRedoManager,
-} from "../src/undo-redo-manager";
-import { WorkspaceState } from "../src/workspace-state";
+} from "../src/undo-redo-manager.js";
+import { WorkspaceState } from "../src/workspace-state.js";
 
 type RegisteredCommandHandler = (...args: readonly unknown[]) => unknown;
 
@@ -122,8 +123,6 @@ vi.mock("node:fs/promises", () => ({
 	readdir: vi.fn().mockResolvedValue([]),
 	readFile: vi.fn().mockResolvedValue(new Uint8Array(0)),
 }));
-
-import { activate } from "../src/extension";
 
 /**
  * Create a mock FileSystemWatcher that has onDidChange/onDidCreate/onDidDelete event handlers.

@@ -31,7 +31,7 @@ import {
 	SST_TRANS_BLOCK,
 	type SstBlockDef,
 	type SstParameterDef,
-} from "./sst-parameters";
+} from "./sst-parameters.js";
 
 export type { SstBlockDef, SstParameterDef };
 export {

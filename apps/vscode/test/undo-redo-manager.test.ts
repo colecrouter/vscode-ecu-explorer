@@ -5,7 +5,7 @@ import {
 	isBatchEdit,
 	type StackEntry,
 	UndoRedoManager,
-} from "../src/undo-redo-manager";
+} from "../src/undo-redo-manager.js";
 
 /**
  * Helper to build a minimal EditOperation for testing.

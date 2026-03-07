@@ -1,6 +1,6 @@
 import type { LiveDataFrame, PidDescriptor } from "@ecu-explorer/device";
 import * as vscode from "vscode";
-import { readConfig } from "./config";
+import { readConfig } from "./config.js";
 
 export type LoggingState = "idle" | "recording" | "paused";
 

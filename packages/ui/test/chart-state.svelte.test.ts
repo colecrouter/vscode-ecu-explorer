@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	ChartState,
 	type TableSnapshot,
-} from "../src/lib/views/chart-state.svelte";
+} from "../src/lib/views/chart-state.svelte.js";
 
 type ChartStateWithLayerOverride = ChartState & {
 	currentLayer: number;

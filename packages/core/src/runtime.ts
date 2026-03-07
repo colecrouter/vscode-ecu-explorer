@@ -1,5 +1,5 @@
-import type { ROMDefinitionProvider } from "./definition/provider";
-import type { ROMDefinition } from "./definition/rom";
+import type { ROMDefinitionProvider } from "./definition/provider.js";
+import type { ROMDefinition } from "./definition/rom.js";
 
 /** Back-compat alias used by the VS Code extension. */
 export type DefinitionProvider = ROMDefinitionProvider;

@@ -36,11 +36,11 @@ import {
 	type SstTransData,
 	TRANS_MODE,
 	validateSstBlockBuffer,
-} from "../src/sst-decoder";
+} from "../src/sst-decoder.js";
 import {
 	getAllSstParameterPids,
 	getSstParameterCount,
-} from "../src/sst-parameters";
+} from "../src/sst-parameters.js";
 
 /**
  * Create a test buffer filled with a specific byte pattern.

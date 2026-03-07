@@ -14,8 +14,8 @@ import type {
 } from "@ecu-explorer/device";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
-import { DeviceManagerImpl } from "../src/device-manager";
-import { DeviceStatusBarManager } from "../src/device-status-bar";
+import { DeviceManagerImpl } from "../src/device-manager.js";
+import { DeviceStatusBarManager } from "../src/device-status-bar.js";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 

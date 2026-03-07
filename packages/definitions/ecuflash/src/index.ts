@@ -89,6 +89,11 @@ function fsPathToUri(p: string): string {
 	return pathToFileURL(p).toString();
 }
 
+function isXmlDefinitionUri(uriOrPath: string): boolean {
+	const fsPath = uriToFsPath(uriOrPath);
+	return path.extname(fsPath).toLowerCase() === ".xml";
+}
+
 function formatIncludeResolutionError(
 	includeToken: string,
 	parentDefinitionPath: string,
@@ -308,9 +313,15 @@ type TemplateAxis = {
 	elements: number | undefined;
 	scaling: string | undefined;
 	data: number[] | undefined;
+	address: number | undefined;
+};
+
+type ParsedChildAxis = Omit<TemplateAxis, "role"> & {
+	role?: "x" | "y";
 };
 
 type TemplateTable = {
+	id: string;
 	name: string;
 	category: string | undefined;
 	type: "1D" | "2D" | "3D" | undefined;
@@ -322,7 +333,9 @@ type TemplateTable = {
 
 function parseTemplateTable(node: TableNode): TemplateTable | null {
 	if (!node.name) return null;
+	const address = parseAddress(node.address);
 	const axes: TemplateAxis[] = [];
+	const unnamedAxes: ParsedChildAxis[] = [];
 	const children = asArray(node.table);
 	for (const child of children) {
 		const role = child.type?.toLowerCase().includes("x axis")
@@ -330,22 +343,50 @@ function parseTemplateTable(node: TableNode): TemplateTable | null {
 			: child.type?.toLowerCase().includes("y axis")
 				? "y"
 				: undefined;
-		if (!role) continue;
-		axes.push({
-			role,
+		const parsedAxis: ParsedChildAxis = {
 			name: child.name,
 			elements: parseNumberish(child.elements) ?? undefined,
 			scaling: child.scaling,
+			address: parseAddress(child.address),
 			data: (() => {
 				const values = asArray(child.data)
 					.map((d) => Number.parseFloat(String(d)))
 					.filter((n) => Number.isFinite(n));
 				return values.length ? values : undefined;
 			})(),
+			...(role ? { role } : {}),
+		};
+		if (role) {
+			axes.push({ ...parsedAxis, role });
+			continue;
+		}
+		unnamedAxes.push(parsedAxis);
+	}
+
+	const assignFallbackAxis = (role: "x" | "y") => {
+		if (axes.some((axis) => axis.role === role)) return;
+		const fallback = unnamedAxes.shift();
+		if (!fallback) return;
+		axes.push({
+			role,
+			name: fallback.name,
+			elements: fallback.elements,
+			scaling: fallback.scaling,
+			address: fallback.address,
+			data: fallback.data,
 		});
+	};
+
+	if (children.length === 1) {
+		assignFallbackAxis("x");
+	}
+	if (children.length >= 2) {
+		assignFallbackAxis("x");
+		assignFallbackAxis("y");
 	}
 
 	return {
+		id: buildEcuFlashTableId(node.name, address, node.category),
 		name: node.name,
 		category: node.category,
 		type:
@@ -353,10 +394,108 @@ function parseTemplateTable(node: TableNode): TemplateTable | null {
 				? node.type
 				: undefined,
 		scaling: node.scaling,
-		address: parseAddress(node.address),
+		address,
 		swapxy: node.swapxy === "true",
 		axes,
 	};
+}
+
+function buildEcuFlashTableId(
+	name: string,
+	address: number | undefined,
+	category: string | undefined,
+): string {
+	const normalizedName = name.trim();
+	const normalizedCategory = category?.trim() || "uncategorized";
+	const normalizedAddress =
+		address !== undefined ? `0x${address.toString(16)}` : "noaddr";
+	return `${normalizedName}::${normalizedCategory}::${normalizedAddress}`;
+}
+
+function buildParsedTableId(
+	tableName: string,
+	category: string | undefined,
+	address: number | undefined,
+	axisIdentity: string | undefined = undefined,
+): string {
+	const baseId = buildEcuFlashTableId(tableName, address, category);
+	return axisIdentity ? `${baseId}::${axisIdentity}` : baseId;
+}
+
+function buildAxisIdentity(
+	axis: AxisDefinition | undefined,
+): string | undefined {
+	if (!axis) return undefined;
+	if (axis.kind === "dynamic") {
+		return `${axis.name}::0x${axis.address.toString(16)}`;
+	}
+	return `${axis.name}::static::${axis.values.length}`;
+}
+
+function buildTableAxisIdentity(
+	x: AxisDefinition | undefined,
+	y: AxisDefinition | undefined,
+): string | undefined {
+	const axisParts = [
+		x ? `x=${buildAxisIdentity(x)}` : undefined,
+		y ? `y=${buildAxisIdentity(y)}` : undefined,
+	].filter((value): value is string => Boolean(value));
+	return axisParts.length > 0 ? axisParts.join("|") : undefined;
+}
+
+function stableSerialize(value: unknown): string {
+	if (Array.isArray(value)) {
+		return `[${value.map((entry) => stableSerialize(entry)).join(",")}]`;
+	}
+	if (value && typeof value === "object") {
+		const entries = Object.entries(value as Record<string, unknown>)
+			.filter(([, entry]) => entry !== undefined)
+			.sort(([a], [b]) => a.localeCompare(b));
+		return `{${entries
+			.map(([key, entry]) => `${JSON.stringify(key)}:${stableSerialize(entry)}`)
+			.join(",")}}`;
+	}
+	return JSON.stringify(value);
+}
+
+function areStructurallyIdenticalTables(
+	left: TableDefinition,
+	right: TableDefinition,
+): boolean {
+	return stableSerialize(left) === stableSerialize(right);
+}
+
+function collapseExactDuplicateTables(
+	tables: TableDefinition[],
+): TableDefinition[] {
+	const deduped: TableDefinition[] = [];
+	const tablesById = new Map<string, TableDefinition[]>();
+
+	for (const table of tables) {
+		const existing = tablesById.get(table.id) ?? [];
+		const exactDuplicate = existing.find((candidate) =>
+			areStructurallyIdenticalTables(candidate, table),
+		);
+		if (exactDuplicate) {
+			continue;
+		}
+		existing.push(table);
+		tablesById.set(table.id, existing);
+		deduped.push(table);
+	}
+
+	const conflictingDuplicates = [...tablesById.entries()]
+		.filter(([, groupedTables]) => groupedTables.length > 1)
+		.map(([id, groupedTables]) => `${id} (${groupedTables.length})`)
+		.sort((a, b) => a.localeCompare(b));
+
+	if (conflictingDuplicates.length > 0) {
+		throw new Error(
+			`ECUFlash definition produced conflicting duplicate stable table ids: ${conflictingDuplicates.join(", ")}`,
+		);
+	}
+
+	return deduped;
 }
 
 function buildTemplateIndex(rom: Raw): Map<string, TemplateTable> {
@@ -365,9 +504,133 @@ function buildTemplateIndex(rom: Raw): Map<string, TemplateTable> {
 	for (const t of tables) {
 		const parsed = parseTemplateTable(t);
 		if (!parsed) continue;
-		if (!out.has(parsed.name)) out.set(parsed.name, parsed);
+		const existing = out.get(parsed.name);
+		if (!existing) {
+			out.set(parsed.name, parsed);
+			continue;
+		}
+
+		const axesByRole = new Map<TemplateAxis["role"], TemplateAxis>();
+		for (const axis of existing.axes) axesByRole.set(axis.role, axis);
+		for (const axis of parsed.axes) {
+			const current = axesByRole.get(axis.role);
+			axesByRole.set(axis.role, {
+				role: axis.role,
+				name: axis.name ?? current?.name,
+				elements: axis.elements ?? current?.elements,
+				scaling: axis.scaling ?? current?.scaling,
+				address: axis.address ?? current?.address,
+				data: axis.data ?? current?.data,
+			});
+		}
+
+		out.set(parsed.name, {
+			id: parsed.id,
+			name: parsed.name,
+			category: parsed.category ?? existing.category,
+			type: parsed.type ?? existing.type,
+			scaling: parsed.scaling ?? existing.scaling,
+			address: parsed.address ?? existing.address,
+			swapxy: parsed.swapxy || existing.swapxy,
+			axes: [...axesByRole.values()],
+		});
 	}
 	return out;
+}
+
+type TableShape = "scalar" | "1d" | "2d";
+
+function inferShapeFromChildCount(childCount: number): TableShape | undefined {
+	if (childCount === 0) return "scalar";
+	if (childCount === 1) return "1d";
+	if (childCount === 2) return "2d";
+	return undefined;
+}
+
+function inferNodeShape(node: TableNode | undefined): TableShape | undefined {
+	if (!node) return undefined;
+	return inferShapeFromChildCount(asArray(node.table).length);
+}
+
+function inferTemplateShape(
+	template: TemplateTable | undefined,
+): TableShape | undefined {
+	if (!template) return undefined;
+	if (template.axes.length > 0) {
+		return inferShapeFromChildCount(template.axes.length);
+	}
+	if (template.type === "1D") return "scalar";
+	if (template.type === "2D") return "1d";
+	if (template.type === "3D") return "2d";
+	return undefined;
+}
+
+function describeShape(shape: TableShape): string {
+	switch (shape) {
+		case "scalar":
+			return "scalar/1x1";
+		case "1d":
+			return "1D";
+		case "2d":
+			return "2D";
+	}
+}
+
+function resolveTableShape(
+	node: TableNode,
+	template: TemplateTable | undefined,
+): TableShape {
+	const nodeShape = inferNodeShape(node);
+	const templateShape = inferTemplateShape(template);
+	const explicitTypeShape = template?.type
+		? inferTemplateShape({ ...template, axes: [] })
+		: undefined;
+	const resolvedShape =
+		nodeShape ?? templateShape ?? explicitTypeShape ?? "scalar";
+
+	if (
+		nodeShape &&
+		templateShape &&
+		nodeShape !== templateShape &&
+		nodeShape !== "scalar"
+	) {
+		throw new Error(
+			`ECUFlash table "${node.name ?? "<unnamed>"}" has conflicting inherited shape metadata: local child count implies ${describeShape(nodeShape)} but inherited metadata implies ${describeShape(templateShape)}.`,
+		);
+	}
+
+	return resolvedShape;
+}
+
+function axisLength(axis: AxisDefinition | undefined): number | undefined {
+	if (!axis) return undefined;
+	return axis.kind === "dynamic" ? axis.length : axis.values.length;
+}
+
+function hasInheritedAxisMetadata(
+	node: TableNode,
+	template: TemplateTable | undefined,
+): boolean {
+	return asArray(node.table).length > 0 || Boolean(template?.axes.length);
+}
+
+function assertResolvedAxisLength(
+	tableName: string,
+	axisRole: "x" | "y",
+	axis: AxisDefinition | undefined,
+	node: TableNode,
+	template: TemplateTable | undefined,
+): number {
+	const length = axisLength(axis);
+	if (length !== undefined) return length;
+	if (hasInheritedAxisMetadata(node, template)) {
+		throw new Error(
+			`ECUFlash inherited table "${tableName}" could not resolve canonical ${axisRole.toUpperCase()}-axis dimensions from local/inherited child metadata. Refusing to emit a fabricated 1x1 table.`,
+		);
+	}
+	throw new Error(
+		`ECUFlash table "${tableName}" requires a ${axisRole.toUpperCase()} axis but none could be resolved.`,
+	);
 }
 
 async function listXmlFilesRecursive(rootDir: string): Promise<string[]> {
@@ -418,6 +681,7 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 
 	private cachedDefinitionUris: string[] | null = null;
 	private additionalSearchPaths: string[] = [];
+	private includeAliasIndex: Map<string, string> | null = null;
 
 	/**
 	 * Create a new EcuFlashProvider
@@ -433,6 +697,7 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 	 */
 	invalidateCache(): void {
 		this.cachedDefinitionUris = null;
+		this.includeAliasIndex = null;
 	}
 
 	/**
@@ -440,6 +705,7 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 	 */
 	dispose(): void {
 		this.cachedDefinitionUris = null;
+		this.includeAliasIndex = null;
 	}
 
 	async discoverDefinitionUris(romUri?: string): Promise<string[]> {
@@ -474,6 +740,10 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 
 		this.cachedDefinitionUris = allFiles.map(fsPathToUri);
 		return this.cachedDefinitionUris;
+	}
+
+	canParseDefinitionUri(definitionUri: string): boolean {
+		return isXmlDefinitionUri(definitionUri);
 	}
 
 	/**
@@ -596,10 +866,8 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 		if (Number.isFinite(yearNum)) platform.year = yearNum;
 
 		const stub = await this.peek(definitionUri);
-		const tables = this.parseTablesFromDoc(
-			inheritedRom,
-			templates,
-			scalingIndex,
+		const tables = collapseExactDuplicateTables(
+			this.parseTablesFromDoc(inheritedRom, templates, scalingIndex),
 		);
 
 		// Parse checksum module if present
@@ -656,6 +924,32 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 		const includeXmlIdLookupCache = new Map<string, string | null>();
 		const fileXmlIdCache = new Map<string, string | null>();
 
+		const getIncludeAliasIndex = async (): Promise<Map<string, string>> => {
+			if (this.includeAliasIndex) return this.includeAliasIndex;
+			const index = new Map<string, string>();
+			for (const root of searchRoots) {
+				const files = await recursiveXmlFilesForRoot(root);
+				for (const file of files) {
+					const baseName = path.basename(file, ".xml");
+					const normalizedBase = normalizeLookupToken(baseName);
+					if (normalizedBase && !index.has(normalizedBase)) {
+						index.set(normalizedBase, file);
+					}
+					const dashed = baseName.match(/^(\d{8})\b/);
+					if (dashed) {
+						const shortId = dashed[1];
+						if (!shortId) continue;
+						const normalizedShort = normalizeLookupToken(shortId);
+						if (normalizedShort && !index.has(normalizedShort)) {
+							index.set(normalizedShort, file);
+						}
+					}
+				}
+			}
+			this.includeAliasIndex = index;
+			return index;
+		};
+
 		const includeTokensFrom = (parentRom: Raw): string[] =>
 			asArray((parentRom as Raw).include as string | string[])
 				.map((s) => String(s).trim())
@@ -691,20 +985,6 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 			const candidates = includePathCandidates(includeToken);
 			const normalizedLookupToken = normalizeLookupToken(includeToken);
 
-			if (includeXmlIdLookupCache.has(normalizedLookupToken)) {
-				const cachedPath = includeXmlIdLookupCache.get(normalizedLookupToken);
-				if (cachedPath && (await fileExists(cachedPath))) {
-					return cachedPath;
-				}
-				if (cachedPath === null) {
-					throw formatIncludeResolutionError(
-						includeToken,
-						parentDefinitionPath,
-						searchRoots,
-					);
-				}
-			}
-
 			for (const candidate of candidates) {
 				const siblingCandidate = path.resolve(
 					path.dirname(parentDefinitionPath),
@@ -722,6 +1002,36 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 						return rootedCandidate;
 					}
 				}
+			}
+
+			const includeAliasIndex = await getIncludeAliasIndex();
+			const aliased = includeAliasIndex.get(normalizedLookupToken);
+			if (aliased && (await fileExists(aliased))) {
+				includeXmlIdLookupCache.set(normalizedLookupToken, aliased);
+				return aliased;
+			}
+
+			if (includeXmlIdLookupCache.has(normalizedLookupToken)) {
+				const cachedPath = includeXmlIdLookupCache.get(normalizedLookupToken);
+				if (cachedPath && (await fileExists(cachedPath))) {
+					return cachedPath;
+				}
+				if (cachedPath === null) {
+					throw formatIncludeResolutionError(
+						includeToken,
+						parentDefinitionPath,
+						searchRoots,
+					);
+				}
+			}
+
+			if (this.additionalSearchPaths.length === 0) {
+				includeXmlIdLookupCache.set(normalizedLookupToken, null);
+				throw formatIncludeResolutionError(
+					includeToken,
+					parentDefinitionPath,
+					searchRoots,
+				);
 			}
 
 			const lowerBasenames = new Set(
@@ -811,116 +1121,129 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 		const nodes = asArray((rom as Raw).table as TableNode | TableNode[]);
 
 		for (const node of nodes) {
-			const name = node.name;
-			if (!name) continue;
+			try {
+				const name = node.name;
+				if (!name) continue;
 
-			const tmpl = templates.get(name);
-			const address = parseAddress(node.address) ?? tmpl?.address;
-			if (address === undefined) continue;
-			const type =
-				tmpl?.type ?? (node.type as "1D" | "2D" | "3D" | undefined) ?? "1D";
-			const category = tmpl?.category ?? node.category;
-			const scalingName = node.scaling ?? tmpl?.scaling;
-			const scaling = scalingName ? scalings.get(scalingName) : undefined;
-			const affine = affineFromScaling(scaling);
-			const zUnit = unitFromSymbol(scaling?.units);
+				const tmpl = templates.get(name);
+				const address = parseAddress(node.address) ?? tmpl?.address;
+				if (address === undefined) continue;
+				const shape = resolveTableShape(node, tmpl);
+				const category = tmpl?.category ?? node.category;
+				const scalingName = node.scaling ?? tmpl?.scaling;
+				const scaling = scalingName ? scalings.get(scalingName) : undefined;
+				const affine = affineFromScaling(scaling);
+				const zUnit = unitFromSymbol(scaling?.units);
 
-			const z: Table1DDefinition["z"] = {
-				name,
-				address,
-				dtype: storageTypeToScalarType(scaling?.storagetype),
-				endianness: scalingEndianness(scaling?.endian),
-				// v0: apply simple affine (linear) scalings when possible, otherwise keep raw.
-				scale: affine?.scale ?? 1,
-				offset: affine?.offset ?? 0,
-				...(zUnit ? { unit: zUnit } : {}),
-			};
-
-			if (type === "1D") {
-				const def: Table1DDefinition = {
-					kind: "table1d",
+				const z: Table1DDefinition["z"] = {
+					id: buildParsedTableId(name, category, address),
 					name,
-					...(category ? { category } : {}),
-					rows: 1,
-					z: { ...z, length: 1 },
+					address,
+					dtype: storageTypeToScalarType(scaling?.storagetype),
+					endianness: scalingEndianness(scaling?.endian),
+					// v0: apply simple affine (linear) scalings when possible, otherwise keep raw.
+					scale: affine?.scale ?? 1,
+					offset: affine?.offset ?? 0,
+					...(zUnit ? { unit: zUnit } : {}),
 				};
-				out.push(def);
-				continue;
-			}
 
-			if (type === "2D") {
+				if (shape === "scalar") {
+					const def: Table1DDefinition = {
+						id: buildParsedTableId(name, category, address),
+						kind: "table1d",
+						name,
+						...(category ? { category } : {}),
+						rows: 1,
+						z: { ...z, length: 1 },
+					};
+					out.push(def);
+					continue;
+				}
+
+				if (shape === "1d") {
+					const x = this.buildAxisDefinition(
+						node,
+						tmpl?.axes.find((a) => a.role === "y") ??
+							tmpl?.axes.find((a) => a.role === "x"),
+						scalings,
+					);
+					const rows = assertResolvedAxisLength(name, "x", x, node, tmpl);
+					const stableTableId = buildParsedTableId(
+						name,
+						category,
+						address,
+						buildTableAxisIdentity(x, undefined),
+					);
+					const def: Table1DDefinition = {
+						id: stableTableId,
+						kind: "table1d",
+						name,
+						...(category ? { category } : {}),
+						rows,
+						...(x ? { x } : {}),
+						z: { ...z, length: rows },
+					};
+					out.push(def);
+					continue;
+				}
+
+				// ECUFlash 3D tables are 2D surfaces (X and Y axes), but inherited
+				// shape resolution is driven by child-axis count rather than XML type label.
+				const swapxy = node.swapxy === "true" || tmpl?.swapxy === true;
+
+				// Build axis definitions WITHOUT swapping
 				const x = this.buildAxisDefinition(
 					node,
-					tmpl?.axes.find((a) => a.role === "y") ??
-						tmpl?.axes.find((a) => a.role === "x"),
+					tmpl?.axes.find((a) => a.role === "x"),
 					scalings,
+					"x",
 				);
-				const rows =
-					(x && x.kind === "dynamic" ? x.length : undefined) ??
-					(x && x.kind === "static" ? x.values.length : undefined) ??
-					1;
-				const def: Table1DDefinition = {
-					kind: "table1d",
+				const y = this.buildAxisDefinition(
+					node,
+					tmpl?.axes.find((a) => a.role === "y"),
+					scalings,
+					"y",
+				);
+
+				// Calculate dimensions
+				const cols = assertResolvedAxisLength(name, "x", x, node, tmpl);
+				const rows = assertResolvedAxisLength(name, "y", y, node, tmpl);
+				const stableTableId = buildParsedTableId(
+					name,
+					category,
+					address,
+					buildTableAxisIdentity(x, y),
+				);
+
+				// For swapxy, adjust strides to read column-major data
+				const elementSize = byteSize(
+					storageTypeToScalarType(scaling?.storagetype),
+				);
+				const colStrideBytes = swapxy ? rows * elementSize : undefined;
+				const rowStrideBytes = swapxy ? elementSize : undefined;
+
+				const def: Table2DDefinition = {
+					id: stableTableId,
+					kind: "table2d",
 					name,
 					...(category ? { category } : {}),
 					rows,
+					cols,
 					...(x ? { x } : {}),
-					z: { ...z, length: rows },
+					...(y ? { y } : {}),
+					z: {
+						...z,
+						length: rows * cols,
+						...(colStrideBytes ? { colStrideBytes } : {}),
+						...(rowStrideBytes ? { rowStrideBytes } : {}),
+					},
 				};
 				out.push(def);
-				continue;
+			} catch (error) {
+				console.warn(
+					`[EcuFlashProvider] Skipping table ${JSON.stringify(node.name ?? "<unnamed>")}: ${error instanceof Error ? error.message : String(error)}`,
+				);
 			}
-
-			// ECUFlash 3D tables are 2D surfaces (X and Y axes).
-			const swapxy = node.swapxy === "true" || tmpl?.swapxy === true;
-
-			// Build axis definitions WITHOUT swapping
-			const x = this.buildAxisDefinition(
-				node,
-				tmpl?.axes.find((a) => a.role === "x"),
-				scalings,
-				"x",
-			);
-			const y = this.buildAxisDefinition(
-				node,
-				tmpl?.axes.find((a) => a.role === "y"),
-				scalings,
-				"y",
-			);
-
-			// Calculate dimensions
-			const cols =
-				(x && x.kind === "dynamic" ? x.length : undefined) ??
-				(x && x.kind === "static" ? x.values.length : undefined) ??
-				1;
-			const rows =
-				(y && y.kind === "dynamic" ? y.length : undefined) ??
-				(y && y.kind === "static" ? y.values.length : undefined) ??
-				1;
-
-			// For swapxy, adjust strides to read column-major data
-			const elementSize = byteSize(
-				storageTypeToScalarType(scaling?.storagetype),
-			);
-			const colStrideBytes = swapxy ? rows * elementSize : undefined;
-			const rowStrideBytes = swapxy ? elementSize : undefined;
-
-			const def: Table2DDefinition = {
-				kind: "table2d",
-				name,
-				...(category ? { category } : {}),
-				rows,
-				cols,
-				...(x ? { x } : {}),
-				...(y ? { y } : {}),
-				z: {
-					...z,
-					length: rows * cols,
-					...(colStrideBytes ? { colStrideBytes } : {}),
-					...(rowStrideBytes ? { rowStrideBytes } : {}),
-				},
-			};
-			out.push(def);
 		}
 
 		return out;
@@ -949,6 +1272,7 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 			const scaling = scalingName ? scalings.get(scalingName) : undefined;
 			const unit = unitFromSymbol(scaling?.units);
 			return {
+				id: `${template.name ?? "Axis"}::static`,
 				kind: "static",
 				name: template.name ?? "Axis",
 				values: template.data,
@@ -964,17 +1288,20 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 		const scaling = scalingName ? scalings.get(scalingName) : undefined;
 		const affine = affineFromScaling(scaling);
 		const hasUnresolvedNamedScaling = Boolean(scalingName) && !scaling;
+		const inheritedAxisAddress = axisAddress ?? template?.address;
 
-		if (axisAddress === undefined) {
+		if (inheritedAxisAddress === undefined) {
 			const values = asArray(axisNode.data)
 				.map((d) => Number.parseFloat(String(d)))
 				.filter((n) => Number.isFinite(n));
-			if (!values.length) return undefined;
+			const inheritedValues = values.length ? values : template?.data;
+			if (!inheritedValues?.length) return undefined;
 			const unit = unitFromSymbol(scaling?.units);
 			return {
+				id: `${axisNode.name ?? "Axis"}::static`,
 				kind: "static",
 				name: axisNode.name ?? "Axis",
-				values,
+				values: inheritedValues,
 				...(unit ? { unit } : {}),
 			};
 		}
@@ -990,9 +1317,10 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 			: scalingEndianness(scaling?.endian);
 		const unit = unitFromSymbol(scaling?.units);
 		return {
+			id: `${axisNode.name ?? template?.name ?? "Axis"}::0x${inheritedAxisAddress.toString(16)}`,
 			kind: "dynamic",
 			name: axisNode.name ?? template?.name ?? "Axis",
-			address: axisAddress,
+			address: inheritedAxisAddress,
 			length: elements,
 			dtype: inferredDynamicAxisDtype,
 			endianness: inferredDynamicAxisEndianness,

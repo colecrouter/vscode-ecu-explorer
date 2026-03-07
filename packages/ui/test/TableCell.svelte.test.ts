@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render } from "vitest-browser-svelte";
-import TableCell from "../src/lib/views/TableCell.svelte";
+import TableCell from "../src/lib/views/TableCell.svelte.js";
 
 describe("TableCell Component", () => {
 	const bytes = new Uint8Array([42]);

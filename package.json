@@ -36,6 +36,7 @@
 	"scripts": {
 		"build": "npm run build --workspaces",
 		"check": "npm run check --workspaces && tsc --noEmit -p tsconfig.test.node.json && tsc --noEmit -p tsconfig.test.vscode.json && tsc --noEmit -p tsconfig.test.browser.json",
+		"inspect:rom": "npm run inspect:rom -w @ecu-explorer/definitions-ecuflash --",
 		"lint": "biome check",
 		"format": "biome format --write && biome check --write --linter-enabled false && prettier --write . -l",
 		"test": "vitest run",

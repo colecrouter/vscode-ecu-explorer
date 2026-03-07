@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	findClosestMatches,
 	levenshteinDistance,
-} from "../src/definition/fuzzy-match";
+} from "../src/definition/fuzzy-match.js";
 
 const nullableFindClosestMatches = findClosestMatches as (
 	input: string | null,

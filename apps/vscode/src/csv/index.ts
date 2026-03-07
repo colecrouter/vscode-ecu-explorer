@@ -13,9 +13,9 @@ export {
 	exportActiveTableCsvFlow,
 	sanitizeFilename,
 	snapshotToCsv,
-} from "./export";
+} from "./export.js";
 // Import functions
-export { applySnapshotToRom, importTableFromCsvFlow } from "./import";
+export { applySnapshotToRom, importTableFromCsvFlow } from "./import.js";
 // Parser functions
 export {
 	csvToSnapshot,
@@ -23,7 +23,7 @@ export {
 	parseCsv1D,
 	parseCsv2D,
 	type TableSnapshot,
-} from "./parser";
+} from "./parser.js";
 
 // Validation functions and types
 export {
@@ -34,4 +34,4 @@ export {
 	type ValidationError,
 	type ValidationWarning,
 	validateDimensions,
-} from "./validation";
+} from "./validation.js";

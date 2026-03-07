@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import type { ActiveConnection, DeviceManagerImpl } from "./device-manager";
+import type { ActiveConnection, DeviceManagerImpl } from "./device-manager.js";
 
 /**
  * Manages the ECU Explorer status bar items for device connection and logging state.

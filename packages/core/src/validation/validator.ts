@@ -3,12 +3,12 @@ import {
 	validateMinMax,
 	validateMonotonicIncreasing,
 	validateNumber,
-} from "./rules";
+} from "./rules.js";
 import type {
 	ValidationContext,
 	ValidationOptions,
 	ValidationResult,
-} from "./types";
+} from "./types.js";
 
 /**
  * Validate a single value with all applicable rules

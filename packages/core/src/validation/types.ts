@@ -1,4 +1,4 @@
-import type { ScalarType } from "../binary";
+import type { ScalarType } from "../binary.js";
 
 /**
  * Error codes for validation failures

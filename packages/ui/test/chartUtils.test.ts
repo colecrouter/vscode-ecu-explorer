@@ -13,7 +13,7 @@ import {
 	formatAxisLabel,
 	formatTooltipValue,
 	shouldDownsample,
-} from "../src/lib/views/chartUtils";
+} from "../src/lib/views/chartUtils.js";
 
 describe("chartUtils", () => {
 	describe("shouldDownsample", () => {

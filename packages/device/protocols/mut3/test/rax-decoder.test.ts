@@ -31,7 +31,7 @@ import {
 	RAX_F_BLOCK,
 	RAX_G_BLOCK,
 	VVT_STATUS,
-} from "../src/rax-decoder";
+} from "../src/rax-decoder.js";
 
 // ---------------------------------------------------------------------------
 // RAX Block A — Fuel Trim Tests

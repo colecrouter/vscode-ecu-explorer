@@ -12,7 +12,10 @@ import type {
 	ROMDefinition,
 	ROMDefinitionStub,
 } from "@ecu-explorer/core";
-import { scoreRomDefinition } from "@ecu-explorer/core";
+import {
+	planRomDefinitionResolution,
+	ROM_DEFINITION_CONFIDENCE_THRESHOLD,
+} from "@ecu-explorer/core";
 import * as vscode from "vscode";
 import type { WorkspaceState } from "../workspace-state.js";
 
@@ -65,56 +68,39 @@ export async function resolveRomDefinition(
 		}
 	}
 
-	// If no saved definition or loading failed, find matching definitions
-	const candidates: {
-		provider: DefinitionProvider;
-		peek: ROMDefinitionStub;
-		score: number;
-	}[] = [];
+	const plan = await planRomDefinitionResolution(
+		romUri.toString(),
+		romBytes,
+		providerRegistry.list(),
+	);
 
-	for (const p of providerRegistry.list()) {
-		// Pass ROM URI to help discover definitions near the ROM file
-		const uris = await p.discoverDefinitionUris(romUri.toString());
-		for (const u of uris) {
-			const peek = await p.peek(u);
-			const score = scoreRomDefinition(romBytes, peek);
-			if (score > 0) candidates.push({ provider: p, peek, score });
-		}
+	if (plan.kind === "auto") {
+		stateManager.saveRomDefinition(romUri.fsPath, plan.definitionUri);
+		console.log(`[DEBUG] Auto-matched definition saved: ${plan.definitionUri}`);
+		return plan.definition;
 	}
 
-	// Sort by score (highest first)
-	candidates.sort((a, b) => b.score - a.score);
-
-	// Determine if we should auto-match or prompt user
-	const CONFIDENCE_THRESHOLD = 0.5; // Require at least 50% match confidence
-
-	if (candidates.length > 0) {
-		const best = candidates[0];
-
-		// Auto-match if confidence is high enough
-		if (best && best.score >= CONFIDENCE_THRESHOLD) {
-			const definition = await best.provider.parse(best.peek.uri);
-			// Save the auto-matched definition
-			stateManager.saveRomDefinition(romUri.fsPath, best.peek.uri);
-			console.log(`[DEBUG] Auto-matched definition saved: ${best.peek.uri}`);
-			return definition;
-		}
-
-		// Low confidence or multiple similar matches - let user choose
+	if (plan.kind === "prompt-candidate") {
 		type DefPickItem = vscode.QuickPickItem & {
 			provider: DefinitionProvider;
 			peek: ROMDefinitionStub;
 		};
 
-		const items: DefPickItem[] = candidates.map((c) => ({
-			label: c.peek.name,
-			description: `${Math.round(c.score * 100)}% match`,
-			provider: c.provider,
-			peek: c.peek,
-		}));
+		const items: DefPickItem[] = plan.candidates.map(
+			(c: {
+				provider: DefinitionProvider;
+				peek: ROMDefinitionStub;
+				score: number;
+			}) => ({
+				label: c.peek.name,
+				description: `${Math.round(c.score * 100)}% match`,
+				provider: c.provider,
+				peek: c.peek,
+			}),
+		);
 
 		const picked = await vscode.window.showQuickPick<DefPickItem>(items, {
-			placeHolder: "Select ROM definition (auto-match confidence too low)",
+			placeHolder: `Select ROM definition (auto-match confidence below ${Math.round(ROM_DEFINITION_CONFIDENCE_THRESHOLD * 100)}%)`,
 			title: `Select definition for ${romUri.fsPath.split(/[\\/]/).pop()}`,
 		});
 
@@ -136,32 +122,19 @@ export async function resolveRomDefinition(
 		return undefined;
 	}
 
-	// No candidates found - show all available definitions
-	const allDefs: {
-		provider: DefinitionProvider;
-		peek: ROMDefinitionStub;
-	}[] = [];
-
-	for (const p of providerRegistry.list()) {
-		// Pass ROM URI to help discover definitions near the ROM file
-		const uris = await p.discoverDefinitionUris(romUri.toString());
-		for (const u of uris) {
-			const peek = await p.peek(u);
-			allDefs.push({ provider: p, peek });
-		}
-	}
-
-	if (allDefs.length > 0) {
+	if (plan.kind === "prompt-all") {
 		type DefPickItem = vscode.QuickPickItem & {
 			provider: DefinitionProvider;
 			peek: ROMDefinitionStub;
 		};
 
-		const items: DefPickItem[] = allDefs.map((d) => ({
-			label: d.peek.name,
-			provider: d.provider,
-			peek: d.peek,
-		}));
+		const items: DefPickItem[] = plan.allDefinitions.map(
+			(d: { provider: DefinitionProvider; peek: ROMDefinitionStub }) => ({
+				label: d.peek.name,
+				provider: d.provider,
+				peek: d.peek,
+			}),
+		);
 
 		const picked = await vscode.window.showQuickPick<DefPickItem>(items, {
 			placeHolder: "No matching definition found - select manually",

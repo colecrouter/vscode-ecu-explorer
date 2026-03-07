@@ -1,9 +1,9 @@
 import type { TableDefinition } from "@ecu-explorer/core";
 import * as vscode from "vscode";
-import type { RomDocument } from "../rom/document";
-import type { RomEditorProvider } from "../rom/editor-provider";
-import type { WorkspaceState } from "../workspace-state";
-import { RomTreeItem, type RomTreeItemData } from "./rom-tree-item";
+import type { RomDocument } from "../rom/document.js";
+import type { RomEditorProvider } from "../rom/editor-provider.js";
+import type { WorkspaceState } from "../workspace-state.js";
+import { RomTreeItem, type RomTreeItemData } from "./rom-tree-item.js";
 
 /**
  * TreeDataProvider for ECU Explorer sidebar
@@ -196,12 +196,12 @@ export class RomExplorerTreeProvider
 
 		// Create table nodes
 		for (const table of tables) {
-			const tableId = `${romUri}:${table.name}`;
+			const tableId = `${romUri}:${table.id}`;
 
 			// Check if this table is the active table
 			const isActive =
 				this.activeTable?.romUri === romUri &&
-				this.activeTable?.tableName === table.name;
+				this.activeTable?.tableName === table.id;
 
 			const data: RomTreeItemData = {
 				id: tableId,

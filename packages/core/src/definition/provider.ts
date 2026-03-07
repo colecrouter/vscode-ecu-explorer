@@ -1,4 +1,4 @@
-import type { ROMDefinition, ROMDefinitionStub } from "./rom";
+import type { ROMDefinition, ROMDefinitionStub } from "./rom.js";
 
 export interface ROMDefinitionProvider {
 	/**
@@ -21,6 +21,15 @@ export interface ROMDefinitionProvider {
 	 * and can be persisted in workspace state.
 	 */
 	discoverDefinitionUris(romUri?: string): Promise<string[]>;
+
+	/**
+	 * Determine whether this provider owns or can parse a persisted definition URI.
+	 *
+	 * @remarks
+	 * This should be cheap and avoid full parsing. It is used to route saved definition
+	 * URIs back to the correct provider in multi-provider environments.
+	 */
+	canParseDefinitionUri(definitionUri: string): boolean | Promise<boolean>;
 
 	/** Quickly preview minimal metadata and fingerprints without full parse */
 	peek(definitionUri: string): Promise<ROMDefinitionStub>;

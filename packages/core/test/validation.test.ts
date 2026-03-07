@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ScalarType } from "../src/binary";
+import type { ScalarType } from "../src/binary.js";
 import {
 	getScalarTypeRange,
 	validateDataType,
@@ -7,15 +7,15 @@ import {
 	validateMonotonicDecreasing,
 	validateMonotonicIncreasing,
 	validateNumber,
-} from "../src/validation/rules";
-import type { ValidationContext } from "../src/validation/types";
+} from "../src/validation/rules.js";
+import type { ValidationContext } from "../src/validation/types.js";
 import {
 	areAllValid,
 	getInvalidCount,
 	getInvalidResults,
 	validateValue,
 	validateValues,
-} from "../src/validation/validator";
+} from "../src/validation/validator.js";
 
 const INVALID_SCALAR_TYPE = "unknown" as ScalarType;
 

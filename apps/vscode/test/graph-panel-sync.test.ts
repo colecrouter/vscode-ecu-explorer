@@ -11,13 +11,13 @@ import type { TableSnapshot } from "@ecu-explorer/ui";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
 // Import after mock
-import { GraphPanelManager } from "../src/graph-panel-manager";
-import type { RomDocument } from "../src/rom/document";
+import { GraphPanelManager } from "../src/graph-panel-manager.js";
+import type { RomDocument } from "../src/rom/document.js";
 import type {
 	GraphCompatibleWebview,
 	GraphCompatibleWebviewPanel,
-} from "./mocks/webview-mock";
-import { createMockWebviewPanel } from "./mocks/webview-mock";
+} from "./mocks/webview-mock.js";
+import { createMockWebviewPanel } from "./mocks/webview-mock.js";
 
 type MockRomDocument = Pick<
 	RomDocument,
@@ -122,11 +122,13 @@ describe("Graph Panel Synchronization", () => {
 						platform: {},
 						tables: [
 							{
+								id: "table1",
 								name: "table1",
 								kind: "table2d",
 								rows: 2,
 								cols: 2,
 								z: {
+									id: "table1-z",
 									name: "z",
 									address: 0x1000,
 									dtype: "u8",

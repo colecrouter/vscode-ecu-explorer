@@ -7,15 +7,15 @@
 import type { ROMDefinition, TableSnapshot } from "@ecu-explorer/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
-import { GraphPanelManager } from "../src/graph-panel-manager";
-import type { RomDocument } from "../src/rom/document";
+import { GraphPanelManager } from "../src/graph-panel-manager.js";
+import type { RomDocument } from "../src/rom/document.js";
 import {
 	createMockWebviewPanel,
 	type GraphCompatibleWebview,
 	type GraphCompatibleWebviewPanel,
 	type MockGraphWebview,
 	type MockWebview,
-} from "./mocks/webview-mock";
+} from "./mocks/webview-mock.js";
 
 type MockExtensionContext = Pick<
 	vscode.ExtensionContext,
@@ -70,11 +70,13 @@ function createMockDefinition(): MockRomDefinition {
 		fingerprints: [],
 		tables: [
 			{
+				id: "table1",
 				kind: "table2d",
 				name: "table1",
 				rows: 2,
 				cols: 2,
 				z: {
+					id: "table1-z",
 					name: "table1-z",
 					address: 0x1000,
 					dtype: "u8",

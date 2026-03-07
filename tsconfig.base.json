@@ -4,8 +4,8 @@
 		"target": "ES2022",
 		// Basic Options
 		"declaration": true,
-		"module": "ESNext",
-		"moduleResolution": "Bundler",
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
 		"lib": ["ESNext", "DOM"],
 
 		// Stricter Typechecking Options

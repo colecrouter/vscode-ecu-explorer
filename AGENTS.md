@@ -196,6 +196,29 @@ npm run test -- binary.test.ts
 
 ## Common Pitfalls
 
+### Headless ROM Inspection for Agents
+
+Use [`npm run inspect:rom`](package.json) when you need a non-UI reproduction of the ROM loading flow.
+
+**Explicit definition path**:
+
+```bash
+npm run inspect:rom -- --rom ./path/to/rom.hex --definition ./path/to/definition.xml
+```
+
+**Auto-discovery mode**:
+
+```bash
+npm run inspect:rom -- --rom ./path/to/rom.hex --definitions-root ./path/to/rommetadata
+```
+
+Behavior summary:
+- Reads ROM bytes directly
+- Uses shared resolution logic from [`planRomDefinitionResolution()`](packages/core/src/definition/resolution.ts:70) with [`EcuFlashProvider`](packages/definitions/ecuflash/src/index.ts) discovery and [`scoreRomDefinition()`](packages/core/src/definition/match.ts:105) scoring
+- Parses the selected definition and emits one grep-able `key=value` line per ROM/match/table
+- Uses [`snapshotTable()`](packages/core/src/view/table.ts:364) to validate table reads from core logic
+- Exits non-zero if the shared resolution flow would require interactive selection or if parsing fails
+
 ### Test ROM File Format Confusion
 
 **Problem**: Sample ROM files with `.hex` extension are **raw binary data**, NOT Intel hex format.

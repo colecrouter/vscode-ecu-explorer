@@ -11,8 +11,8 @@ import {
 	multiplyConstant,
 	smoothValues,
 } from "@ecu-explorer/core";
-import type { RangeEdit, Transaction } from "../types/transaction";
-import { getRangeForDataType } from "./table";
+import type { RangeEdit, Transaction } from "../types/transaction.js";
+import { getRangeForDataType } from "./table.js";
 
 type ReactiveTable<T extends TableDefinition> = T extends Table3DDefinition
 	? Uint8Array[][][]

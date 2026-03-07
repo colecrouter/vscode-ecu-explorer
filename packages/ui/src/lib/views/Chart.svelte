@@ -19,8 +19,8 @@
 
 	import { onMount, onDestroy } from "svelte";
 	import type { ChartState, HoveredCell } from "./chart-state.svelte";
-	import type { ThemeColors } from "./colorMap";
-	import { debounce } from "./chartUtils";
+	import type { ThemeColors } from "./colorMap.js";
+	import { debounce } from "./chartUtils.js";
 	import ChartTooltip from "./ChartTooltip.svelte";
 
 	/**

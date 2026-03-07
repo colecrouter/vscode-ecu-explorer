@@ -27,7 +27,7 @@ import {
 	RAX_G_BLOCK,
 	RAX_H_BLOCK,
 	type RaxBlockDef,
-} from "./rax-parameters";
+} from "./rax-parameters.js";
 
 export type { RaxBlockDef };
 export {

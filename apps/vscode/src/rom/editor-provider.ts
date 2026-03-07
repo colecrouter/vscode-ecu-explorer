@@ -15,6 +15,21 @@ import { resolveRomDefinition } from "./definition-resolver.js";
 import { RomDocument } from "./document.js";
 import { RomSaveManager } from "./save-manager.js";
 
+async function parseDefinitionByUri(
+	providerRegistry: { list(): DefinitionProvider[] },
+	definitionUri: string,
+) {
+	for (const provider of providerRegistry.list()) {
+		try {
+			return await provider.parse(definitionUri);
+		} catch {
+			// Try the next provider.
+		}
+	}
+
+	return undefined;
+}
+
 /**
  * Custom editor provider for ROM files
  * Implements VSCode's CustomEditorProvider to enable native dirty marker,
@@ -297,22 +312,52 @@ export class RomEditorProvider
 		let romDocument = this.documents.get(romUri.toString());
 
 		if (!romDocument) {
+			if (tableUri.definitionUri) {
+				this.stateManager.saveRomDefinition(
+					tableUri.romPath,
+					tableUri.definitionUri,
+				);
+			}
+
 			// Open the ROM document first
 			const openContext: vscode.CustomDocumentOpenContext = {
 				backupId: undefined,
 				untitledDocumentData: undefined,
 			};
 			romDocument = await this.openRomDocument(romUri, openContext, token);
+			if (!romDocument.definition) {
+				if (tableUri.definitionUri) {
+					const definition = await parseDefinitionByUri(
+						this.providerRegistry,
+						tableUri.definitionUri,
+					);
+
+					if (definition) {
+						romDocument = new RomDocument(
+							romUri,
+							romDocument.romBytes,
+							definition,
+						);
+						this.documents.set(romUri.toString(), romDocument);
+					}
+				}
+
+				if (!romDocument.definition) {
+					throw new Error(
+						`Failed to load ROM definition for ${tableUri.romPath}; table open aborted before resolving ${tableUri.tableId}`,
+					);
+				}
+			}
 		}
 
 		// Find the table definition
 		const tableDef = romDocument.definition?.tables.find(
-			(t) => t.name === tableUri.tableName,
+			(t) => t.id === tableUri.tableId,
 		);
 
 		if (!tableDef) {
 			throw new Error(
-				`Table "${tableUri.tableName}" not found in ROM definition`,
+				`Table "${tableUri.tableId}" not found in ROM definition`,
 			);
 		}
 
@@ -320,7 +365,7 @@ export class RomEditorProvider
 		const tableDocument = new TableDocument(
 			uri,
 			romDocument,
-			tableUri.tableName,
+			tableUri.tableId,
 			tableDef,
 		);
 		this.tableDocuments.set(uri.toString(), tableDocument);

@@ -12,6 +12,7 @@
 		"build": "tsc -p tsconfig.build.json",
 		"check": "tsc -p tsconfig.build.json --noEmit",
 		"check:test": "tsc -p tsconfig.test.json --noEmit",
+		"inspect:rom": "node ./dist/inspect-rom.js",
 		"test": "vitest run",
 		"test:ui": "vitest --ui",
 		"test:coverage": "vitest run --coverage",

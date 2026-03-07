@@ -20,7 +20,7 @@ import {
 	validateSubaruDensoChecksum,
 	validateSubaruDensoChecksums,
 	xorChecksum,
-} from "../src/checksum/algorithms";
+} from "../src/checksum/algorithms.js";
 
 describe("CRC32", () => {
 	it("computes CRC32 for known test vector", () => {

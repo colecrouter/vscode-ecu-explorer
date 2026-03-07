@@ -1,8 +1,8 @@
 import type { DefinitionProvider, TableDefinition } from "@ecu-explorer/core";
 import * as vscode from "vscode";
-import { resolveRomDefinition } from "../rom/definition-resolver";
-import { createTableUri } from "../table-fs-uri";
-import type { WorkspaceState } from "../workspace-state";
+import { resolveRomDefinition } from "../rom/definition-resolver.js";
+import { createTableUri } from "../table-fs-uri.js";
+import type { WorkspaceState } from "../workspace-state.js";
 
 /**
  * Registry for definition providers
@@ -50,7 +50,8 @@ export function setTableCommandsContext(
  */
 export async function openTableInCustomEditor(
 	romUri: vscode.Uri,
-	tableName: string,
+	tableId: string,
+	tableName?: string,
 	_options?: {
 		viewColumn?: vscode.ViewColumn;
 		preserveFocus?: boolean;
@@ -58,9 +59,9 @@ export async function openTableInCustomEditor(
 	},
 ): Promise<void> {
 	// Check if definition is already saved in workspace state
-	const savedDefUri = workspaceState?.getRomDefinition(romUri.fsPath);
+	let definitionUri = workspaceState?.getRomDefinition(romUri.fsPath);
 
-	if (!savedDefUri) {
+	if (!definitionUri) {
 		// No saved definition — resolve it now (may prompt user)
 		if (!workspaceState) {
 			throw new Error("Workspace state not initialized");
@@ -80,10 +81,16 @@ export async function openTableInCustomEditor(
 			// User cancelled definition selection
 			return;
 		}
+		definitionUri = definition.uri;
 	}
 
 	// Create table URI
-	const tableUri = createTableUri(romUri.fsPath, tableName);
+	const tableUri = createTableUri(
+		romUri.fsPath,
+		tableId,
+		tableName,
+		definitionUri,
+	);
 	console.log(
 		"[DEBUG] openTableInCustomEditor - Created URI:",
 		tableUri.toString(),
@@ -139,5 +146,5 @@ export async function openTableFlow(
 
 	// Use unified Custom Editor infrastructure (Phase 3)
 	const romUri = vscode.Uri.parse(activeRom.romUri);
-	await openTableInCustomEditor(romUri, picked.def.name);
+	await openTableInCustomEditor(romUri, picked.def.id, picked.def.name);
 }

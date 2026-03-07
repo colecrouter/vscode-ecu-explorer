@@ -6,7 +6,7 @@ import type {
 	LiveDataSession,
 } from "@ecu-explorer/device";
 import * as vscode from "vscode";
-import type { DeviceManagerImpl } from "./device-manager";
+import type { DeviceManagerImpl } from "./device-manager.js";
 
 export class LiveDataPanelManager {
 	private panel: vscode.WebviewPanel | undefined;

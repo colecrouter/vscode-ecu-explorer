@@ -2,9 +2,9 @@
 	import type { TableDefinition } from "@ecu-explorer/core";
 	import TableCell from "./TableCell.svelte";
 	import type { TableView } from "./table.svelte";
-	import { computeNormalizedValues } from "./colorMap";
-	import type { ThemeColors } from "./colorMap";
-	import { loadAxisValues, formatAxisValue } from "./table";
+	import { computeNormalizedValues } from "./colorMap.js";
+	import type { ThemeColors } from "./colorMap.js";
+	import { loadAxisValues, formatAxisValue } from "./table.js";
 	import { onMount, onDestroy } from "svelte";
 
 	interface Props {

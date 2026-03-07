@@ -2,10 +2,10 @@ import type { ROMDefinition, TableDefinition } from "@ecu-explorer/core";
 import type { Mock } from "vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
-import { RomDocument } from "../src/rom/document";
-import type { RomEditorProvider } from "../src/rom/editor-provider";
-import { RomExplorerTreeProvider } from "../src/tree/rom-tree-provider";
-import { WorkspaceState } from "../src/workspace-state";
+import { RomDocument } from "../src/rom/document.js";
+import type { RomEditorProvider } from "../src/rom/editor-provider.js";
+import { RomExplorerTreeProvider } from "../src/tree/rom-tree-provider.js";
+import { WorkspaceState } from "../src/workspace-state.js";
 
 type MockEditorProvider = Pick<RomEditorProvider, "onDidChangeCustomDocument">;
 
@@ -78,12 +78,14 @@ describe("RomExplorerTreeProvider - Phase 2: Active Table Tracking", () => {
 	): TableDefinition {
 		if (kind === "table3d") {
 			const table = {
+				id: `${name}-table`,
 				name,
 				kind,
 				rows: 10,
 				cols: 10,
 				depth: 10,
 				z: {
+					id: `${name}-z`,
 					name: "z",
 					address: 0x1000,
 					dtype: "u8" as const,
@@ -96,11 +98,13 @@ describe("RomExplorerTreeProvider - Phase 2: Active Table Tracking", () => {
 
 		if (kind === "table2d") {
 			const table = {
+				id: `${name}-table`,
 				name,
 				kind,
 				rows: 10,
 				cols: 10,
 				z: {
+					id: `${name}-z`,
 					name: "z",
 					address: 0x1000,
 					dtype: "u8" as const,
@@ -112,10 +116,12 @@ describe("RomExplorerTreeProvider - Phase 2: Active Table Tracking", () => {
 		}
 
 		const table = {
+			id: `${name}-table`,
 			name,
 			kind,
 			rows: 10,
 			z: {
+				id: `${name}-z`,
 				name: "z",
 				address: 0x1000,
 				dtype: "u8" as const,
@@ -195,7 +201,7 @@ describe("RomExplorerTreeProvider - Phase 2: Active Table Tracking", () => {
 			treeProvider.addDocument(document);
 
 			// Set Table1 as active
-			treeProvider.setActiveTable(mockUri.toString(), "Table1");
+			treeProvider.setActiveTable(mockUri.toString(), tables[0]!.id);
 
 			// Get table nodes
 			const romNodes = await treeProvider.getChildren();
@@ -234,7 +240,7 @@ describe("RomExplorerTreeProvider - Phase 2: Active Table Tracking", () => {
 			treeProvider.addDocument(document);
 
 			// Set Table1 as active
-			treeProvider.setActiveTable(mockUri.toString(), "Table1");
+			treeProvider.setActiveTable(mockUri.toString(), tables[0]!.id);
 
 			// Get table node
 			const romNodes = await treeProvider.getChildren();
@@ -267,7 +273,7 @@ describe("RomExplorerTreeProvider - Phase 2: Active Table Tracking", () => {
 			treeProvider.addDocument(document);
 
 			// Set Table1 as active
-			treeProvider.setActiveTable(mockUri.toString(), "Table1");
+			treeProvider.setActiveTable(mockUri.toString(), tables[0]!.id);
 
 			let romNodes = await treeProvider.getChildren();
 			const firstRomNode = romNodes[0];
@@ -285,7 +291,7 @@ describe("RomExplorerTreeProvider - Phase 2: Active Table Tracking", () => {
 			}
 
 			// Switch to Table2
-			treeProvider.setActiveTable(mockUri.toString(), "Table2");
+			treeProvider.setActiveTable(mockUri.toString(), tables[1]!.id);
 
 			romNodes = await treeProvider.getChildren();
 			const secondRomNode = romNodes[0];
@@ -325,7 +331,7 @@ describe("RomExplorerTreeProvider - Phase 2: Active Table Tracking", () => {
 			treeProvider.addDocument(document2);
 
 			// Set Table1 in ROM1 as active
-			treeProvider.setActiveTable(mockUri1.toString(), "Table1");
+			treeProvider.setActiveTable(mockUri1.toString(), tables1[0]!.id);
 
 			// Get ROM1 tables
 			const romNodes = await treeProvider.getChildren();
@@ -368,7 +374,7 @@ describe("RomExplorerTreeProvider - Phase 2: Active Table Tracking", () => {
 			treeProvider.addDocument(document);
 
 			// Set Table1 as active
-			treeProvider.setActiveTable(mockUri.toString(), "Table1");
+			treeProvider.setActiveTable(mockUri.toString(), tables[0]!.id);
 
 			let romNodes = await treeProvider.getChildren();
 			const firstRomNode = romNodes[0];

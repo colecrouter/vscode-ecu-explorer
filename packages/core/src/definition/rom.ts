@@ -1,4 +1,4 @@
-import type { TableDefinition } from "./table";
+import type { TableDefinition } from "./table.js";
 
 export interface ROMDefinitionStub {
 	/** Definition file URI (typically file://...) */

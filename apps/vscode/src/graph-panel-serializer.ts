@@ -11,8 +11,8 @@
  */
 
 import * as vscode from "vscode";
-import type { GraphPanelManager } from "./graph-panel-manager";
-import type { RomEditorProvider } from "./rom/editor-provider";
+import type { GraphPanelManager } from "./graph-panel-manager.js";
+import type { RomEditorProvider } from "./rom/editor-provider.js";
 
 /**
  * State saved by ChartViewerApp for persistence

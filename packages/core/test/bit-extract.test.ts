@@ -4,7 +4,7 @@ import {
 	extractBits,
 	extractBitsAt,
 	extractSignedBits,
-} from "../src/binary/bit-extract";
+} from "../src/binary/bit-extract.js";
 
 describe("extractBits", () => {
 	describe("within a single byte", () => {

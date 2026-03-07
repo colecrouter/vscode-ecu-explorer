@@ -12,8 +12,8 @@ import type {
 	ChecksumAlgorithm,
 	ChecksumDefinition,
 	ChecksumValidation,
-} from "../definition/rom";
-import { crc32, sumChecksum, xorChecksum } from "./algorithms";
+} from "../definition/rom.js";
+import { crc32, sumChecksum, xorChecksum } from "./algorithms.js";
 
 /**
  * Recompute checksum for ROM data based on definition

@@ -1,6 +1,6 @@
 import type { TableDefinition } from "@ecu-explorer/core";
 import * as vscode from "vscode";
-import type { RomDocument } from "../rom/document";
+import type { RomDocument } from "../rom/document.js";
 
 /**
  * Base interface for all tree items
@@ -202,7 +202,7 @@ export class RomTreeItem extends vscode.TreeItem {
 			const cmd = {
 				command: "ecuExplorer.openTable",
 				title: "Open Table",
-				arguments: [table.romUri, table.tableDef.name],
+				arguments: [table.romUri, table.tableDef.id, table.tableDef.name],
 			};
 			return cmd;
 		}

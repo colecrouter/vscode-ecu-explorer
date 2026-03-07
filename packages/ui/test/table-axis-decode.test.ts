@@ -1,6 +1,6 @@
 import type { AxisDefinition } from "@ecu-explorer/core";
 import { describe, expect, it } from "vitest";
-import { loadAxisValues } from "../src/lib/views/table";
+import { loadAxisValues } from "../src/lib/views/table.js";
 
 describe("table axis decode behavior", () => {
 	it("decodes BE-like 16-bit byte pattern as interleaved values when axis dtype is u8", () => {

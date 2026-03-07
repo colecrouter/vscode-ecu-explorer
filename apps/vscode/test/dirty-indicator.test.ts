@@ -14,8 +14,8 @@
 import type { TableDefinition } from "@ecu-explorer/core";
 import { beforeEach, describe, expect, it } from "vitest";
 import * as vscode from "vscode";
-import { RomDocument } from "../src/rom/document";
-import { TableDocument } from "../src/table-document";
+import { RomDocument } from "../src/rom/document.js";
+import { TableDocument } from "../src/table-document.js";
 
 // Minimal vscode.Uri-compatible object
 function makeUri(path: string): vscode.Uri {
@@ -139,10 +139,12 @@ describe("RomDocument dirty-state tracking", () => {
 describe("TableDocument onDidChange selective propagation", () => {
 	// Two non-overlapping table definitions in the same ROM
 	const TABLE_A_DEF: TableDefinition = {
+		id: "table-a",
 		name: "Table A",
 		kind: "table1d",
 		rows: 4,
 		z: {
+			id: "table-a-z",
 			name: "z",
 			address: 0x0100,
 			dtype: "u8",
@@ -150,10 +152,12 @@ describe("TableDocument onDidChange selective propagation", () => {
 	} as TableDefinition;
 
 	const TABLE_B_DEF: TableDefinition = {
+		id: "table-b",
 		name: "Table B",
 		kind: "table1d",
 		rows: 4,
 		z: {
+			id: "table-b-z",
 			name: "z",
 			address: 0x0200,
 			dtype: "u8",
@@ -277,11 +281,13 @@ describe("TableDocument swapped-axis (swapxy) dirty propagation regression", () 
 	//   rows=16, cols=49, colStrideBytes=32, rowStrideBytes=2, dtype=u16
 	//   z.address=0x5130e
 	const SWAPXY_TABLE_DEF: TableDefinition = {
+		id: "throttle-map",
 		name: "Throttle Map",
 		kind: "table2d",
 		rows: 16,
 		cols: 49,
 		z: {
+			id: "throttle-map-z",
 			name: "z",
 			address: 0x5130e,
 			dtype: "u16",

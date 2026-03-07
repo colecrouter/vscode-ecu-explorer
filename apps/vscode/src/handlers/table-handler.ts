@@ -6,12 +6,12 @@ import {
 	type TableDefinition,
 } from "@ecu-explorer/core";
 import * as vscode from "vscode";
-import type { RomDocument } from "../rom/document";
-import { TableDocument } from "../table-document";
-import { getThemeColors } from "../theme-colors";
-import type { RomExplorerTreeProvider } from "../tree/rom-tree-provider";
-import type { EditOperation, UndoRedoManager } from "../undo-redo-manager";
-import { isBatchEdit } from "../undo-redo-manager";
+import type { RomDocument } from "../rom/document.js";
+import { TableDocument } from "../table-document.js";
+import { getThemeColors } from "../theme-colors.js";
+import type { RomExplorerTreeProvider } from "../tree/rom-tree-provider.js";
+import type { EditOperation, UndoRedoManager } from "../undo-redo-manager.js";
+import { isBatchEdit } from "../undo-redo-manager.js";
 
 /**
  * Cell edit message from webview
@@ -63,7 +63,8 @@ let getStateRefs:
 			importTableFromCsvFlow: (ctx: vscode.ExtensionContext) => Promise<void>;
 			openTableInCustomEditor: (
 				romUri: vscode.Uri,
-				tableName: string,
+				tableId: string,
+				tableName?: string,
 			) => Promise<void>;
 	  })
 	| null = null;
@@ -282,7 +283,11 @@ export async function handleTableOpen(
 
 		// Open the selected table via the table editor and dispose the ROM panel.
 		// We don't want a ROM editor tab to remain open — only the table tab.
-		await state.openTableInCustomEditor(romDocument.uri, selectedTable.name);
+		await state.openTableInCustomEditor(
+			romDocument.uri,
+			selectedTable.id,
+			selectedTable.name,
+		);
 		panel.dispose();
 		return;
 	}
@@ -310,7 +315,7 @@ export async function handleTableOpen(
 	const undoRedoManagers = state.undoRedoManagers;
 	if (!undoRedoManagers.has(tableUriKey)) {
 		// Create new UndoRedoManager with lazy import
-		const { UndoRedoManager } = await import("../undo-redo-manager");
+		const { UndoRedoManager } = await import("../undo-redo-manager.js");
 		undoRedoManagers.set(tableUriKey, new UndoRedoManager());
 	}
 	const undoRedoManager = undoRedoManagers.get(tableUriKey);

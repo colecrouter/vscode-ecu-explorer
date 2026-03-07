@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type * as vscode from "vscode";
-import { type TableEditorState, WorkspaceState } from "../src/workspace-state";
+import {
+	type TableEditorState,
+	WorkspaceState,
+} from "../src/workspace-state.js";
 
 describe("workspace-state", () => {
 	let memento: vscode.Memento;

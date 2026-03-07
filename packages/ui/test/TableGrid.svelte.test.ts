@@ -7,8 +7,8 @@ import type {
 import { describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { render } from "vitest-browser-svelte";
-import TableGrid from "../src/lib/views/TableGrid.svelte";
-import { TableView } from "../src/lib/views/table.svelte";
+import TableGrid from "../src/lib/views/TableGrid.svelte.js";
+import { TableView } from "../src/lib/views/table.svelte.js";
 
 function createUnit(symbol: string): Unit {
 	return {

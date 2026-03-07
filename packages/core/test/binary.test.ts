@@ -3,7 +3,7 @@ import {
 	decodeScalar,
 	decodeScalarBytes,
 	type ScalarType,
-} from "../src/binary";
+} from "../src/binary.js";
 
 const INVALID_SCALAR_TYPE = "invalid" as ScalarType;
 

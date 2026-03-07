@@ -1,8 +1,8 @@
 import type { ROMDefinition, TableDefinition } from "@ecu-explorer/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
-import { RomDocument } from "../src/rom/document";
-import { TableDocument } from "../src/table-document";
+import { RomDocument } from "../src/rom/document.js";
+import { TableDocument } from "../src/table-document.js";
 
 describe("table-document", () => {
 	let romDocument: RomDocument;
@@ -25,10 +25,12 @@ describe("table-document", () => {
 
 		// Create mock table definition
 		tableDef = {
+			id: "fuel-map-table",
 			name: "Fuel Map",
 			kind: "table2d",
 			rows: 10,
 			z: {
+				id: "fuel-map-z",
 				name: "z",
 				address: 0x1000,
 				dtype: "u8",

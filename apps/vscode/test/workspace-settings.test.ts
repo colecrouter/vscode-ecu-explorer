@@ -12,7 +12,7 @@ import * as path from "node:path";
 import { EcuFlashProvider } from "@ecu-explorer/definitions-ecuflash";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
-import { readConfig } from "../src/config";
+import { readConfig } from "../src/config.js";
 
 type ConfigValue = string | string[];
 

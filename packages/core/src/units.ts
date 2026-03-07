@@ -1,4 +1,4 @@
-import type { Endianness, ScalarType } from "./binary";
+import type { Endianness, ScalarType } from "./binary.js";
 
 /** Scale definition for converting between raw and scaled values */
 export interface Unit {

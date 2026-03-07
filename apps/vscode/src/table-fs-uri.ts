@@ -33,8 +33,12 @@ import * as vscode from "vscode";
 export interface TableUri {
 	/** Absolute path to the ROM file */
 	romPath: string;
-	/** Table name/ID */
-	tableName: string;
+	/** Stable table ID */
+	tableId: string;
+	/** Human-readable table name */
+	tableName?: string;
+	/** URI of the resolved ROM definition */
+	definitionUri?: string;
 }
 
 /**
@@ -50,13 +54,18 @@ export interface TableUri {
  * // Returns: ecu-table:///Users/cole/ROM/test.hex/Fuel%20Map
  * ```
  */
-export function createTableUri(romPath: string, tableName: string): vscode.Uri {
+export function createTableUri(
+	romPath: string,
+	tableId: string,
+	tableName?: string,
+	definitionUri?: string,
+): vscode.Uri {
 	// Validate inputs
 	if (!romPath) {
 		throw new Error("ROM path is required");
 	}
-	if (!tableName) {
-		throw new Error("Table name is required");
+	if (!tableId) {
+		throw new Error("Table ID is required");
 	}
 
 	// Convert filesystem path to URI path using VSCode semantics.
@@ -64,8 +73,18 @@ export function createTableUri(romPath: string, tableName: string): vscode.Uri {
 	const uriPath = vscode.Uri.file(romPath).path;
 
 	// Store table name in query so reserved path chars (e.g. '/') remain intact
-	const query = `table=${encodeURIComponent(tableName)}`;
-	const encodedTableName = encodeURIComponent(tableName);
+	const params = new URLSearchParams({
+		table: tableId,
+	});
+	if (tableName) {
+		params.set("name", tableName);
+	}
+	if (definitionUri) {
+		params.set("definition", definitionUri);
+	}
+	const query = params.toString();
+	const displayName = tableName ?? tableId;
+	const encodedTableName = encodeURIComponent(displayName);
 
 	// Include table name as trailing path segment so VSCode tab title uses table name
 	// instead of ROM file name. Query remains the source of truth for robust parsing.
@@ -96,13 +115,15 @@ export function parseTableUri(uri: vscode.Uri): TableUri | null {
 
 	// Preferred format: table name in query param
 	const params = new URLSearchParams(uri.query);
-	const queryTableName = params.get("table");
-	if (queryTableName) {
-		let tableName: string;
+	const queryTableId = params.get("table");
+	const queryDisplayName = params.get("name") ?? undefined;
+	const definitionUri = params.get("definition") ?? undefined;
+	if (queryTableId) {
+		let tableId: string;
 		try {
-			tableName = decodeURIComponent(queryTableName);
+			tableId = decodeURIComponent(queryTableId);
 		} catch (error) {
-			console.error("Failed to decode table name:", error);
+			console.error("Failed to decode table id:", error);
 			return null;
 		}
 
@@ -119,11 +140,11 @@ export function parseTableUri(uri: vscode.Uri): TableUri | null {
 				// Keep raw segment if decoding fails
 			}
 
-			if (decodedTrailingSegment === tableName) {
+			if (decodedTrailingSegment === (queryDisplayName ?? tableId)) {
 				romUriPath = uri.path.substring(0, lastSlash);
 			}
 		}
-		if (!romUriPath || !tableName) {
+		if (!romUriPath || !tableId) {
 			return null;
 		}
 
@@ -132,7 +153,12 @@ export function parseTableUri(uri: vscode.Uri): TableUri | null {
 			path: romUriPath,
 		}).fsPath;
 
-		return { romPath, tableName };
+		return {
+			romPath,
+			tableId,
+			...(queryDisplayName ? { tableName: queryDisplayName } : {}),
+			...(definitionUri ? { definitionUri } : {}),
+		};
 	}
 
 	// Legacy fallback: split path into ROM path and table name
@@ -145,22 +171,22 @@ export function parseTableUri(uri: vscode.Uri): TableUri | null {
 	const encodedTableName = uri.path.substring(lastSlash + 1);
 
 	// Decode table name
-	let tableName: string;
+	let tableId: string;
 	try {
-		tableName = decodeURIComponent(encodedTableName);
+		tableId = decodeURIComponent(encodedTableName);
 	} catch (error) {
-		console.error("Failed to decode table name:", error);
+		console.error("Failed to decode table id:", error);
 		return null;
 	}
 
 	// Validate decoded values
-	if (!romUriPath || !tableName) {
+	if (!romUriPath || !tableId) {
 		return null;
 	}
 
 	const romPath = vscode.Uri.from({ scheme: "file", path: romUriPath }).fsPath;
 
-	return { romPath, tableName };
+	return { romPath, tableId, tableName: tableId };
 }
 
 /**
@@ -213,7 +239,7 @@ export function validateTableUri(uri: vscode.Uri): boolean {
 	}
 
 	// Validate components
-	if (!components.romPath || !components.tableName) {
+	if (!components.romPath || !components.tableId) {
 		return false;
 	}
 

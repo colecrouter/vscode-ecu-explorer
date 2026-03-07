@@ -4,7 +4,7 @@ import type {
 	Table3DDefinition,
 } from "@ecu-explorer/core";
 import { describe, expect, it } from "vitest";
-import { TableView } from "../src/lib/views/table.svelte";
+import { TableView } from "../src/lib/views/table.svelte.js";
 
 type UndoRedoOperation = {
 	row: number;

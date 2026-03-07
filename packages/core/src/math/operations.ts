@@ -1,4 +1,4 @@
-import type { ScalarType } from "../binary";
+import type { ScalarType } from "../binary.js";
 
 /**
  * Clamp a single value to a min/max range

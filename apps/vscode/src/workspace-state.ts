@@ -71,6 +71,7 @@ export class WorkspaceState {
 	private static readonly STATE_KEY = "ecuExplorer.workspaceState";
 	private saveTimeout: ReturnType<typeof setTimeout> | null = null;
 	private pendingState: WorkspaceStateData | null = null;
+	private currentState: WorkspaceStateData | null = null;
 
 	constructor(private readonly memento: vscode.Memento) {}
 
@@ -93,7 +94,8 @@ export class WorkspaceState {
 	 * @returns URI of the saved ROM definition, or undefined if not found
 	 */
 	getRomDefinition(romPath: string): string | undefined {
-		return this.getState().romDefinitions[romPath];
+		const definitionUri = this.getState().romDefinitions[romPath];
+		return definitionUri || undefined;
 	}
 
 	/**
@@ -236,20 +238,30 @@ export class WorkspaceState {
 	 * @returns Current workspace state
 	 */
 	private getState(): WorkspaceStateData {
+		if (this.pendingState) {
+			return this.pendingState;
+		}
+
+		if (this.currentState) {
+			return this.currentState;
+		}
+
 		const state = this.memento.get<WorkspaceStateData>(
 			WorkspaceState.STATE_KEY,
 		);
 		if (!state) {
-			return {
+			this.currentState = {
 				romDefinitions: {},
 				lastOpenedTables: {},
 				tableStates: {},
 				dirtyTables: {},
 			};
+			return this.currentState;
 		}
 
 		// Sanitize state to ensure it's valid
-		return this.sanitizeState(state);
+		this.currentState = this.sanitizeState(state);
+		return this.currentState;
 	}
 
 	/**
@@ -258,6 +270,7 @@ export class WorkspaceState {
 	 * @param state - Workspace state to save
 	 */
 	private setState(state: WorkspaceStateData): void {
+		this.currentState = this.sanitizeState(state);
 		this.memento.update(WorkspaceState.STATE_KEY, state);
 	}
 

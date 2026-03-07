@@ -10,13 +10,13 @@
  * - Custom indexers for non-linear layouts
  */
 
-import type { Endianness } from "../binary";
+import type { Endianness } from "../binary.js";
 import {
 	decodeScalar,
 	decodeScalarBytes,
 	encodeScalar,
 	sizeOf,
-} from "../binary";
+} from "../binary.js";
 import type {
 	AxisDefinition,
 	DynamicArrayDefinition,
@@ -24,8 +24,8 @@ import type {
 	Table2DDefinition,
 	TableDefinition,
 	ZDataDefinition,
-} from "../definition/table";
-import type { Unit } from "../units";
+} from "../definition/table.js";
+import type { Unit } from "../units.js";
 
 type AccessMode = "raw" | "physical";
 

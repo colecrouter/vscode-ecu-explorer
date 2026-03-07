@@ -5,9 +5,9 @@ import {
 	type TableDefinition,
 } from "@ecu-explorer/core";
 import * as vscode from "vscode";
-import type { RomDocument } from "../rom/document";
-import type { UndoRedoManager } from "../undo-redo-manager";
-import { isBatchEdit } from "../undo-redo-manager";
+import type { RomDocument } from "../rom/document.js";
+import type { UndoRedoManager } from "../undo-redo-manager.js";
+import { isBatchEdit } from "../undo-redo-manager.js";
 
 /**
  * Get references to extension state

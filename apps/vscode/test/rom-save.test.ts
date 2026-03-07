@@ -3,7 +3,7 @@ import * as path from "node:path";
 import type { ChecksumDefinition } from "@ecu-explorer/core";
 import { validateChecksum } from "@ecu-explorer/core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { RomSaveManager } from "../src/rom/save-manager";
+import { RomSaveManager } from "../src/rom/save-manager.js";
 
 describe("ROM Save Integration Test", () => {
 	const testDir = path.join(__dirname, "..", "..", "..", "test-output");

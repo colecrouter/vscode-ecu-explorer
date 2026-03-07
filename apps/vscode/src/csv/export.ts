@@ -4,7 +4,7 @@ import {
 	type TableDefinition,
 } from "@ecu-explorer/core";
 import * as vscode from "vscode";
-import type { TableSnapshot } from "./parser";
+import type { TableSnapshot } from "./parser.js";
 
 /**
  * Handle CSV export flow

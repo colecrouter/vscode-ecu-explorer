@@ -12,8 +12,8 @@ import type { Table1DDefinition, Table2DDefinition } from "@ecu-explorer/core";
 import { describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { render } from "vitest-browser-svelte";
-import TableGrid from "../src/lib/views/TableGrid.svelte";
-import { TableView } from "../src/lib/views/table.svelte";
+import TableGrid from "../src/lib/views/TableGrid.svelte.js";
+import { TableView } from "../src/lib/views/table.svelte.js";
 
 describe("TableGrid cell editing — index correctness", () => {
 	describe("1D table cell editing", () => {

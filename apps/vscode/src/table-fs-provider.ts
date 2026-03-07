@@ -159,6 +159,9 @@ interface TableMetadata {
 	/** Absolute path to ROM file */
 	romPath: string;
 
+	/** Stable table ID */
+	tableId: string;
+
 	/** Table name */
 	tableName: string;
 
@@ -189,7 +192,7 @@ interface TableMetadata {
  */
 interface TableCacheEntry {
 	romPath: string;
-	tableName: string;
+	tableId: string;
 	definition: TableDefinition;
 	lastRead: number;
 }
@@ -253,7 +256,7 @@ export class TableFileSystemProvider implements vscode.FileSystemProvider {
 			throw vscode.FileSystemError.FileNotFound(uri);
 		}
 
-		const { romPath, tableName } = parsed;
+		const { romPath, tableId } = parsed;
 
 		// Get or load ROM document
 		const romDoc = await this.getRomDocument(romPath);
@@ -262,7 +265,7 @@ export class TableFileSystemProvider implements vscode.FileSystemProvider {
 		}
 
 		// Find table definition
-		const tableDef = romDoc.definition.tables.find((t) => t.name === tableName);
+		const tableDef = romDoc.definition.tables.find((t) => t.id === tableId);
 		if (!tableDef) {
 			throw vscode.FileSystemError.FileNotFound(uri);
 		}
@@ -276,7 +279,7 @@ export class TableFileSystemProvider implements vscode.FileSystemProvider {
 		// Cache metadata
 		this.tableCache.set(uri.toString(), {
 			romPath,
-			tableName,
+			tableId,
 			definition: tableDef,
 			lastRead: Date.now(),
 		});
@@ -299,7 +302,7 @@ export class TableFileSystemProvider implements vscode.FileSystemProvider {
 			throw vscode.FileSystemError.FileNotFound(uri);
 		}
 
-		const { romPath, tableName } = parsed;
+		const { romPath, tableId } = parsed;
 
 		// Get ROM document
 		const romDoc = await this.getRomDocument(romPath);
@@ -308,7 +311,7 @@ export class TableFileSystemProvider implements vscode.FileSystemProvider {
 		}
 
 		// Find table definition
-		const tableDef = romDoc.definition.tables.find((t) => t.name === tableName);
+		const tableDef = romDoc.definition.tables.find((t) => t.id === tableId);
 		if (!tableDef) {
 			throw vscode.FileSystemError.FileNotFound(uri);
 		}
@@ -336,7 +339,7 @@ export class TableFileSystemProvider implements vscode.FileSystemProvider {
 		);
 
 		// Mark this specific table as dirty
-		this.stateManager.markTableDirty(romPath, tableName);
+		this.stateManager.markTableDirty(romPath, tableId);
 
 		// Notify tree provider to refresh
 		this.treeProvider?.refresh();
@@ -540,6 +543,7 @@ export class TableFileSystemProvider implements vscode.FileSystemProvider {
 
 		const metadata: TableMetadata = {
 			romPath: romDoc.uri.fsPath,
+			tableId: tableDef.id,
 			tableName: tableDef.name,
 			tableKind: tableDef.kind,
 			address: tableDef.z.address,

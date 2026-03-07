@@ -15,33 +15,39 @@ import { SubaruProtocol } from "@ecu-explorer/device-protocol-subaru";
 import { UdsProtocol } from "@ecu-explorer/device-protocol-uds";
 import { OpenPort2Transport } from "@ecu-explorer/device-transport-openport2";
 import * as vscode from "vscode";
-import { setEditCommandsContext, setGraphCommandsContext } from "./commands";
-import { readConfig } from "./config";
-import { exportActiveTableCsvFlow } from "./csv/export";
-import { importTableFromCsvFlow } from "./csv/import";
-import { DeviceManagerImpl } from "./device-manager";
-import { DeviceStatusBarManager } from "./device-status-bar";
-import { GraphPanelManager } from "./graph-panel-manager";
-import { GraphPanelSerializer } from "./graph-panel-serializer";
+import {
+	setEditCommandsContext,
+	setGraphCommandsContext,
+} from "./commands/index.js";
+import { readConfig } from "./config.js";
+import { exportActiveTableCsvFlow } from "./csv/export.js";
+import { importTableFromCsvFlow } from "./csv/import.js";
+import { DeviceManagerImpl } from "./device-manager.js";
+import { DeviceStatusBarManager } from "./device-status-bar.js";
+import { GraphPanelManager } from "./graph-panel-manager.js";
+import { GraphPanelSerializer } from "./graph-panel-serializer.js";
 import {
 	handleCellEdit,
 	handleTableOpen,
 	setCellEditHandlerContext,
 	setTableHandlerContext,
-} from "./handlers";
-import { LiveDataPanelManager } from "./live-data-panel-manager";
-import { LoggingManager, openLogsFolder } from "./logging-manager";
-import { resolveRomDefinition } from "./rom/definition-resolver";
-import type { RomDocument } from "./rom/document";
-import { RomEditorProvider, TableEditorDelegate } from "./rom/editor-provider";
-import { RomSymbolProvider } from "./rom/symbol-provider";
-import { TableFileSystemProvider } from "./table-fs-provider";
-import { createTableUri } from "./table-fs-uri";
-import { getThemeColors } from "./theme-colors";
-import type { RomTreeItem } from "./tree/rom-tree-item";
-import { RomExplorerTreeProvider } from "./tree/rom-tree-provider";
-import { isBatchEdit, type UndoRedoManager } from "./undo-redo-manager";
-import { WorkspaceState } from "./workspace-state";
+} from "./handlers/index.js";
+import { LiveDataPanelManager } from "./live-data-panel-manager.js";
+import { LoggingManager, openLogsFolder } from "./logging-manager.js";
+import { resolveRomDefinition } from "./rom/definition-resolver.js";
+import type { RomDocument } from "./rom/document.js";
+import {
+	RomEditorProvider,
+	TableEditorDelegate,
+} from "./rom/editor-provider.js";
+import { RomSymbolProvider } from "./rom/symbol-provider.js";
+import { TableFileSystemProvider } from "./table-fs-provider.js";
+import { createTableUri, parseTableUri } from "./table-fs-uri.js";
+import { getThemeColors } from "./theme-colors.js";
+import type { RomTreeItem } from "./tree/rom-tree-item.js";
+import { RomExplorerTreeProvider } from "./tree/rom-tree-provider.js";
+import { isBatchEdit, type UndoRedoManager } from "./undo-redo-manager.js";
+import { WorkspaceState } from "./workspace-state.js";
 
 class ProviderRegistry {
 	providers: DefinitionProvider[] = [];
@@ -85,6 +91,10 @@ function getActiveRomPathForCacheClear(): string | null {
 
 	if (activeUri?.scheme === "file") {
 		return activeUri.fsPath;
+	}
+
+	if (activeUri?.scheme === "ecu-table") {
+		return parseTableUri(activeUri)?.romPath ?? null;
 	}
 
 	return null;
@@ -170,13 +180,15 @@ const panelToDocument = new Map<vscode.WebviewPanel, RomDocument>();
  * resolves the definition directly via resolveRomDefinition().
  *
  * @param romUri - URI of the ROM file to open
- * @param tableName - Name of the table to open (required)
+ * @param tableId - Stable ID of the table to open (required)
+ * @param tableName - Optional human-readable table name for presentation
  * @param _options - View column and focus options for the editor
  * @returns Promise that resolves when the custom editor is opened
  */
 async function openTableInCustomEditor(
 	romUri: vscode.Uri,
-	tableName: string,
+	tableId: string,
+	tableName?: string,
 	_options?: {
 		viewColumn?: vscode.ViewColumn;
 		preserveFocus?: boolean;
@@ -205,7 +217,7 @@ async function openTableInCustomEditor(
 	}
 
 	// Create table URI
-	const tableUri = createTableUri(romUri.fsPath, tableName);
+	const tableUri = createTableUri(romUri.fsPath, tableId, tableName);
 	console.log(
 		"[DEBUG] openTableInCustomEditor - Created URI:",
 		tableUri.toString(),
@@ -539,17 +551,23 @@ export async function activate(ctx: vscode.ExtensionContext) {
 		),
 		vscode.commands.registerCommand(
 			"ecuExplorer.openTable",
-			async (romUriOrTreeItem: string | RomTreeItem, tableName?: string) => {
+			async (
+				romUriOrTreeItem: string | RomTreeItem,
+				tableIdOrName?: string,
+				tableName?: string,
+			) => {
 				// Handle both direct command invocation and context menu invocation
 				let romUri: string;
-				let tableNameResolved: string;
+				let tableIdResolved: string;
+				let tableNameResolved: string | undefined;
 
 				if (typeof romUriOrTreeItem === "string") {
 					// Direct command invocation with arguments
 					romUri = romUriOrTreeItem;
-					if (!tableName) {
-						throw new Error("tableName is required when romUri is a string");
+					if (!tableIdOrName) {
+						throw new Error("tableId is required when romUri is a string");
 					}
+					tableIdResolved = tableIdOrName;
 					tableNameResolved = tableName;
 				} else {
 					// Context menu invocation - VSCode passes the tree item
@@ -561,10 +579,16 @@ export async function activate(ctx: vscode.ExtensionContext) {
 						return;
 					}
 					romUri = treeItem.data.romUri;
+					tableIdResolved = treeItem.data.tableDef.id;
 					tableNameResolved = treeItem.data.tableDef.name;
 				}
 
-				await handleOpenTableFromTree(ctx, romUri, tableNameResolved);
+				await handleOpenTableFromTree(
+					ctx,
+					romUri,
+					tableIdResolved,
+					tableNameResolved,
+				);
 			},
 		),
 		vscode.commands.registerCommand(
@@ -1750,7 +1774,8 @@ async function handleOpenGraphParameterized(
 async function handleOpenTableFromTree(
 	_ctx: vscode.ExtensionContext,
 	romUri: string,
-	tableName: string,
+	tableId: string,
+	tableName?: string,
 ): Promise<void> {
 	try {
 		// Parse the ROM URI
@@ -1758,7 +1783,7 @@ async function handleOpenTableFromTree(
 
 		// Use the unified openTableInCustomEditor function with preview mode
 		// This makes the tab temporary until the user edits it
-		await openTableInCustomEditor(uri, tableName, { preview: true });
+		await openTableInCustomEditor(uri, tableId, tableName, { preview: true });
 	} catch (error) {
 		vscode.window.showErrorMessage(
 			`Failed to open table: ${error instanceof Error ? error.message : String(error)}`,
@@ -1821,7 +1846,7 @@ async function openTableFlow(_ctx: vscode.ExtensionContext) {
 
 	// Use unified Custom Editor infrastructure (Phase 3)
 	const romUri = vscode.Uri.parse(activeRom.romUri);
-	await openTableInCustomEditor(romUri, picked.def.name);
+	await openTableInCustomEditor(romUri, picked.def.id, picked.def.name);
 }
 
 /**

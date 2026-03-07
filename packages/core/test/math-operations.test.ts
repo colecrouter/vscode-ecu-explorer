@@ -4,7 +4,7 @@ import {
 	clampValues,
 	multiplyConstant,
 	smoothValues,
-} from "../src/math/operations";
+} from "../src/math/operations.js";
 
 describe("Math Operations", () => {
 	describe("addConstant", () => {

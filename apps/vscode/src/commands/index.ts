@@ -12,16 +12,16 @@ export {
 	handleRedo,
 	handleUndo,
 	setEditCommandsContext,
-} from "./edit-commands";
+} from "./edit-commands.js";
 export {
 	handleOpenGraph,
 	handleOpenGraphParameterized,
 	handleOpenTableFromTree,
 	setGraphCommandsContext,
-} from "./graph-commands";
-export { openRomFlow } from "./rom-commands";
+} from "./graph-commands.js";
+export { openRomFlow } from "./rom-commands.js";
 export {
 	openTableFlow,
 	openTableInCustomEditor,
 	setTableCommandsContext,
-} from "./table-commands";
+} from "./table-commands.js";

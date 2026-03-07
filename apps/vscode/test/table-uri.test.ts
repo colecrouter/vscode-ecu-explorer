@@ -7,7 +7,7 @@ import {
 	parseTableUri,
 	type TableUri,
 	validateTableUri,
-} from "../src/table-uri";
+} from "../src/table-uri.js";
 
 /**
  * Normalizes a path to use forward slashes for platform-agnostic comparison

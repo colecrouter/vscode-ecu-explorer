@@ -8,14 +8,14 @@ import {
 	type TableDefinition,
 } from "@ecu-explorer/core";
 import * as vscode from "vscode";
-import type { RomDocument } from "../rom/document";
-import type { UndoRedoManager } from "../undo-redo-manager";
-import { csvToSnapshot, parseCsv, type TableSnapshot } from "./parser";
+import type { RomDocument } from "../rom/document.js";
+import type { UndoRedoManager } from "../undo-redo-manager.js";
+import { csvToSnapshot, parseCsv, type TableSnapshot } from "./parser.js";
 import {
 	generateImportPreview,
 	showImportPreviewDialog,
 	validateDimensions,
-} from "./validation";
+} from "./validation.js";
 
 /**
  * Get RomDocument for a webview panel

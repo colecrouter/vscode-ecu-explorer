@@ -1,10 +1,10 @@
 import type { ROMDefinition, TableDefinition } from "@ecu-explorer/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
-import { RomDocument } from "../src/rom/document";
-import type { RomEditorProvider } from "../src/rom/editor-provider";
-import { RomExplorerTreeProvider } from "../src/tree/rom-tree-provider";
-import { WorkspaceState } from "../src/workspace-state";
+import { RomDocument } from "../src/rom/document.js";
+import type { RomEditorProvider } from "../src/rom/editor-provider.js";
+import { RomExplorerTreeProvider } from "../src/tree/rom-tree-provider.js";
+import { WorkspaceState } from "../src/workspace-state.js";
 
 type MockEditorProvider = Pick<
 	RomEditorProvider,
@@ -49,10 +49,12 @@ describe("ECU Explorer Commands - Phase 2", () => {
 		kind: "table1d" | "table2d" | "table3d" = "table1d",
 	): TableDefinition {
 		const baseTable = {
+			id: `${name}-table`,
 			name,
 			kind,
 			rows: 10,
 			z: {
+				id: `${name}-z`,
 				name: "z",
 				address: 0x1000,
 				dtype: "u8" as const,
@@ -141,17 +143,17 @@ describe("ECU Explorer Commands - Phase 2", () => {
 			treeProvider.addDocument(document2);
 
 			// Simulate opening Table1
-			treeProvider.setActiveTable(mockUri1.toString(), "Table1");
+			treeProvider.setActiveTable(mockUri1.toString(), tables1[0]!.id);
 			expect(treeProvider.getActiveTable()).toEqual({
 				romUri: mockUri1.toString(),
-				tableName: "Table1",
+				tableName: tables1[0]!.id,
 			});
 
 			// Simulate switching to Table2 (e.g., via tab switch)
-			treeProvider.setActiveTable(mockUri2.toString(), "Table2");
+			treeProvider.setActiveTable(mockUri2.toString(), tables2[0]!.id);
 			expect(treeProvider.getActiveTable()).toEqual({
 				romUri: mockUri2.toString(),
-				tableName: "Table2",
+				tableName: tables2[0]!.id,
 			});
 
 			// Verify tree reflects the active table for the second ROM
@@ -191,7 +193,7 @@ describe("ECU Explorer Commands - Phase 2", () => {
 			treeProvider.addDocument(document);
 
 			// Simulate command execution
-			treeProvider.setActiveTable(mockUri.toString(), "Table1");
+			treeProvider.setActiveTable(mockUri.toString(), tables[0]!.id);
 
 			// Verify tree reflects the change
 			const romNodes = await treeProvider.getChildren();
@@ -226,16 +228,16 @@ describe("ECU Explorer Commands - Phase 2", () => {
 			treeProvider.addDocument(document);
 
 			// Open Table1
-			treeProvider.setActiveTable(mockUri.toString(), "Table1");
-			expect(treeProvider.getActiveTable()?.tableName).toBe("Table1");
+			treeProvider.setActiveTable(mockUri.toString(), tables[0]!.id);
+			expect(treeProvider.getActiveTable()?.tableName).toBe(tables[0]!.id);
 
 			// Switch to Table2
-			treeProvider.setActiveTable(mockUri.toString(), "Table2");
-			expect(treeProvider.getActiveTable()?.tableName).toBe("Table2");
+			treeProvider.setActiveTable(mockUri.toString(), tables[1]!.id);
+			expect(treeProvider.getActiveTable()?.tableName).toBe(tables[1]!.id);
 
 			// Switch to Table3
-			treeProvider.setActiveTable(mockUri.toString(), "Table3");
-			expect(treeProvider.getActiveTable()?.tableName).toBe("Table3");
+			treeProvider.setActiveTable(mockUri.toString(), tables[2]!.id);
+			expect(treeProvider.getActiveTable()?.tableName).toBe(tables[2]!.id);
 		});
 
 		it("should handle opening table from different ROM", async () => {
@@ -256,17 +258,17 @@ describe("ECU Explorer Commands - Phase 2", () => {
 			treeProvider.addDocument(document2);
 
 			// Open Table1 from ROM1
-			treeProvider.setActiveTable(mockUri1.toString(), "Table1");
+			treeProvider.setActiveTable(mockUri1.toString(), tables1[0]!.id);
 			expect(treeProvider.getActiveTable()).toEqual({
 				romUri: mockUri1.toString(),
-				tableName: "Table1",
+				tableName: tables1[0]!.id,
 			});
 
 			// Switch to Table2 from ROM2
-			treeProvider.setActiveTable(mockUri2.toString(), "Table2");
+			treeProvider.setActiveTable(mockUri2.toString(), tables2[0]!.id);
 			expect(treeProvider.getActiveTable()).toEqual({
 				romUri: mockUri2.toString(),
-				tableName: "Table2",
+				tableName: tables2[0]!.id,
 			});
 		});
 	});

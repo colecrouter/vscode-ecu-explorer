@@ -1,6 +1,6 @@
 import type { Table2DDefinition } from "@ecu-explorer/core";
 import { beforeEach, describe, expect, it } from "vitest";
-import { TableView } from "../src/lib/views/table.svelte";
+import { TableView } from "../src/lib/views/table.svelte.js";
 
 /**
  * Helper to create a simple 2D table definition

@@ -14,8 +14,8 @@
 
 import type { TableSnapshot } from "@ecu-explorer/ui";
 import * as vscode from "vscode";
-import type { RomDocument } from "./rom/document";
-import { getThemeColors, type ThemeColors } from "./theme-colors";
+import type { RomDocument } from "./rom/document.js";
+import { getThemeColors, type ThemeColors } from "./theme-colors.js";
 
 /**
  * Message from graph webview

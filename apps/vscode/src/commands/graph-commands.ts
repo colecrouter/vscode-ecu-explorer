@@ -4,9 +4,9 @@ import {
 	type TableDefinition,
 } from "@ecu-explorer/core";
 import * as vscode from "vscode";
-import type { GraphPanelManager } from "../graph-panel-manager";
-import type { RomEditorProvider } from "../rom/editor-provider";
-import type { RomTreeItem } from "../tree/rom-tree-item";
+import type { GraphPanelManager } from "../graph-panel-manager.js";
+import type { RomEditorProvider } from "../rom/editor-provider.js";
+import type { RomTreeItem } from "../tree/rom-tree-item.js";
 
 /**
  * Get references to extension state
@@ -197,10 +197,12 @@ export async function handleOpenGraphParameterized(
 export async function handleOpenTableFromTree(
 	_ctx: vscode.ExtensionContext,
 	romUri: string,
-	tableName: string,
+	tableId: string,
+	tableName: string | undefined,
 	openTableInCustomEditor: (
 		romUri: vscode.Uri,
-		tableName: string,
+		tableId: string,
+		tableName?: string,
 	) => Promise<void>,
 ): Promise<void> {
 	try {
@@ -209,7 +211,7 @@ export async function handleOpenTableFromTree(
 
 		// Use the unified openTableInCustomEditor function with preview mode
 		// This makes the tab temporary until the user edits it
-		await openTableInCustomEditor(uri, tableName);
+		await openTableInCustomEditor(uri, tableId, tableName);
 	} catch (error) {
 		vscode.window.showErrorMessage(
 			`Failed to open table: ${error instanceof Error ? error.message : String(error)}`,

@@ -11,16 +11,16 @@
 import type { TableSnapshot } from "@ecu-explorer/ui";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
-import { GraphPanelManager } from "../src/graph-panel-manager";
-import { GraphPanelSerializer } from "../src/graph-panel-serializer";
-import { RomDocument } from "../src/rom/document";
-import type { RomEditorProvider } from "../src/rom/editor-provider";
+import { GraphPanelManager } from "../src/graph-panel-manager.js";
+import { GraphPanelSerializer } from "../src/graph-panel-serializer.js";
+import { RomDocument } from "../src/rom/document.js";
+import type { RomEditorProvider } from "../src/rom/editor-provider.js";
 import {
 	createMockPanel,
 	createMockWebviewPanel,
 	type GraphCompatibleWebviewPanel,
 	type MockGraphWebview,
-} from "./mocks/webview-mock";
+} from "./mocks/webview-mock.js";
 
 describe("Graph Windows E2E", () => {
 	let manager: GraphPanelManager;
@@ -74,11 +74,13 @@ describe("Graph Windows E2E", () => {
 			platform: {},
 			tables: [
 				{
+					id: "table1",
 					name: "table1",
 					kind: "table2d",
 					rows: 2,
 					cols: 2,
 					z: {
+						id: "table1-z",
 						name: "z",
 						address: 0x1000,
 						dtype: "u8",

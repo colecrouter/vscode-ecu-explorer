@@ -7,7 +7,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
-import { LoggingManager, openLogsFolder } from "../src/logging-manager";
+import { LoggingManager, openLogsFolder } from "../src/logging-manager.js";
 
 type LoggingConfiguration = Pick<
 	vscode.WorkspaceConfiguration,

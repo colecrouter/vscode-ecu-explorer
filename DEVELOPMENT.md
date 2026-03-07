@@ -56,6 +56,7 @@
 - [ ] Flashing tool: "wrx02", "wrx04", "sti04", "sti05", "mitsucan", "mitsukernel", "mitsukernelocp", "mitsubootloader", "shbootmode", "shaudmode", "subarucan", "subarucand", "subarubrz", "subaruhitachi", 
 - [ ] Extract proper device support tables from EcuFlash and RomRaider
 - [ ] Revisit `list_tables` (how will LLM know categories?)
+- [ ] Add optional path to MCP commands
 
 **Status**: In Progress
 

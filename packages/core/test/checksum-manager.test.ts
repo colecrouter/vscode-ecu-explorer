@@ -4,8 +4,8 @@ import {
 	recomputeChecksum,
 	validateChecksum,
 	writeChecksum,
-} from "../src/checksum/manager";
-import type { ChecksumDefinition } from "../src/definition/rom";
+} from "../src/checksum/manager.js";
+import type { ChecksumDefinition } from "../src/definition/rom.js";
 
 describe("recomputeChecksum", () => {
 	it("computes CRC32 for single region", () => {
