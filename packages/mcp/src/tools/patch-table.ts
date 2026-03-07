@@ -27,12 +27,17 @@ import {
 } from "../formatters/table-formatter.js";
 import { invalidateRomCache, loadRom } from "../rom-loader.js";
 
+function toLoadRomOptions(definitionPath?: string) {
+	return definitionPath === undefined ? {} : { definitionPath };
+}
+
 export type PatchOp = "set" | "add" | "multiply" | "clamp" | "smooth";
 
 export interface PatchTableOptions {
 	rom: string;
 	table: string;
 	op: PatchOp;
+	definitionPath?: string;
 	value?: number;
 	min?: number;
 	max?: number;
@@ -55,6 +60,7 @@ export async function handlePatchTable(
 		rom: romPath,
 		table: tableName,
 		op,
+		definitionPath,
 		value,
 		min,
 		max,
@@ -83,7 +89,11 @@ export async function handlePatchTable(
 	}
 
 	// Load ROM + definition
-	const loaded = await loadRom(romPath, config.definitionsPaths);
+	const loaded = await loadRom(
+		romPath,
+		config.definitionsPaths,
+		toLoadRomOptions(definitionPath),
+	);
 	const { definition, romBytes } = loaded;
 
 	// Find the table definition by name
@@ -279,7 +289,11 @@ export async function handlePatchTable(
 	invalidateRomCache(absoluteRomPath);
 
 	// Reload ROM with new bytes and return updated table
-	const reloaded = await loadRom(romPath, config.definitionsPaths);
+	const reloaded = await loadRom(
+		romPath,
+		config.definitionsPaths,
+		toLoadRomOptions(definitionPath),
+	);
 	const result = formatTable(romPath, tableDef, reloaded.romBytes);
 	return result.content;
 }
