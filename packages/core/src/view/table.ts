@@ -108,6 +108,8 @@ export class TableView {
 		this.endian = this.z.endianness ?? "le";
 		this.scale = this.z.scale ?? 1;
 		this.offset = this.z.offset ?? 0;
+		this.transform = this.z.transform;
+		this.inverseTransform = this.z.inverseTransform;
 
 		// Layout defaults for 2D/3D
 		if (def.kind === "table2d" || def.kind === "table3d") {
@@ -129,6 +131,8 @@ export class TableView {
 	private readonly endian: Endianness;
 	private readonly scale: number;
 	private readonly offset: number;
+	private readonly transform: ZDataDefinition["transform"];
+	private readonly inverseTransform: ZDataDefinition["inverseTransform"];
 	private readonly rowStride: number;
 	private readonly colStride: number;
 
@@ -149,7 +153,9 @@ export class TableView {
 		const raw = decodeScalar(this.rom, off, this.z.dtype, {
 			endian: this.endian,
 		});
-		const value = raw * this.scale + this.offset;
+		const value = this.transform
+			? this.transform(raw)
+			: raw * this.scale + this.offset;
 		return mode === "raw" ? raw : value;
 	}
 
@@ -166,7 +172,11 @@ export class TableView {
 		this.checkBounds(r, c);
 		const off = this.cellByteOffset(r, c);
 		const raw =
-			mode === "raw" ? value : Math.round((value - this.offset) / this.scale);
+			mode === "raw"
+				? value
+				: this.inverseTransform
+					? this.inverseTransform(value)
+					: Math.round((value - this.offset) / this.scale);
 		const bytes = encodeScalar(raw, this.z.dtype, this.endian);
 		this.rom.set(bytes, off);
 	}
@@ -229,7 +239,9 @@ export class TableView {
 			const off = dyn.address + i * dtypeSize;
 			const bytes = this.rom.subarray(off, off + dtypeSize);
 			const raw = decodeScalarBytes(bytes, dyn.dtype, endian);
-			values[i] = raw * dynScale + dynOffset;
+			values[i] = dyn.transform
+				? dyn.transform(raw)
+				: raw * dynScale + dynOffset;
 		}
 		return { values, unit: dyn.unit };
 	}
@@ -336,7 +348,9 @@ export function readAxis(
 		const addr = dyn.address + i * width;
 		const cell = rom.subarray(addr, addr + width);
 		const raw = decodeScalarBytes(cell, dyn.dtype, dyn.endianness ?? "le");
-		const scaled = raw * (dyn.scale ?? 1) + (dyn.offset ?? 0);
+		const scaled = dyn.transform
+			? dyn.transform(raw)
+			: raw * (dyn.scale ?? 1) + (dyn.offset ?? 0);
 		out.push(scaled);
 	}
 	return out;
@@ -377,7 +391,7 @@ export function snapshotTable(
 			const addr = t.z.address + r * stride;
 			const bytes = rom.subarray(addr, addr + width);
 			const raw = decodeScalarBytes(bytes, t.z.dtype, endian);
-			z.push(raw * scale + offset);
+			z.push(t.z.transform ? t.z.transform(raw) : raw * scale + offset);
 		}
 		const x = readAxis(t.x, rom);
 		const result: TableSnapshot = {
@@ -405,7 +419,7 @@ export function snapshotTable(
 			const addr = t.z.address + r * rowStride + c * colStride;
 			const bytes = rom.subarray(addr, addr + width);
 			const raw = decodeScalarBytes(bytes, t.z.dtype, endian);
-			row.push(raw * scale + offset);
+			row.push(t.z.transform ? t.z.transform(raw) : raw * scale + offset);
 		}
 		z.push(row);
 	}

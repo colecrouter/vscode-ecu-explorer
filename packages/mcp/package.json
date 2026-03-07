@@ -9,6 +9,30 @@
 		".": {
 			"import": "./dist/index.js",
 			"types": "./dist/index.d.ts"
+		},
+		"./formatters/markdown": {
+			"import": "./dist/formatters/markdown.js",
+			"types": "./dist/formatters/markdown.d.ts"
+		},
+		"./formatters/table-formatter": {
+			"import": "./dist/formatters/table-formatter.js",
+			"types": "./dist/formatters/table-formatter.d.ts"
+		},
+		"./formatters/table-summary": {
+			"import": "./dist/formatters/table-summary.js",
+			"types": "./dist/formatters/table-summary.d.ts"
+		},
+		"./formatters/unit": {
+			"import": "./dist/formatters/unit.js",
+			"types": "./dist/formatters/unit.d.ts"
+		},
+		"./formatters/yaml-formatter": {
+			"import": "./dist/formatters/yaml-formatter.js",
+			"types": "./dist/formatters/yaml-formatter.d.ts"
+		},
+		"./rom-loader": {
+			"import": "./dist/rom-loader.js",
+			"types": "./dist/rom-loader.d.ts"
 		}
 	},
 	"scripts": {

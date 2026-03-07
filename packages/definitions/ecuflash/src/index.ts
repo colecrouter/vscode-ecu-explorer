@@ -29,6 +29,9 @@ type TableNode = {
 	category?: string;
 	scaling?: string;
 	elements?: string;
+	"lt-group"?: string;
+	"lt-memory-ptr"?: string;
+	"lt-memory-blk"?: string;
 	swapxy?: string;
 	flipy?: string;
 	flipx?: string;
@@ -37,15 +40,134 @@ type TableNode = {
 	table?: TableNode | TableNode[];
 };
 
+function hasLiveTuneOnlyMetadata(node: TableNode): boolean {
+	return (
+		node.address === undefined &&
+		(node["lt-memory-blk"] !== undefined || node["lt-memory-ptr"] !== undefined)
+	);
+}
+
+function mergeTableNodes(parent: TableNode, child: TableNode): TableNode {
+	const merged: TableNode = { ...parent };
+
+	if (child.name !== undefined) merged.name = child.name;
+	if (child.address !== undefined) merged.address = child.address;
+	if (child.type !== undefined) merged.type = child.type;
+	if (child.category !== undefined) merged.category = child.category;
+	if (child.scaling !== undefined) merged.scaling = child.scaling;
+	if (child.elements !== undefined) merged.elements = child.elements;
+	if (child["lt-group"] !== undefined) merged["lt-group"] = child["lt-group"];
+	if (child["lt-memory-ptr"] !== undefined)
+		merged["lt-memory-ptr"] = child["lt-memory-ptr"];
+	if (child["lt-memory-blk"] !== undefined)
+		merged["lt-memory-blk"] = child["lt-memory-blk"];
+	if (child.swapxy !== undefined) merged.swapxy = child.swapxy;
+	if (child.flipy !== undefined) merged.flipy = child.flipy;
+	if (child.flipx !== undefined) merged.flipx = child.flipx;
+	if (child.notes !== undefined) merged.notes = child.notes;
+	if (child.data !== undefined) merged.data = child.data;
+
+	// Merge child tables (axes) by name or role
+	const parentChildren = asArray(parent.table);
+	const childChildren = asArray(child.table);
+
+	if (childChildren.length > 0) {
+		const mergedChildren: TableNode[] = [...parentChildren];
+
+		for (const childAxis of childChildren) {
+			const childKey =
+				childAxis.name?.trim() ??
+				(childAxis.type?.toLowerCase().includes("x axis")
+					? "X Axis"
+					: childAxis.type?.toLowerCase().includes("y axis")
+						? "Y Axis"
+						: undefined);
+
+			const existingIndex = mergedChildren.findIndex((p) => {
+				const pKey =
+					p.name?.trim() ??
+					(p.type?.toLowerCase().includes("x axis")
+						? "X Axis"
+						: p.type?.toLowerCase().includes("y axis")
+							? "Y Axis"
+							: undefined);
+				return pKey !== undefined && pKey === childKey;
+			});
+
+			if (existingIndex !== -1) {
+				const existing = mergedChildren[existingIndex];
+				if (existing) {
+					mergedChildren[existingIndex] = mergeTableNodes(existing, childAxis);
+				}
+			} else {
+				mergedChildren.push(childAxis);
+			}
+		}
+		merged.table = mergedChildren;
+	}
+
+	return merged;
+}
+
+function applyInheritance(nodes: TableNode[]): TableNode[] {
+	// allNodes is [parent1, parent2, ..., child] (parents first, child last).
+	// We iterate backward so the child is processed first and stored in the map.
+	// When a parent is encountered later, existing=child and node=parent, so we
+	// call mergeTableNodes(node=parent, existing=child) which lets child fields
+	// overwrite parent fields — correct child-wins semantics.
+	//
+	// Two nodes with the same name are only merged when their addresses are
+	// compatible (at least one is undefined). If both have distinct non-undefined
+	// addresses they represent separate tables and must be kept independent.
+	const mergedByName = new Map<string, TableNode>();
+	const extras: TableNode[] = [];
+
+	for (let i = nodes.length - 1; i >= 0; i--) {
+		const node = nodes[i];
+		if (!node) continue;
+		const name = node.name?.trim();
+		if (!name) continue;
+
+		const existing = mergedByName.get(name);
+		if (existing) {
+			const existingAddr = existing.address;
+			const nodeAddr = node.address;
+			// Only merge when addresses are compatible (inheritance pattern).
+			// If both have distinct addresses they are separate tables.
+			if (
+				existingAddr !== undefined &&
+				nodeAddr !== undefined &&
+				existingAddr !== nodeAddr
+			) {
+				extras.push(node);
+			} else {
+				// existing = child (processed first), node = parent
+				// mergeTableNodes(parent, child) → child fields win
+				mergedByName.set(name, mergeTableNodes(node, existing));
+			}
+		} else {
+			mergedByName.set(name, node);
+		}
+	}
+
+	return [...Array.from(mergedByName.values()), ...extras];
+}
+
 type ScalingNode = {
 	name?: string;
 	storagetype?: string;
 	endian?: string;
 	toexpr?: string;
+	frexpr?: string;
 	units?: string;
 };
 
 type Affine = { scale: number; offset: number };
+
+type ScalingTransform = {
+	toPhysical: (raw: number) => number;
+	toRaw?: (physical: number) => number;
+};
 
 function unitFromSymbol(symbol: string | undefined): Unit | undefined {
 	if (!symbol) return undefined;
@@ -219,6 +341,53 @@ function affineFromScaling(scaling: ScalingNode | undefined): Affine | null {
 	return tryParseAffineToExpr(scaling?.toexpr);
 }
 
+function compileScalingExpression(
+	expr: string | undefined,
+): ((value: number) => number) | null {
+	if (!expr) return null;
+	const trimmed = expr.trim();
+	if (!trimmed) return null;
+	if (!/^[0-9xX+\-*/().\s]+$/.test(trimmed)) return null;
+
+	try {
+		// eslint-disable-next-line no-new-func
+		const fn = new Function(
+			"x",
+			`"use strict"; return (${trimmed.replaceAll("X", "x")});`,
+		) as (value: number) => number;
+		// Use non-zero sample points to avoid false negatives for reciprocal
+		// expressions like "29241/x" where x=0 is a singularity but the
+		// function is otherwise valid.
+		const samples = [1, 2, 3].map((value) => fn(value));
+		if (!samples.every((value) => Number.isFinite(value))) return null;
+		return fn;
+	} catch {
+		return null;
+	}
+}
+
+function transformFromScaling(
+	scaling: ScalingNode | undefined,
+): ScalingTransform | null {
+	if (!scaling) return null;
+	const affine = affineFromScaling(scaling);
+	if (affine) {
+		const toRaw =
+			affine.scale !== 0
+				? (physical: number) => (physical - affine.offset) / affine.scale
+				: undefined;
+		return {
+			toPhysical: (raw) => raw * affine.scale + affine.offset,
+			...(toRaw ? { toRaw } : {}),
+		};
+	}
+
+	const toPhysical = compileScalingExpression(scaling.toexpr);
+	if (!toPhysical) return null;
+	const toRaw = compileScalingExpression(scaling.frexpr);
+	return { toPhysical, ...(toRaw ? { toRaw } : {}) };
+}
+
 /**
  * Parse checksum module name to ChecksumDefinition
  *
@@ -305,6 +474,27 @@ function buildScalingIndex(rom: Raw): Map<string, ScalingNode> {
 		if (name) map.set(name, s);
 	}
 	return map;
+}
+
+function mergeScalingIndex(
+	...sources: Array<Map<string, ScalingNode>>
+): Map<string, ScalingNode> {
+	const merged = new Map<string, ScalingNode>();
+	for (const source of sources) {
+		for (const [name, scaling] of source.entries()) {
+			const existing = merged.get(name);
+			if (!existing) {
+				merged.set(name, scaling);
+				continue;
+			}
+			merged.set(name, {
+				...existing,
+				...scaling,
+				name,
+			});
+		}
+	}
+	return merged;
 }
 
 type TemplateAxis = {
@@ -837,10 +1027,10 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 		const includes = await this.loadIncludes(definitionUri, rom);
 		const templates = includes.templates;
 		// Merge scalings defined in the main file and included base/template files.
-		const scalingIndex = new Map<string, ScalingNode>([
-			...includes.scalings.entries(),
-			...buildScalingIndex(rom).entries(),
-		]);
+		const scalingIndex = mergeScalingIndex(
+			includes.scalings,
+			buildScalingIndex(rom),
+		);
 		const inheritedRom = {
 			...rom,
 			table: [
@@ -1079,7 +1269,10 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 			parentDefinitionPath: string,
 			parentRom: Raw,
 		): Promise<void> => {
-			for (const includeToken of includeTokensFrom(parentRom)) {
+			const tokens = includeTokensFrom(parentRom);
+			// Process includes in order.
+			for (const includeToken of tokens) {
+				if (!includeToken) continue;
 				const includePath = path.resolve(
 					await resolveIncludePath(parentDefinitionPath, includeToken),
 				);
@@ -1092,7 +1285,11 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 				const includeRom = extractRom(includeDoc);
 				if (!includeRom) continue;
 
-				tables.push(
+				await visitIncludes(includePath, includeRom);
+
+				// Push to the FRONT of the array so that parents come BEFORE children
+				// in the final allNodes array.
+				tables.unshift(
 					...asArray((includeRom as Raw).table as TableNode | TableNode[]),
 				);
 
@@ -1100,10 +1297,8 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 					if (!templates.has(k)) templates.set(k, v);
 				}
 				for (const [k, v] of buildScalingIndex(includeRom).entries()) {
-					if (!scalings.has(k)) scalings.set(k, v);
+					scalings.set(k, v);
 				}
-
-				await visitIncludes(includePath, includeRom);
 			}
 		};
 
@@ -1118,14 +1313,25 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 		scalings: Map<string, ScalingNode>,
 	): TableDefinition[] {
 		const out: TableDefinition[] = [];
-		const nodes = asArray((rom as Raw).table as TableNode | TableNode[]);
+		const allNodes = asArray((rom as Raw).table as TableNode | TableNode[]);
+
+		// Apply basic inheritance model: merge by name, child overwrites parent
+		const nodes = applyInheritance(allNodes);
 
 		for (const node of nodes) {
 			try {
 				const name = node.name;
 				if (!name) continue;
+				if (hasLiveTuneOnlyMetadata(node)) continue;
 
 				const tmpl = templates.get(name);
+				if (
+					tmpl &&
+					hasLiveTuneOnlyMetadata(node) &&
+					node.address === undefined
+				) {
+					continue;
+				}
 				const address = parseAddress(node.address) ?? tmpl?.address;
 				if (address === undefined) continue;
 				const shape = resolveTableShape(node, tmpl);
@@ -1133,6 +1339,7 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 				const scalingName = node.scaling ?? tmpl?.scaling;
 				const scaling = scalingName ? scalings.get(scalingName) : undefined;
 				const affine = affineFromScaling(scaling);
+				const transform = transformFromScaling(scaling);
 				const zUnit = unitFromSymbol(scaling?.units);
 
 				const z: Table1DDefinition["z"] = {
@@ -1144,6 +1351,14 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 					// v0: apply simple affine (linear) scalings when possible, otherwise keep raw.
 					scale: affine?.scale ?? 1,
 					offset: affine?.offset ?? 0,
+					...(transform && !affine
+						? {
+								transform: transform.toPhysical,
+								...(transform.toRaw
+									? { inverseTransform: transform.toRaw }
+									: {}),
+							}
+						: {}),
 					...(zUnit ? { unit: zUnit } : {}),
 				};
 
@@ -1287,6 +1502,7 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 		const scalingName = axisNode.scaling ?? template?.scaling;
 		const scaling = scalingName ? scalings.get(scalingName) : undefined;
 		const affine = affineFromScaling(scaling);
+		const transform = transformFromScaling(scaling);
 		const hasUnresolvedNamedScaling = Boolean(scalingName) && !scaling;
 		const inheritedAxisAddress = axisAddress ?? template?.address;
 
@@ -1326,6 +1542,12 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 			endianness: inferredDynamicAxisEndianness,
 			scale: affine?.scale ?? 1,
 			offset: affine?.offset ?? 0,
+			...(transform && !affine
+				? {
+						transform: transform.toPhysical,
+						...(transform.toRaw ? { inverseTransform: transform.toRaw } : {}),
+					}
+				: {}),
 			...(unit ? { unit } : {}),
 		};
 	}

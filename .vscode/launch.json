@@ -8,8 +8,8 @@
 			"runtimeExecutable": "${execPath}",
 			"preLaunchTask": "build:vscode-extension",
 			"args": [
-				"--extensionDevelopmentPath=${workspaceFolder}/apps/vscode",
-				"--disable-extensions"
+				"--extensionDevelopmentPath=${workspaceFolder}/apps/vscode"
+				// "--disable-extensions"
 			],
 			"outFiles": ["${workspaceFolder}/apps/vscode/dist/**/*.cjs"]
 		}

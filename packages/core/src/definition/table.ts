@@ -29,6 +29,10 @@ interface Categorized {
 interface Scalable {
 	offset?: number; // physical = raw * scale + offset
 	scale?: number;
+	/** Optional forward transform when scaling cannot be represented as affine scale+offset. */
+	transform?: (raw: number) => number;
+	/** Optional inverse transform for encoding physical values back to raw storage. */
+	inverseTransform?: (physical: number) => number;
 }
 
 /**

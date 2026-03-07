@@ -7,6 +7,27 @@
 
 import yaml from "js-yaml";
 
+function sanitizeYamlValue(value: unknown): unknown {
+	if (typeof value === "function") {
+		return undefined;
+	}
+
+	if (Array.isArray(value)) {
+		return value
+			.map((entry) => sanitizeYamlValue(entry))
+			.filter((entry) => entry !== undefined);
+	}
+
+	if (value && typeof value === "object") {
+		const entries = Object.entries(value as Record<string, unknown>)
+			.map(([key, entry]) => [key, sanitizeYamlValue(entry)] as const)
+			.filter(([, entry]) => entry !== undefined);
+		return Object.fromEntries(entries);
+	}
+
+	return value;
+}
+
 /**
  * Serialize a metadata object as a YAML document.
  *
@@ -14,7 +35,7 @@ import yaml from "js-yaml";
  * @returns YAML string
  */
 export function toYaml(data: Record<string, unknown>): string {
-	return yaml.dump(data, {
+	return yaml.dump(sanitizeYamlValue(data), {
 		indent: 2,
 		lineWidth: 120,
 		noRefs: true,

@@ -22,6 +22,7 @@ import type {
 } from "@ecu-explorer/core";
 import { decodeScalar } from "@ecu-explorer/core";
 import { buildMarkdownTable } from "./markdown.js";
+import { formatUnit } from "./unit.js";
 import { toYamlFrontmatter } from "./yaml-formatter.js";
 
 export interface TableReadResult {
@@ -81,7 +82,7 @@ function readAxisValues(romBytes: Uint8Array, axis: AxisDefinition): number[] {
 	for (let i = 0; i < axis.length; i++) {
 		const byteOffset = axis.address + i * elemSize;
 		const raw = decodeScalar(romBytes, byteOffset, axis.dtype, { endian });
-		values.push(raw * scale + offset);
+		values.push(axis.transform ? axis.transform(raw) : raw * scale + offset);
 	}
 
 	return values;
@@ -109,7 +110,7 @@ function readTable1DValues(
 	for (let i = 0; i < length; i++) {
 		const byteOffset = z.address + i * elemSize;
 		const raw = decodeScalar(romBytes, byteOffset, z.dtype, { endian });
-		values.push(raw * scale + offset);
+		values.push(z.transform ? z.transform(raw) : raw * scale + offset);
 	}
 
 	return values;
@@ -146,7 +147,7 @@ function readTable2DValues(
 				byteOffset = z.address + r * rowStride + c * colStride;
 			}
 			const raw = decodeScalar(romBytes, byteOffset, z.dtype, { endian });
-			row.push(raw * scale + offset);
+			row.push(z.transform ? z.transform(raw) : raw * scale + offset);
 		}
 		result.push(row);
 	}
@@ -189,12 +190,12 @@ export function formatTable1D(
 		rom: romPath,
 		kind: "table1d",
 		rows: values.length,
-		unit: def.z.unit ?? "",
+		unit: formatUnit(def.z.unit),
 	};
 
 	if (def.x) {
 		frontmatterData.x_axis_name = def.x.name;
-		frontmatterData.x_axis_unit = def.x.unit ?? "";
+		frontmatterData.x_axis_unit = formatUnit(def.x.unit);
 	}
 
 	if (writeStatus) {
@@ -207,8 +208,10 @@ export function formatTable1D(
 	const frontmatter = toYamlFrontmatter(frontmatterData);
 
 	// Build markdown table
-	const axisName = def.x ? `${def.x.name} (${def.x.unit ?? ""})` : "Index";
-	const valueName = `${def.name} (${def.z.unit ?? ""})`;
+	const axisName = def.x
+		? `${def.x.name} (${formatUnit(def.x.unit)})`
+		: "Index";
+	const valueName = `${def.name} (${formatUnit(def.z.unit)})`;
 	const headers = [axisName, valueName];
 
 	const tableRows: string[][] = values.map((val, i) => {
@@ -257,17 +260,17 @@ export function formatTable2D(
 		kind: "table2d",
 		rows: def.rows,
 		cols: def.cols,
-		unit: def.z.unit ?? "",
+		unit: formatUnit(def.z.unit),
 	};
 
 	if (def.x) {
 		frontmatterData.x_axis_name = def.x.name;
-		frontmatterData.x_axis_unit = def.x.unit ?? "";
+		frontmatterData.x_axis_unit = formatUnit(def.x.unit);
 	}
 
 	if (def.y) {
 		frontmatterData.y_axis_name = def.y.name;
-		frontmatterData.y_axis_unit = def.y.unit ?? "";
+		frontmatterData.y_axis_unit = formatUnit(def.y.unit);
 	}
 
 	if (writeStatus) {
@@ -343,7 +346,7 @@ export function formatTable(
 		rows: def.rows,
 		cols: def.cols,
 		depth: def.depth,
-		unit: def.z.unit ?? "",
+		unit: formatUnit(def.z.unit),
 		note: "3D tables are not fully supported. Showing first layer.",
 	};
 
@@ -394,7 +397,11 @@ export function writeTable1DValues(
 
 	for (let i = 0; i < length; i++) {
 		const physVal = newValues[i] as number;
-		const rawVal = scale !== 0 ? (physVal - offset) / scale : physVal;
+		const rawVal = z.inverseTransform
+			? z.inverseTransform(physVal)
+			: scale !== 0
+				? (physVal - offset) / scale
+				: physVal;
 		const byteOffset = z.address + i * elemSize;
 
 		writeScalarToView(dv, byteOffset, z.dtype, le, rawVal);
@@ -448,7 +455,11 @@ export function writeTable2DValues(
 
 		for (let c = 0; c < def.cols; c++) {
 			const physVal = row[c] as number;
-			const rawVal = scale !== 0 ? (physVal - offset) / scale : physVal;
+			const rawVal = z.inverseTransform
+				? z.inverseTransform(physVal)
+				: scale !== 0
+					? (physVal - offset) / scale
+					: physVal;
 
 			let byteOffset: number;
 			if (z.indexer) {

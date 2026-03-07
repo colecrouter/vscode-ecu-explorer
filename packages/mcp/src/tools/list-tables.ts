@@ -6,7 +6,7 @@
  */
 
 import type { McpConfig } from "../config.js";
-import { buildMarkdownTable } from "../formatters/markdown.js";
+import { formatTableListMarkdown } from "../formatters/table-summary.js";
 import { toYamlFrontmatter } from "../formatters/yaml-formatter.js";
 import { loadRom } from "../rom-loader.js";
 
@@ -53,23 +53,7 @@ export async function handleListTables(
 
 	const frontmatter = toYamlFrontmatter(frontmatterData);
 
-	// Build markdown table matching spec: name, category, dimensions, unit
-	const headers = ["Name", "Category", "Dimensions", "Unit"];
-
-	const rows = tables.map((table) => {
-		const dims =
-			table.kind === "table1d"
-				? `1x${table.rows}`
-				: table.kind === "table2d"
-					? `${table.cols}x${table.rows}`
-					: `${table.cols}x${table.rows}x${table.depth}`;
-		const unit = String(table.z.unit ?? "");
-		const category = table.category ?? "";
-
-		return [table.name, category, dims, unit];
-	});
-
-	const tableContent = buildMarkdownTable(headers, rows);
+	const tableContent = formatTableListMarkdown(tables);
 
 	return `${frontmatter}\n${tableContent}`;
 }
