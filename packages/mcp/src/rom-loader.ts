@@ -13,6 +13,10 @@ import type { ROMDefinition } from "@ecu-explorer/core";
 import { scoreRomDefinition } from "@ecu-explorer/core";
 import { EcuFlashProvider } from "@ecu-explorer/definitions-ecuflash";
 
+export interface LoadRomOptions {
+	definitionPath?: string;
+}
+
 export interface LoadedRom {
 	/** ROM file path */
 	romPath: string;
@@ -28,6 +32,7 @@ export interface LoadedRom {
 
 interface CacheEntry {
 	mtime: number;
+	definitionPath: string | null;
 	loaded: LoadedRom;
 }
 
@@ -46,16 +51,27 @@ const cache = new Map<string, CacheEntry>();
 export async function loadRom(
 	romPath: string,
 	definitionsPaths: string[] = [],
+	options: LoadRomOptions = {},
 ): Promise<LoadedRom> {
 	const absolutePath = path.isAbsolute(romPath)
 		? romPath
 		: path.resolve(process.cwd(), romPath);
+	const explicitDefinitionPath =
+		options.definitionPath === undefined
+			? null
+			: path.isAbsolute(options.definitionPath)
+				? options.definitionPath
+				: path.resolve(process.cwd(), options.definitionPath);
 
 	// Check cache
 	const stat = await fs.stat(absolutePath);
 	const mtime = stat.mtimeMs;
 	const cached = cache.get(absolutePath);
-	if (cached && cached.mtime === mtime) {
+	if (
+		cached &&
+		cached.mtime === mtime &&
+		cached.definitionPath === explicitDefinitionPath
+	) {
 		return cached.loaded;
 	}
 
@@ -67,42 +83,58 @@ export async function loadRom(
 	const provider = new EcuFlashProvider(definitionsPaths);
 	const romUri = pathToFileURL(absolutePath).toString();
 
-	// Discover definition URIs (search near ROM file + additional paths)
-	const definitionUris = await provider.discoverDefinitionUris(romUri);
+	let bestDefinition: ROMDefinition;
 
-	if (definitionUris.length === 0) {
-		throw new Error(
-			`No definition files found for ROM: ${absolutePath}. ` +
-				`Set ECU_DEFINITIONS_PATH or --definitions-path to point to your ECUFlash XML definitions directory.`,
-		);
-	}
-
-	// Score all definitions and find the best match
-	let bestScore = 0;
-	let bestDefinition: ROMDefinition | null = null;
-
-	for (const uri of definitionUris) {
+	if (explicitDefinitionPath !== null) {
 		try {
-			const stub = await provider.peek(uri);
-			if (stub.fingerprints.length === 0) continue;
-
-			const score = scoreRomDefinition(romBytes, stub);
-			if (score > bestScore) {
-				bestScore = score;
-				// Lazily parse the full definition only for the best match
-				bestDefinition = await provider.parse(uri);
-			}
-		} catch {
-			// Skip definitions that fail to parse
+			bestDefinition = await provider.parse(
+				pathToFileURL(explicitDefinitionPath).toString(),
+			);
+		} catch (err) {
+			throw new Error(
+				`Failed to load explicit definition file: ${explicitDefinitionPath}. ${err instanceof Error ? err.message : String(err)}`,
+			);
 		}
-	}
+	} else {
+		// Discover definition URIs (search near ROM file + additional paths)
+		const definitionUris = await provider.discoverDefinitionUris(romUri);
 
-	if (!bestDefinition || bestScore === 0) {
-		throw new Error(
-			`No matching definition found for ROM: ${absolutePath}. ` +
-				`Searched ${definitionUris.length} definition file(s). ` +
-				`Ensure the correct ECUFlash XML definitions are available.`,
-		);
+		if (definitionUris.length === 0) {
+			throw new Error(
+				`No definition files found for ROM: ${absolutePath}. ` +
+					`Set ECU_DEFINITIONS_PATH or --definitions-path to point to your ECUFlash XML definitions directory.`,
+			);
+		}
+
+		// Score all definitions and find the best match
+		let bestScore = 0;
+		let matchedDefinition: ROMDefinition | null = null;
+
+		for (const uri of definitionUris) {
+			try {
+				const stub = await provider.peek(uri);
+				if (stub.fingerprints.length === 0) continue;
+
+				const score = scoreRomDefinition(romBytes, stub);
+				if (score > bestScore) {
+					bestScore = score;
+					// Lazily parse the full definition only for the best match
+					matchedDefinition = await provider.parse(uri);
+				}
+			} catch {
+				// Skip definitions that fail to parse
+			}
+		}
+
+		if (!matchedDefinition || bestScore === 0) {
+			throw new Error(
+				`No matching definition found for ROM: ${absolutePath}. ` +
+					`Searched ${definitionUris.length} definition file(s). ` +
+					`Ensure the correct ECUFlash XML definitions are available.`,
+			);
+		}
+
+		bestDefinition = matchedDefinition;
 	}
 
 	const loaded: LoadedRom = {
@@ -113,7 +145,11 @@ export async function loadRom(
 		mtime,
 	};
 
-	cache.set(absolutePath, { mtime, loaded });
+	cache.set(absolutePath, {
+		mtime,
+		definitionPath: explicitDefinitionPath,
+		loaded,
+	});
 	return loaded;
 }
 

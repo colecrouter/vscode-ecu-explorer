@@ -10,6 +10,10 @@ import { buildMarkdownTable } from "../formatters/markdown.js";
 import { toYamlFrontmatter } from "../formatters/yaml-formatter.js";
 import { loadRom } from "../rom-loader.js";
 
+function toLoadRomOptions(definitionPath?: string) {
+	return definitionPath === undefined ? {} : { definitionPath };
+}
+
 /**
  * Handle the list_tables tool call.
  *
@@ -21,8 +25,13 @@ export async function handleListTables(
 	romPath: string,
 	config: McpConfig,
 	categoryFilter?: string,
+	definitionPath?: string,
 ): Promise<string> {
-	const loaded = await loadRom(romPath, config.definitionsPaths);
+	const loaded = await loadRom(
+		romPath,
+		config.definitionsPaths,
+		toLoadRomOptions(definitionPath),
+	);
 	const { definition } = loaded;
 
 	// Filter tables by category if provided

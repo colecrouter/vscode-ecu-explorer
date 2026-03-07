@@ -149,6 +149,10 @@ server.tool(
 		rom: z
 			.string()
 			.describe("Absolute or workspace-relative path to the ROM binary"),
+		definition: z
+			.string()
+			.optional()
+			.describe("Optional explicit path to an ECU definition XML file"),
 		category: z
 			.string()
 			.optional()
@@ -156,9 +160,9 @@ server.tool(
 				"Filter string — only tables whose category contains this string (case-insensitive) are returned",
 			),
 	},
-	async ({ rom, category }) => {
+	async ({ rom, definition, category }) => {
 		try {
-			const content = await handleListTables(rom, config, category);
+			const content = await handleListTables(rom, config, category, definition);
 			return { content: [{ type: "text", text: content }] };
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
@@ -179,11 +183,15 @@ server.tool(
 		rom: z
 			.string()
 			.describe("Absolute or workspace-relative path to the ROM binary"),
+		definition: z
+			.string()
+			.optional()
+			.describe("Optional explicit path to an ECU definition XML file"),
 		table: z.string().describe("Table name (from list_tables)"),
 	},
-	async ({ rom, table }) => {
+	async ({ rom, definition, table }) => {
 		try {
-			const content = await handleReadTable(rom, table, config);
+			const content = await handleReadTable(rom, table, config, definition);
 			return { content: [{ type: "text", text: content }] };
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
@@ -202,6 +210,10 @@ server.tool(
 	"Apply an operation to cells in a ROM table, returns the updated table. (Note: this produces rounding errors, due to how the ROM stores values.)",
 	{
 		rom: z.string().describe("Path to ROM file"),
+		definition: z
+			.string()
+			.optional()
+			.describe("Optional explicit path to an ECU definition XML file"),
 		table: z.string().describe("Table name (from list_tables)"),
 		op: z
 			.enum(["set", "add", "multiply", "clamp", "smooth"])
@@ -222,13 +234,14 @@ server.tool(
 			.optional()
 			.describe("0-based column index; omit for all columns"),
 	},
-	async ({ rom, table, op, value, min, max, row, col }) => {
+	async ({ rom, definition, table, op, value, min, max, row, col }) => {
 		try {
 			const opts: PatchTableOptions = {
 				rom,
 				table,
 				op,
 			};
+			if (definition !== undefined) opts.definitionPath = definition;
 			if (value !== undefined) opts.value = value;
 			if (min !== undefined) opts.min = min;
 			if (max !== undefined) opts.max = max;
@@ -255,10 +268,14 @@ server.tool(
 		rom: z
 			.string()
 			.describe("Absolute or workspace-relative path to the ROM binary"),
+		definition: z
+			.string()
+			.optional()
+			.describe("Optional explicit path to an ECU definition XML file"),
 	},
-	async ({ rom }) => {
+	async ({ rom, definition }) => {
 		try {
-			const content = await handleRomInfo(rom, config);
+			const content = await handleRomInfo(rom, config, definition);
 			return { content: [{ type: "text", text: content }] };
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);

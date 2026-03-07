@@ -10,6 +10,10 @@ import type { McpConfig } from "../config.js";
 import { formatTable } from "../formatters/table-formatter.js";
 import { loadRom } from "../rom-loader.js";
 
+function toLoadRomOptions(definitionPath?: string) {
+	return definitionPath === undefined ? {} : { definitionPath };
+}
+
 /**
  * Handle the read_table tool call.
  *
@@ -22,8 +26,13 @@ export async function handleReadTable(
 	romPath: string,
 	tableName: string,
 	config: McpConfig,
+	definitionPath?: string,
 ): Promise<string> {
-	const loaded = await loadRom(romPath, config.definitionsPaths);
+	const loaded = await loadRom(
+		romPath,
+		config.definitionsPaths,
+		toLoadRomOptions(definitionPath),
+	);
 	const { definition, romBytes } = loaded;
 
 	// Find the table definition by name

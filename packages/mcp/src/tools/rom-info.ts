@@ -11,6 +11,10 @@ import type { McpConfig } from "../config.js";
 import { toYaml } from "../formatters/yaml-formatter.js";
 import { loadRom } from "../rom-loader.js";
 
+function toLoadRomOptions(definitionPath?: string) {
+	return definitionPath === undefined ? {} : { definitionPath };
+}
+
 /**
  * Handle the rom_info tool call.
  *
@@ -21,8 +25,13 @@ import { loadRom } from "../rom-loader.js";
 export async function handleRomInfo(
 	romPath: string,
 	config: McpConfig,
+	definitionPath?: string,
 ): Promise<string> {
-	const loaded = await loadRom(romPath, config.definitionsPaths);
+	const loaded = await loadRom(
+		romPath,
+		config.definitionsPaths,
+		toLoadRomOptions(definitionPath),
+	);
 	const { definition, romBytes, fileSizeBytes } = loaded;
 
 	// Check checksum if definition has one
