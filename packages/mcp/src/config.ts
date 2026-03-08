@@ -17,6 +17,14 @@ export interface McpConfig {
 	logsDir: string;
 }
 
+function splitDefinitionPaths(rawPaths: string): string[] {
+	return rawPaths
+		.split(path.delimiter)
+		.flatMap((raw) => raw.split("\n"))
+		.map((p) => p.trim())
+		.filter((p) => p.length > 0);
+}
+
 /**
  * Parse CLI arguments for MCP server configuration.
  *
@@ -89,7 +97,9 @@ export function loadConfig(): McpConfig {
 	// Environment variable
 	const envDefinitionsPath = process.env.ECU_DEFINITIONS_PATH;
 	if (envDefinitionsPath !== undefined) {
-		definitionsPaths.push(envDefinitionsPath);
+		for (const p of splitDefinitionPaths(envDefinitionsPath)) {
+			definitionsPaths.push(p);
+		}
 	}
 
 	// Workspace settings: ecuExplorer.definitions.paths

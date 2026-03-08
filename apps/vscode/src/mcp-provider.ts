@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import * as path from "node:path";
 
 /**
  * Registers the ECU Explorer MCP server definition provider.
@@ -32,32 +33,28 @@ export function registerMcpProvider(ctx: vscode.ExtensionContext): void {
 				const workspaceFolder =
 					vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
 
+				const resolveRelativePath = (rawPath: string): string => {
+					return path.isAbsolute(rawPath)
+						? rawPath
+						: path.resolve(workspaceFolder, rawPath);
+				};
+
 				// Read definition paths from extension settings
 				const config = vscode.workspace.getConfiguration("ecuExplorer");
 				const definitionPaths: string[] = [
 					...(config.get<string[]>("definitions.paths") ?? []),
 					...(config.get<string[]>("definitions.ecuflash.paths") ?? []),
-				].map((p) =>
-					p.startsWith("/")
-						? p
-						: new URL(`./${p}`, vscode.Uri.file(workspaceFolder).toString())
-								.pathname,
-				);
+				].map(resolveRelativePath);
 
 				const logsFolder = config.get<string>("logsFolder") ?? "logs";
-				const logsDir = logsFolder.startsWith("/")
-					? logsFolder
-					: new URL(
-							`./${logsFolder}`,
-							vscode.Uri.file(workspaceFolder).toString(),
-						).pathname;
+				const logsDir = resolveRelativePath(logsFolder);
 
 				const definition = new vscode.McpStdioServerDefinition(
 					"ECU Explorer MCP",
 					process.execPath, // node binary
 					[serverPath],
 					{
-						ECU_DEFINITIONS_PATH: definitionPaths.join("/"),
+						ECU_DEFINITIONS_PATH: definitionPaths.join(path.delimiter),
 						ECU_LOGS_DIR: logsDir,
 						ECU_ICON_PATH: vscode.Uri.joinPath(ctx.extensionUri, "icon.png")
 							.fsPath,

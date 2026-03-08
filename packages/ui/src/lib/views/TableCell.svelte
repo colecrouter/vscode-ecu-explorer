@@ -1,8 +1,12 @@
 <script lang="ts">
-	import type { Endianness, ScalarType, ValidationResult } from "@ecu-explorer/core";
+	import type {
+		Endianness,
+		ScalarType,
+		ValidationResult,
+	} from "@ecu-explorer/core";
 	import { validateValue } from "@ecu-explorer/core";
 	import { createEventDispatcher } from "svelte";
-	import { getStepForDataType, getRangeForDataType } from "./table";
+	import { getStepForDataType, getRangeForDataType } from "./table.js";
 
 	const dispatch = createEventDispatcher<{
 		commit: { bytes: Uint8Array };
@@ -16,6 +20,8 @@
 		endianness = "le" as Endianness,
 		scale = 1,
 		offset = 0,
+		transform = undefined,
+		inverseTransform = undefined,
 		min: minConstraint = undefined,
 		max: maxConstraint = undefined,
 	} = $props<{
@@ -26,6 +32,8 @@
 		endianness?: Endianness;
 		scale?: number;
 		offset?: number;
+		transform?: (raw: number) => number;
+		inverseTransform?: (physical: number) => number;
 		min?: number;
 		max?: number;
 	}>();
@@ -73,7 +81,7 @@
 
 	function format(source: Uint8Array): string {
 		const numeric = decodeScalar(source, dtype, endianness);
-		const scaled = numeric * scale + offset;
+		const scaled = transform ? transform(numeric) : numeric * scale + offset;
 
 		const decimals = getDecimalPlaces(scale, dtype);
 		if (decimals > 0) {
@@ -140,8 +148,11 @@
 		const rounded =
 			decimals > 0 ? Number(parsed.toFixed(decimals)) : Math.round(parsed);
 
-		const scaled = rounded - offset;
-		const raw = scale !== 0 ? scaled / scale : scaled;
+		const raw = inverseTransform
+			? inverseTransform(rounded)
+			: scale !== 0
+				? (rounded - offset) / scale
+				: rounded;
 
 		const encoded = encodeScalar(raw, dtype, endianness);
 		dispatch("commit", { bytes: encoded });

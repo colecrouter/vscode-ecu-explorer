@@ -255,8 +255,8 @@ export async function handlePatchTable(
 			);
 			writeChecksum(mutableRomBytes, newChecksum, definition.checksum);
 		} catch (err) {
-			process.stderr.write(
-				`Warning: failed to update checksum after patch: ${err instanceof Error ? err.message : String(err)}\n`,
+			throw new Error(
+				`Failed to update checksum after patch: ${err instanceof Error ? err.message : String(err)}.`,
 			);
 		}
 	}
@@ -357,8 +357,6 @@ function readTable1DPhysical(
 	def: Table1DDefinition,
 ): number[] {
 	const z = def.z;
-	const scale = z.scale ?? 1;
-	const offset = z.offset ?? 0;
 	const endian = z.endianness ?? "le";
 	const elemSize = byteSize(z.dtype);
 	const length = z.length ?? def.rows;
@@ -367,7 +365,7 @@ function readTable1DPhysical(
 	for (let i = 0; i < length; i++) {
 		const byteOffset = z.address + i * elemSize;
 		const raw = decodeScalar(romBytes, byteOffset, z.dtype, { endian });
-		values.push(raw * scale + offset);
+		values.push(z.transform ? z.transform(raw) : raw * (z.scale ?? 1) + (z.offset ?? 0));
 	}
 
 	return values;
@@ -381,8 +379,6 @@ function readTable2DPhysical(
 	def: Table2DDefinition,
 ): number[][] {
 	const z = def.z;
-	const scale = z.scale ?? 1;
-	const offset = z.offset ?? 0;
 	const endian = z.endianness ?? "le";
 	const elemSize = byteSize(z.dtype);
 	const rowStride = z.rowStrideBytes ?? def.cols * elemSize;
@@ -400,7 +396,7 @@ function readTable2DPhysical(
 				byteOffset = z.address + r * rowStride + c * colStride;
 			}
 			const raw = decodeScalar(romBytes, byteOffset, z.dtype, { endian });
-			row.push(raw * scale + offset);
+			row.push(z.transform ? z.transform(raw) : raw * (z.scale ?? 1) + (z.offset ?? 0));
 		}
 		result.push(row);
 	}

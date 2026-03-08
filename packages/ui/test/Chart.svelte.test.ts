@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
-import Chart from "../src/lib/views/Chart.svelte.js";
+import Chart from "../src/lib/views/Chart.svelte";
 import { ChartState } from "../src/lib/views/chart-state.svelte.js";
 
 /**

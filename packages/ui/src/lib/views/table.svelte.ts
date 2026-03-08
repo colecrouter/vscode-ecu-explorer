@@ -639,9 +639,7 @@ export class TableView<T extends TableDefinition> {
 					const address = this.cellOffset(row, col, 0);
 					const bytes = this.readBytes(address);
 					const value = this.decodeScalarValue(bytes);
-					const scaled =
-						value * (this.def.z.scale ?? 1) + (this.def.z.offset ?? 0);
-					rowData.push(scaled);
+					rowData.push(value);
 				} else {
 					rowData.push(NaN); // Empty cell
 				}
@@ -742,11 +740,7 @@ export class TableView<T extends TableDefinition> {
 				const scaledValue = parseFloat(rawValue.trim());
 				if (!Number.isFinite(scaledValue)) continue;
 
-				// Unscale before encoding
-				const scale = def.z.scale ?? 1;
-				const offset = def.z.offset ?? 0;
-				const unscaled = (scaledValue - offset) / scale;
-				const bytes = this.encodeScalarValue(unscaled);
+				const bytes = this.encodeScalarValue(scaledValue);
 
 				this.stageCell({ row: targetRow, col: targetCol, depth }, bytes);
 
@@ -804,8 +798,7 @@ export class TableView<T extends TableDefinition> {
 			);
 			const bytes = this.readBytes(address);
 			const raw = this.decodeScalarValue(bytes);
-			const scaled = raw * (this.def.z.scale ?? 1) + (this.def.z.offset ?? 0);
-			values.push(scaled);
+			values.push(raw);
 		}
 
 		// Get constraints
@@ -822,8 +815,7 @@ export class TableView<T extends TableDefinition> {
 			if (newScaled === undefined)
 				throw new Error(`Missing result value for index ${i}`);
 			// Unscale before encoding
-			const newRaw =
-				(newScaled - (this.def.z.offset ?? 0)) / (this.def.z.scale ?? 1);
+			const newRaw = newScaled;
 			const bytes = this.encodeScalarValue(newRaw);
 			this.stageCell(coord, bytes);
 		}
@@ -870,8 +862,7 @@ export class TableView<T extends TableDefinition> {
 			);
 			const bytes = this.readBytes(address);
 			const raw = this.decodeScalarValue(bytes);
-			const scaled = raw * (this.def.z.scale ?? 1) + (this.def.z.offset ?? 0);
-			currentValues.push(scaled);
+			currentValues.push(raw);
 		}
 
 		// Get constraints
@@ -915,8 +906,7 @@ export class TableView<T extends TableDefinition> {
 		// Stage changes
 		for (const coord of selected) {
 			// Unscale before encoding
-			const newRaw =
-				(constrainedValue - (this.def.z.offset ?? 0)) / (this.def.z.scale ?? 1);
+			const newRaw = constrainedValue;
 			const bytes = this.encodeScalarValue(newRaw);
 			this.stageCell(coord, bytes);
 		}
@@ -961,8 +951,7 @@ export class TableView<T extends TableDefinition> {
 			);
 			const bytes = this.readBytes(address);
 			const raw = this.decodeScalarValue(bytes);
-			const scaled = raw * (this.def.z.scale ?? 1) + (this.def.z.offset ?? 0);
-			values.push(scaled);
+			values.push(raw);
 		}
 
 		// Get constraints
@@ -980,8 +969,7 @@ export class TableView<T extends TableDefinition> {
 			if (newScaled === undefined)
 				throw new Error(`Missing result value for index ${i}`);
 			// Unscale before encoding
-			const newRaw =
-				(newScaled - (this.def.z.offset ?? 0)) / (this.def.z.scale ?? 1);
+			const newRaw = newScaled;
 			const bytes = this.encodeScalarValue(newRaw);
 			this.stageCell(coord, bytes);
 		}
@@ -1032,8 +1020,7 @@ export class TableView<T extends TableDefinition> {
 			);
 			const bytes = this.readBytes(address);
 			const raw = this.decodeScalarValue(bytes);
-			const scaled = raw * (this.def.z.scale ?? 1) + (this.def.z.offset ?? 0);
-			values.push(scaled);
+			values.push(raw);
 		}
 
 		// Apply operation
@@ -1049,8 +1036,7 @@ export class TableView<T extends TableDefinition> {
 				throw new Error(`Missing result value for index ${i}`);
 
 			// Unscale before encoding
-			const newRaw =
-				(newScaled - (this.def.z.offset ?? 0)) / (this.def.z.scale ?? 1);
+			const newRaw = newScaled;
 			const bytes = this.encodeScalarValue(newRaw);
 			this.stageCell(coord, bytes);
 		}
@@ -1128,8 +1114,7 @@ export class TableView<T extends TableDefinition> {
 						throw new Error(`Missing result value for index ${valueIndex}`);
 
 					// Unscale before encoding
-					const newRaw =
-						(newScaled - (this.def.z.offset ?? 0)) / (this.def.z.scale ?? 1);
+					const newRaw = newScaled;
 					const bytes = this.encodeScalarValue(newRaw);
 					this.stageCell({ row, col }, bytes);
 					valueIndex++;
@@ -1174,26 +1159,39 @@ export class TableView<T extends TableDefinition> {
 	private decodeScalarValue(bytes: Uint8Array): number {
 		const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 		const { dtype, endianness } = this.def.z;
+		const scale = this.def.z.scale ?? 1;
+		const offset = this.def.z.offset ?? 0;
 		const littleEndian = endianness === "le";
+		let rawValue: number;
 
 		switch (dtype) {
 			case "u8":
-				return view.getUint8(0);
+				rawValue = view.getUint8(0);
+				break;
 			case "i8":
-				return view.getInt8(0);
+				rawValue = view.getInt8(0);
+				break;
 			case "u16":
-				return view.getUint16(0, littleEndian);
+				rawValue = view.getUint16(0, littleEndian);
+				break;
 			case "i16":
-				return view.getInt16(0, littleEndian);
+				rawValue = view.getInt16(0, littleEndian);
+				break;
 			case "u32":
-				return view.getUint32(0, littleEndian);
+				rawValue = view.getUint32(0, littleEndian);
+				break;
 			case "i32":
-				return view.getInt32(0, littleEndian);
+				rawValue = view.getInt32(0, littleEndian);
+				break;
 			case "f32":
-				return view.getFloat32(0, littleEndian);
+				rawValue = view.getFloat32(0, littleEndian);
+				break;
 			default:
-				return NaN;
+				rawValue = NaN;
 		}
+
+		const transform = this.def.z.transform;
+		return transform ? transform(rawValue) : rawValue * scale + offset;
 	}
 
 	/**
@@ -1208,32 +1206,40 @@ export class TableView<T extends TableDefinition> {
 		const buffer = new ArrayBuffer(this.elementSize());
 		const view = new DataView(buffer);
 		const littleEndian = endianness === "le";
+		const scale = this.def.z.scale ?? 1;
+		const offset = this.def.z.offset ?? 0;
+		const inverseTransform = this.def.z.inverseTransform;
+		const encodedRaw = inverseTransform
+			? inverseTransform(value)
+			: scale !== 0
+				? (value - offset) / scale
+				: value;
 
 		switch (dtype) {
 			case "u8":
-				view.setUint8(0, this.clamp(value, 0, 0xff));
+				view.setUint8(0, this.clamp(encodedRaw, 0, 0xff));
 				break;
 			case "i8":
-				view.setInt8(0, this.clamp(value, -0x80, 0x7f));
+				view.setInt8(0, this.clamp(encodedRaw, -0x80, 0x7f));
 				break;
 			case "u16":
-				view.setUint16(0, this.clamp(value, 0, 0xffff), littleEndian);
+				view.setUint16(0, this.clamp(encodedRaw, 0, 0xffff), littleEndian);
 				break;
 			case "i16":
-				view.setInt16(0, this.clamp(value, -0x8000, 0x7fff), littleEndian);
+				view.setInt16(0, this.clamp(encodedRaw, -0x8000, 0x7fff), littleEndian);
 				break;
 			case "u32":
-				view.setUint32(0, this.clamp(value, 0, 0xffffffff), littleEndian);
+				view.setUint32(0, this.clamp(encodedRaw, 0, 0xffffffff), littleEndian);
 				break;
 			case "i32":
 				view.setInt32(
 					0,
-					this.clamp(value, -0x80000000, 0x7fffffff),
+					this.clamp(encodedRaw, -0x80000000, 0x7fffffff),
 					littleEndian,
 				);
 				break;
 			case "f32":
-				view.setFloat32(0, value, littleEndian);
+				view.setFloat32(0, encodedRaw, littleEndian);
 				break;
 		}
 
@@ -1257,8 +1263,7 @@ export class TableView<T extends TableDefinition> {
 				const address = this.cellOffset(row);
 				const bytes = this.readBytes(address);
 				const raw = this.decodeScalarValue(bytes);
-				const scaled = raw * (def.z.scale ?? 1) + (def.z.offset ?? 0);
-				z.push(scaled);
+				z.push(raw);
 			}
 
 			return {
@@ -1281,8 +1286,7 @@ export class TableView<T extends TableDefinition> {
 					const address = this.cellOffset(row, col);
 					const bytes = this.readBytes(address);
 					const raw = this.decodeScalarValue(bytes);
-					const scaled = raw * (def.z.scale ?? 1) + (def.z.offset ?? 0);
-					rowData.push(scaled);
+					rowData.push(raw);
 				}
 				z.push(rowData);
 			}
@@ -1304,17 +1308,16 @@ export class TableView<T extends TableDefinition> {
 
 		// table3d
 		const z: number[][][] = [];
-		for (let depth = 0; depth < def.depth; depth++) {
-			const layer: number[][] = [];
-			for (let row = 0; row < def.rows; row++) {
-				const rowData: number[] = [];
-				for (let col = 0; col < def.cols; col++) {
-					const address = this.cellOffset(row, col, depth);
-					const bytes = this.readBytes(address);
-					const raw = this.decodeScalarValue(bytes);
-					const scaled = raw * (def.z.scale ?? 1) + (def.z.offset ?? 0);
-					rowData.push(scaled);
-				}
+			for (let depth = 0; depth < def.depth; depth++) {
+				const layer: number[][] = [];
+				for (let row = 0; row < def.rows; row++) {
+					const rowData: number[] = [];
+					for (let col = 0; col < def.cols; col++) {
+						const address = this.cellOffset(row, col, depth);
+						const bytes = this.readBytes(address);
+						const raw = this.decodeScalarValue(bytes);
+						rowData.push(raw);
+					}
 				layer.push(rowData);
 			}
 			z.push(layer);

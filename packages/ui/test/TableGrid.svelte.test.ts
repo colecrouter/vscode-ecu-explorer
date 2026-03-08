@@ -1,4 +1,5 @@
 import type {
+	Table1DDefinition,
 	StaticArrayDefinition,
 	Table2DDefinition,
 	Table3DDefinition,
@@ -7,7 +8,7 @@ import type {
 import { describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { render } from "vitest-browser-svelte";
-import TableGrid from "../src/lib/views/TableGrid.svelte.js";
+import TableGrid from "../src/lib/views/TableGrid.svelte";
 import { TableView } from "../src/lib/views/table.svelte.js";
 
 function createUnit(symbol: string): Unit {
@@ -30,6 +31,7 @@ function createStaticAxis(
 ): StaticArrayDefinition {
 	return {
 		kind: "static",
+		id: `axis-${name.toLowerCase().replace(/\s+/g, "-")}`,
 		name,
 		values,
 		unit,
@@ -39,12 +41,17 @@ function createStaticAxis(
 describe("TableGrid Component", () => {
 	const rom = new Uint8Array(1024).fill(0);
 
+	function createROM(size = 1024): Uint8Array {
+		return new Uint8Array(size).fill(0);
+	}
+
 	const def2d: Table2DDefinition = {
 		kind: "table2d",
 		name: "Test 2D",
+		id: "grid-2d",
 		rows: 4,
 		cols: 4,
-		z: { name: "Values", address: 0, length: 16, dtype: "u8" },
+		z: { id: "values-2d", name: "Values", address: 0, length: 16, dtype: "u8" },
 	};
 
 	it("should render correct number of cells for 2D table", async () => {
@@ -59,10 +66,11 @@ describe("TableGrid Component", () => {
 		const def3d: Table3DDefinition = {
 			kind: "table3d",
 			name: "Test 3D",
+			id: "grid-3d",
 			rows: 4,
 			cols: 4,
 			depth: 2,
-			z: { name: "Values", address: 0, length: 32, dtype: "u8" },
+			z: { id: "values-3d", name: "Values", address: 0, length: 32, dtype: "u8" },
 		};
 		const view = new TableView(rom, def3d);
 		const screen = render(TableGrid, { view, definition: def3d });
@@ -128,5 +136,65 @@ describe("TableGrid Component", () => {
 		// Check for Z unit above table
 		const zUnit = screen.getByText("Unit: %");
 		await expect.element(zUnit).toBeVisible();
+	});
+
+	it("should render transformed values in cells when z.transform is defined", async () => {
+		const romForTransform = createROM();
+
+		const def: Table1DDefinition = {
+			kind: "table1d",
+			name: "Transform Table",
+			id: "grid-transform-1d",
+			rows: 1,
+			z: {
+				id: "values-transformed",
+				name: "Values",
+				address: 0,
+				length: 1,
+				dtype: "u8",
+				transform: (raw) => raw * 2,
+				inverseTransform: (physical) => physical / 2,
+			},
+		};
+
+		romForTransform[0] = 4;
+		const view = new TableView(romForTransform, def);
+		const screen = render(TableGrid, { view, definition: def });
+
+		const input = screen.getByRole("spinbutton");
+		await expect.element(input).toHaveValue(8);
+	});
+
+	it("should encode edits using z.inverseTransform when defined", async () => {
+		const romForInverse = createROM();
+
+		const def: Table1DDefinition = {
+			kind: "table1d",
+			name: "Inverse Transform Table",
+			id: "grid-inverse-1d",
+			rows: 1,
+			z: {
+				id: "values-inverse",
+				name: "Values",
+				address: 0,
+				length: 1,
+				dtype: "u8",
+				transform: (raw) => raw * 2,
+				inverseTransform: (physical) => physical / 2,
+			},
+		};
+
+		const view = new TableView(romForInverse, def);
+		const screen = render(TableGrid, { view, definition: def });
+
+		const input = screen.getByRole("spinbutton");
+		await input.click();
+		await input.fill("20");
+		await userEvent.keyboard("{Tab}");
+
+		const tx = view.commit("Set cell");
+		expect(tx).not.toBeNull();
+		expect(tx?.edits[0]?.after[0]).toBe(10);
+		expect(romForInverse[0]).toBe(10);
 	});
 });

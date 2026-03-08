@@ -9,8 +9,10 @@ function create1DTableDef(rows: number = 16): Table1DDefinition {
 	return {
 		kind: "table1d",
 		name: "Test 1D Table",
+		id: "math-1d",
 		rows,
 		z: {
+			id: "values-1d",
 			name: "Values",
 			address: 0x1000,
 			length: rows,
@@ -29,9 +31,11 @@ function create2DTableDef(
 	return {
 		kind: "table2d",
 		name: "Test 2D Table",
+		id: "math-2d",
 		rows,
 		cols,
 		z: {
+			id: "values-2d",
 			name: "Values",
 			address: 0x1000,
 			length: rows * cols,
@@ -53,6 +57,30 @@ function createROM(size: number): Uint8Array {
 
 describe("TableView Math Operations", () => {
 	describe("1D Table Operations", () => {
+		const transform = (raw: number) => raw * 2;
+		const inverseTransform = (physical: number) => physical / 2;
+
+		it("should apply add operation using transformed values", () => {
+			const rom = createROM(0x2000);
+			const def = create1DTableDef(4);
+			rom[0x1000] = 2;
+			rom[0x1001] = 3;
+			def.z.transform = transform;
+			def.z.inverseTransform = inverseTransform;
+			const table = new TableView(rom, def);
+
+			table.selectCell({ row: 0, col: 0 }, "replace");
+			table.selectCell({ row: 0, col: 1 }, "add");
+
+			const { result, transaction } = table.applyAddOperation(2);
+
+			expect(result.values).toEqual([6, 8]);
+			expect(transaction).not.toBeNull();
+			expect(transaction?.edits.length).toBe(2);
+			expect(rom[0x1000]).toBe(3);
+			expect(rom[0x1001]).toBe(4);
+		});
+
 		it("should apply set value operation to multiple cells in 1D table", () => {
 			const rom = createROM(0x2000);
 			const def = create1DTableDef(16);

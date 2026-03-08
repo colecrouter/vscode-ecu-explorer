@@ -6,7 +6,8 @@
 	"private": true,
 	"scripts": {
 		"build": "echo 'No build step required for JS package'",
-		"inspect-rom": "node ./inspect-rom.js"
+		"inspect-rom": "node ./inspect-rom.js",
+		"check": "node --check ./inspect-rom.js"
 	},
 	"dependencies": {
 		"@ecu-explorer/core": "*",

@@ -20,8 +20,10 @@ function create1DTableDef(rows: number = 10): Table1DDefinition {
 	return {
 		kind: "table1d",
 		name: "Test 1D Table",
+		id: "table1d-core-1d",
 		rows,
 		z: {
+			id: "table1d-core-values",
 			name: "Values",
 			address: 0x1000,
 			length: rows,
@@ -40,9 +42,11 @@ function create2DTableDef(
 	return {
 		kind: "table2d",
 		name: "Test 2D Table",
+		id: "table1d-core-2d",
 		rows,
 		cols,
 		z: {
+			id: "table2d-core-values",
 			name: "Values",
 			address: 0x1000,
 			length: rows * cols,
@@ -62,10 +66,12 @@ function create3DTableDef(
 	return {
 		kind: "table3d",
 		name: "Test 3D Table",
+		id: "table1d-core-3d",
 		rows,
 		cols,
 		depth,
 		z: {
+			id: "table3d-core-values",
 			name: "Values",
 			address: 0x1000,
 			length: rows * cols * depth,
@@ -838,6 +844,96 @@ describe("TableView Svelte Reactive State", () => {
 					expect(table.isSelected({ row, col: 0 })).toBe(true);
 				}
 			});
+		});
+	});
+
+	describe("Transform-aware TableView operations", () => {
+		const transform = (raw: number) => raw * 2;
+		const inverseTransform = (physical: number) => physical / 2;
+
+		it("should return transformed values for selected matrix", () => {
+			const rom = new Uint8Array([1, 2, 3, 4]);
+		const def: Table2DDefinition = {
+			kind: "table2d",
+			name: "Transform table",
+			id: "transform-table-base",
+			rows: 2,
+			cols: 2,
+			z: {
+				id: "transform-values-base",
+				name: "Values",
+					address: 0,
+					length: 4,
+					dtype: "u8",
+					transform,
+					inverseTransform,
+				},
+			};
+
+			const view = new TableView(rom, def);
+			view.selectAll();
+
+			expect(view.getSelectedValuesAsMatrix()).toEqual([
+				[2, 4],
+				[6, 8],
+			]);
+		});
+
+		it("should decode pasted values via inverseTransform", () => {
+			const rom = new Uint8Array(2);
+		const def: Table2DDefinition = {
+			kind: "table2d",
+			name: "Transform table",
+			id: "transform-table-paste",
+			rows: 1,
+			cols: 2,
+			z: {
+				id: "transform-values-paste",
+				name: "Values",
+					address: 0,
+					length: 2,
+					dtype: "u8",
+					transform,
+					inverseTransform,
+				},
+			};
+
+			const view = new TableView(rom, def);
+			const region = view.pasteFromTSV("20\t30", 0, 0);
+
+			expect(region).toEqual({ minRow: 0, minCol: 0, maxRow: 0, maxCol: 1 });
+			expect(rom[0]).toBe(10);
+			expect(rom[1]).toBe(15);
+		});
+
+		it("should apply math operations against transformed values", () => {
+			const rom = new Uint8Array([2, 3]);
+		const def: Table2DDefinition = {
+			kind: "table2d",
+			name: "Transform table",
+			id: "transform-table-math",
+			rows: 1,
+			cols: 2,
+			z: {
+				id: "transform-values-math",
+				name: "Values",
+					address: 0,
+					length: 2,
+					dtype: "u8",
+					transform,
+					inverseTransform,
+				},
+			};
+
+			const view = new TableView(rom, def);
+			view.selectCell({ row: 0, col: 0 }, "replace");
+			view.selectCell({ row: 0, col: 1 }, "add");
+
+			const result = view.applyAddOperation(2);
+			expect(result.transaction).not.toBeNull();
+			expect(rom[0]).toBe(3);
+			expect(rom[1]).toBe(4);
+			expect(result.result.values).toEqual([6, 8]);
 		});
 	});
 });

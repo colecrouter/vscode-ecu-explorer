@@ -17,8 +17,10 @@ function create1DTableDef(rows: number = 10): Table1DDefinition {
 	return {
 		kind: "table1d",
 		name: "Test 1D Table",
+		id: "selection-1d",
 		rows,
 		z: {
+			id: "selection-values-1d",
 			name: "Values",
 			address: 0x1000,
 			length: rows,
@@ -37,9 +39,11 @@ function create2DTableDef(
 	return {
 		kind: "table2d",
 		name: "Test 2D Table",
+		id: "selection-2d",
 		rows,
 		cols,
 		z: {
+			id: "selection-values-2d",
 			name: "Values",
 			address: 0x1000,
 			length: rows * cols,

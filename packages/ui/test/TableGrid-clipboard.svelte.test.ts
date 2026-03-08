@@ -12,9 +12,11 @@ function create2DTableDef(
 	return {
 		kind: "table2d",
 		name: "Test 2D Table",
+		id: "clipboard-2d",
 		rows,
 		cols,
 		z: {
+			id: "clipboard-values",
 			name: "Values",
 			address: 0x1000,
 			length: rows * cols,
@@ -48,6 +50,24 @@ describe("TableView Clipboard Operations", () => {
 	});
 
 	describe("getSelectedValuesAsMatrix", () => {
+		it("should apply z.transform when building selected matrix", () => {
+			const transform = (raw: number) => raw + 5;
+			const transformedDef: Table2DDefinition = {
+				...definition,
+				z: {
+					...definition.z,
+					transform,
+				},
+			};
+			const transformedView = new TableView(rom, transformedDef);
+			transformedView.selectCell({ row: 0, col: 0 }, "replace");
+
+			const matrix = transformedView.getSelectedValuesAsMatrix();
+			const firstRow = matrix[0];
+			if (!firstRow) throw new Error("Expected first row to be defined");
+			expect(firstRow[0]).toBe(5);
+		});
+
 		it("should return empty array when no selection", () => {
 			const matrix = view.getSelectedValuesAsMatrix();
 			expect(matrix).toEqual([]);
@@ -245,6 +265,21 @@ describe("TableView Clipboard Operations", () => {
 	});
 
 	describe("TSV Format Compatibility", () => {
+		it("should produce transformed values in TSV output", () => {
+			const transform = (raw: number) => raw + 100;
+			const transformedDef: Table2DDefinition = {
+				...definition,
+				z: {
+					...definition.z,
+					transform,
+				},
+			};
+			const transformedView = new TableView(rom, transformedDef);
+			transformedView.selectCell({ row: 0, col: 0 }, "replace");
+			const tsv = transformedView.getSelectedValuesAsTSV();
+			expect(tsv).toBe("100");
+		});
+
 		it("should produce valid TSV for single value", () => {
 			view.selectCell({ row: 0, col: 0 }, "replace");
 			const tsv = view.getSelectedValuesAsTSV();

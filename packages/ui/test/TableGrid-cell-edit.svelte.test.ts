@@ -12,7 +12,7 @@ import type { Table1DDefinition, Table2DDefinition } from "@ecu-explorer/core";
 import { describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { render } from "vitest-browser-svelte";
-import TableGrid from "../src/lib/views/TableGrid.svelte.js";
+import TableGrid from "../src/lib/views/TableGrid.svelte";
 import { TableView } from "../src/lib/views/table.svelte.js";
 
 describe("TableGrid cell editing — index correctness", () => {
@@ -24,8 +24,9 @@ describe("TableGrid cell editing — index correctness", () => {
 			const def: Table1DDefinition = {
 				kind: "table1d",
 				name: "Test 1D",
+				id: "grid-cell-edit-1d",
 				rows: 8,
-				z: { name: "Values", address: 0, length: 8, dtype: "u8" },
+				z: { id: "values-1d", name: "Values", address: 0, length: 8, dtype: "u8" },
 			};
 
 			const view = new TableView(rom, def);
@@ -73,8 +74,9 @@ describe("TableGrid cell editing — index correctness", () => {
 			const def: Table1DDefinition = {
 				kind: "table1d",
 				name: "Test 1D",
+				id: "grid-cell-edit-1d-last",
 				rows: 5,
-				z: { name: "Values", address: 0, length: 5, dtype: "u8" },
+				z: { id: "values-1d-last", name: "Values", address: 0, length: 5, dtype: "u8" },
 			};
 
 			const view = new TableView(rom, def);
@@ -116,9 +118,16 @@ describe("TableGrid cell editing — index correctness", () => {
 			const def: Table2DDefinition = {
 				kind: "table2d",
 				name: "Test 2D",
+				id: "grid-cell-edit-2d",
 				rows: 4,
 				cols: 4,
-				z: { name: "Values", address: 0, length: 16, dtype: "u8" },
+				z: {
+					id: "values-2d",
+					name: "Values",
+					address: 0,
+					length: 16,
+					dtype: "u8",
+				},
 			};
 			const view = new TableView(rom, def);
 			const screen = render(TableGrid, { view, definition: def });

@@ -98,6 +98,12 @@
 	const endiannessLookup = $derived(definition.z.endianness ?? "le");
 	const scaleLookup = $derived(definition.z.scale ?? 1);
 	const offsetLookup = $derived(definition.z.offset ?? 0);
+	const transformLookup = $derived(
+		definition.z.transform ?? ((raw: number) => raw),
+	);
+	const inverseTransformLookup = $derived(
+		definition.z.inverseTransform ?? ((physical: number) => physical),
+	);
 
 	// Compute normalized values (0-1) for CSS --t custom property
 	const normalizedMap = $derived.by(() => {
@@ -514,6 +520,8 @@
 								endianness={endiannessLookup}
 								scale={scaleLookup}
 								offset={offsetLookup}
+								transform={transformLookup}
+								inverseTransform={inverseTransformLookup}
 								on:commit={(event: CustomEvent) =>
 									handleCommit(rowIndex, colIndex, event)}
 							/>
