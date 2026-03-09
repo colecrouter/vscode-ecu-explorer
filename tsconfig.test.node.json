@@ -2,7 +2,7 @@
 	"extends": "./tsconfig.base.json",
 	"compilerOptions": {
 		"noEmit": true,
-		"types": ["node"]
+		"types": ["node", "w3c-web-usb"]
 	},
 	"include": ["./**/*.test.ts", "./**/*.spec.ts"],
 	"exclude": [

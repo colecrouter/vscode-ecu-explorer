@@ -33,6 +33,15 @@ export interface TableEditorState {
 	lastModified?: number;
 }
 
+export interface DeviceSelectionState {
+	id: string;
+	transportName: string;
+	name: string;
+	serialNumber?: string;
+	vendorId?: string;
+	productId?: string;
+}
+
 /**
  * Workspace state structure
  */
@@ -45,6 +54,8 @@ interface WorkspaceStateData {
 	tableStates: Record<string, TableEditorState>;
 	/** Map of ROM file path → Set of dirty table names */
 	dirtyTables: Record<string, string[]>;
+	/** Map of logical device slot → selected device identity */
+	deviceSelections: Record<string, DeviceSelectionState>;
 }
 
 /**
@@ -193,7 +204,24 @@ export class WorkspaceState {
 			lastOpenedTables: {},
 			tableStates: {},
 			dirtyTables: {},
+			deviceSelections: {},
 		});
+	}
+
+	saveDeviceSelection(slot: string, selection: DeviceSelectionState): void {
+		const state = this.getState();
+		state.deviceSelections[slot] = selection;
+		this.setState(state);
+	}
+
+	getDeviceSelection(slot: string): DeviceSelectionState | undefined {
+		return this.getState().deviceSelections[slot];
+	}
+
+	clearDeviceSelection(slot: string): void {
+		const state = this.getState();
+		delete state.deviceSelections[slot];
+		this.setState(state);
 	}
 
 	/**
@@ -255,6 +283,7 @@ export class WorkspaceState {
 				lastOpenedTables: {},
 				tableStates: {},
 				dirtyTables: {},
+				deviceSelections: {},
 			};
 			return this.currentState;
 		}
@@ -290,6 +319,7 @@ export class WorkspaceState {
 				lastOpenedTables: {},
 				tableStates: {},
 				dirtyTables: {},
+				deviceSelections: {},
 			};
 		}
 
@@ -299,7 +329,48 @@ export class WorkspaceState {
 			lastOpenedTables: this.sanitizeRecord(obj.lastOpenedTables),
 			tableStates: this.sanitizeTableStates(obj.tableStates),
 			dirtyTables: this.sanitizeDirtyTables(obj.dirtyTables),
+			deviceSelections: this.sanitizeDeviceSelections(obj.deviceSelections),
 		};
+	}
+
+	private sanitizeDeviceSelections(
+		deviceSelections: unknown,
+	): Record<string, DeviceSelectionState> {
+		if (typeof deviceSelections !== "object" || deviceSelections === null) {
+			return {};
+		}
+
+		const obj = deviceSelections as Record<string, unknown>;
+		const result: Record<string, DeviceSelectionState> = {};
+		for (const [key, value] of Object.entries(obj)) {
+			if (typeof key !== "string" || typeof value !== "object" || value === null) {
+				continue;
+			}
+			const entry = value as Record<string, unknown>;
+			if (
+				typeof entry.id !== "string" ||
+				typeof entry.transportName !== "string" ||
+				typeof entry.name !== "string"
+			) {
+				continue;
+			}
+			const selection: DeviceSelectionState = {
+				id: entry.id,
+				transportName: entry.transportName,
+				name: entry.name,
+			};
+			if (typeof entry.serialNumber === "string") {
+				selection.serialNumber = entry.serialNumber;
+			}
+			if (typeof entry.vendorId === "string") {
+				selection.vendorId = entry.vendorId;
+			}
+			if (typeof entry.productId === "string") {
+				selection.productId = entry.productId;
+			}
+			result[key] = selection;
+		}
+		return result;
 	}
 
 	/**

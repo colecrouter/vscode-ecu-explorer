@@ -10,9 +10,9 @@ function create2DTableDef(
 	cols: number = 4,
 ): Table2DDefinition {
 	return {
+		id: `table-2d-${rows}x${cols}`,
 		kind: "table2d",
 		name: "Test 2D Table",
-		id: "clipboard-2d",
 		rows,
 		cols,
 		z: {

@@ -57,6 +57,28 @@ See **[PROTOCOL_SUPPORT.md](PROTOCOL_SUPPORT.md)** for detailed per-vehicle capa
 - **Subaru WRX/STI/Forester (Denso SH7058 ECU)** — Complete ROM editing
 - **Generic OBD-II** — Real-time monitoring (8 standard PIDs)
 
+### Transport Notes
+
+OpenPort 2.0 does not behave the same way across every runtime.
+
+- Browser/web runtimes use WebUSB first.
+- WebHID remains a provisional fallback and should not be treated as universally supported.
+- macOS desktop should prefer the CDC ACM serial endpoint exposed as `/dev/cu.usbmodem*` when available, rather than relying on libusb interface claims.
+
+You can run protocol-specific CLI diagnostics from the same transport:
+
+```bash
+npm run tools:inspect-device -- log --duration 2000 --protocol mut3 --pids 0c,0d
+npm run tools:inspect-device -- read-rom --protocol bootloader --out ./dump.bin
+npm run tools:inspect-device -- read-rom --protocol mut3 --dry-run
+```
+
+Try running the command below to verify if the connection is available in your environment.
+
+```bash
+npm run tools:inspect-device -- connect --verbose
+```
+
 ---
 
 ## Contributing

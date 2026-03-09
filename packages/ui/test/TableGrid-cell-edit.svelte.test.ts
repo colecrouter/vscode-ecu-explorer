@@ -22,11 +22,17 @@ describe("TableGrid cell editing — index correctness", () => {
 			const rom = new Uint8Array(1024);
 
 			const def: Table1DDefinition = {
+				id: "table-1d-edit-8",
 				kind: "table1d",
 				name: "Test 1D",
-				id: "grid-cell-edit-1d",
 				rows: 8,
-				z: { id: "values-1d", name: "Values", address: 0, length: 8, dtype: "u8" },
+				z: {
+					id: "values-1d",
+					name: "Values",
+					address: 0,
+					length: 8,
+					dtype: "u8",
+				},
 			};
 
 			const view = new TableView(rom, def);
@@ -72,11 +78,17 @@ describe("TableGrid cell editing — index correctness", () => {
 			const rom = new Uint8Array(1024);
 
 			const def: Table1DDefinition = {
+				id: "table-1d-edit-5",
 				kind: "table1d",
 				name: "Test 1D",
-				id: "grid-cell-edit-1d-last",
 				rows: 5,
-				z: { id: "values-1d-last", name: "Values", address: 0, length: 5, dtype: "u8" },
+				z: {
+					id: "values-1d-last",
+					name: "Values",
+					address: 0,
+					length: 5,
+					dtype: "u8",
+				},
 			};
 
 			const view = new TableView(rom, def);
@@ -116,9 +128,9 @@ describe("TableGrid cell editing — index correctness", () => {
 		it("editing cell at row=1, col=2 in a 4×4 table should update address 6", async () => {
 			const rom = new Uint8Array(1024);
 			const def: Table2DDefinition = {
+				id: "table-2d-edit-4x4",
 				kind: "table2d",
 				name: "Test 2D",
-				id: "grid-cell-edit-2d",
 				rows: 4,
 				cols: 4,
 				z: {

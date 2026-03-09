@@ -358,9 +358,8 @@ Create `packages/providers/[name]/package.json`:
 		"@repo/core": "workspace:*"
 	},
 	"devDependencies": {
-		"@types/node": "^20",
-		"typescript": "^5",
-		"vitest": "^1"
+		"typescript": "*",
+		"vitest": "*"
 	}
 }
 ```

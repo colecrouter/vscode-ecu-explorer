@@ -33,6 +33,10 @@
 		"./rom-loader": {
 			"import": "./dist/rom-loader.js",
 			"types": "./dist/rom-loader.d.ts"
+		},
+		"./formatters/diagnostics-formatter": {
+			"import": "./dist/formatters/diagnostics-formatter.js",
+			"types": "./dist/formatters/diagnostics-formatter.d.ts"
 		}
 	},
 	"scripts": {

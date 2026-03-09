@@ -4,9 +4,12 @@ import {
 	deactivate as deactivateShared,
 } from "./extension.js";
 import { registerMcpProvider } from "./mcp-provider.js";
+import { createOpenPortDesktopRuntime } from "./openport2-desktop-runtime.js";
 
 export async function activate(ctx: vscode.ExtensionContext) {
-	await activateShared(ctx);
+	await activateShared(ctx, {
+		openPortRuntime: await createOpenPortDesktopRuntime(),
+	});
 	registerMcpProvider(ctx);
 }
 

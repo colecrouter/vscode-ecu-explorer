@@ -17,6 +17,7 @@ describe("table axis decode behavior", () => {
 		]);
 
 		const axis: AxisDefinition = {
+			id: "axis-u8",
 			kind: "dynamic",
 			id: "axis-u8-be",
 			name: "Axis",
@@ -48,6 +49,7 @@ describe("table axis decode behavior", () => {
 		]);
 
 		const axis: AxisDefinition = {
+			id: "axis-u16",
 			kind: "dynamic",
 			id: "axis-u16-be",
 			name: "Axis",

@@ -18,9 +18,9 @@ type UndoRedoOperation = {
  */
 function create1DTableDef(rows: number = 10): Table1DDefinition {
 	return {
+		id: `table-1d-${rows}`,
 		kind: "table1d",
 		name: "Test 1D Table",
-		id: "table1d-core-1d",
 		rows,
 		z: {
 			id: "table1d-core-values",
@@ -40,9 +40,9 @@ function create2DTableDef(
 	cols: number = 4,
 ): Table2DDefinition {
 	return {
+		id: `table-2d-${rows}x${cols}`,
 		kind: "table2d",
 		name: "Test 2D Table",
-		id: "table1d-core-2d",
 		rows,
 		cols,
 		z: {
@@ -64,9 +64,9 @@ function create3DTableDef(
 	depth: number = 2,
 ): Table3DDefinition {
 	return {
+		id: `table-3d-${rows}x${cols}x${depth}`,
 		kind: "table3d",
 		name: "Test 3D Table",
-		id: "table1d-core-3d",
 		rows,
 		cols,
 		depth,
@@ -853,15 +853,15 @@ describe("TableView Svelte Reactive State", () => {
 
 		it("should return transformed values for selected matrix", () => {
 			const rom = new Uint8Array([1, 2, 3, 4]);
-		const def: Table2DDefinition = {
-			kind: "table2d",
-			name: "Transform table",
-			id: "transform-table-base",
-			rows: 2,
-			cols: 2,
-			z: {
-				id: "transform-values-base",
-				name: "Values",
+			const def: Table2DDefinition = {
+				kind: "table2d",
+				name: "Transform table",
+				id: "transform-table-base",
+				rows: 2,
+				cols: 2,
+				z: {
+					id: "transform-values-base",
+					name: "Values",
 					address: 0,
 					length: 4,
 					dtype: "u8",
@@ -881,15 +881,15 @@ describe("TableView Svelte Reactive State", () => {
 
 		it("should decode pasted values via inverseTransform", () => {
 			const rom = new Uint8Array(2);
-		const def: Table2DDefinition = {
-			kind: "table2d",
-			name: "Transform table",
-			id: "transform-table-paste",
-			rows: 1,
-			cols: 2,
-			z: {
-				id: "transform-values-paste",
-				name: "Values",
+			const def: Table2DDefinition = {
+				kind: "table2d",
+				name: "Transform table",
+				id: "transform-table-paste",
+				rows: 1,
+				cols: 2,
+				z: {
+					id: "transform-values-paste",
+					name: "Values",
 					address: 0,
 					length: 2,
 					dtype: "u8",
@@ -908,15 +908,15 @@ describe("TableView Svelte Reactive State", () => {
 
 		it("should apply math operations against transformed values", () => {
 			const rom = new Uint8Array([2, 3]);
-		const def: Table2DDefinition = {
-			kind: "table2d",
-			name: "Transform table",
-			id: "transform-table-math",
-			rows: 1,
-			cols: 2,
-			z: {
-				id: "transform-values-math",
-				name: "Values",
+			const def: Table2DDefinition = {
+				kind: "table2d",
+				name: "Transform table",
+				id: "transform-table-math",
+				rows: 1,
+				cols: 2,
+				z: {
+					id: "transform-values-math",
+					name: "Values",
 					address: 0,
 					length: 2,
 					dtype: "u8",

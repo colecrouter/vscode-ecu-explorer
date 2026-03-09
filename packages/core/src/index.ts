@@ -1,5 +1,5 @@
-export * from "./binary.js";
 export * from "./binary/bit-extract.js";
+export * from "./binary.js";
 export * from "./checksum/algorithms.js";
 export * from "./checksum/manager.js";
 export * from "./definition/fuzzy-match.js";

@@ -1,7 +1,7 @@
 {
 	"extends": "../../tsconfig.base.json",
 	"compilerOptions": {
-		"types": ["@types/vscode", "@types/vscode-webview"],
+		"types": ["@types/vscode", "@types/vscode-webview", "@types/node"],
 		"outDir": "dist"
 	},
 	"include": ["src/**/*"]

@@ -15,9 +15,9 @@ import { TableView } from "../src/lib/views/table.svelte.js";
  */
 function create1DTableDef(rows: number = 10): Table1DDefinition {
 	return {
+		id: `table-1d-${rows}`,
 		kind: "table1d",
 		name: "Test 1D Table",
-		id: "selection-1d",
 		rows,
 		z: {
 			id: "selection-values-1d",
@@ -37,9 +37,9 @@ function create2DTableDef(
 	cols: number = 4,
 ): Table2DDefinition {
 	return {
+		id: `table-2d-${rows}x${cols}`,
 		kind: "table2d",
 		name: "Test 2D Table",
-		id: "selection-2d",
 		rows,
 		cols,
 		z: {

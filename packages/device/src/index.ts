@@ -168,5 +168,7 @@ export interface DeviceManager {
 	dispose(): void;
 }
 
+export * from "./diagnostic-workflow.js";
 export * from "./diff.js";
+export * from "./trace.js";
 export * from "./types.js";

@@ -6,6 +6,10 @@
 		".": {
 			"import": "./dist/index.js",
 			"types": "./dist/index.d.ts"
+		},
+		"./trace": {
+			"import": "./dist/trace.js",
+			"types": "./dist/trace.d.ts"
 		}
 	},
 	"scripts": {

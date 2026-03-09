@@ -5,7 +5,11 @@
  * layer selection, and hover interactions.
  */
 
-import { downsample2D, downsampleData, shouldDownsample } from "./chartUtils.js";
+import {
+	downsample2D,
+	downsampleData,
+	shouldDownsample,
+} from "./chartUtils.js";
 
 /**
  * Table snapshot for chart rendering

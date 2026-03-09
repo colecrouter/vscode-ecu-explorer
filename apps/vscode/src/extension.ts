@@ -49,6 +49,10 @@ import { RomExplorerTreeProvider } from "./tree/rom-tree-provider.js";
 import { isBatchEdit, type UndoRedoManager } from "./undo-redo-manager.js";
 import { WorkspaceState } from "./workspace-state.js";
 
+type ActivationOptions = {
+	openPortRuntime?: ConstructorParameters<typeof OpenPort2Transport>[0];
+};
+
 class ProviderRegistry {
 	providers: DefinitionProvider[] = [];
 	register(p: DefinitionProvider) {
@@ -296,7 +300,10 @@ function reinitializeProviders(): void {
  *
  * @param ctx - Extension context
  */
-export async function activate(ctx: vscode.ExtensionContext) {
+export async function activate(
+	ctx: vscode.ExtensionContext,
+	options?: ActivationOptions,
+) {
 	// Initialize providers based on current settings
 	reinitializeProviders();
 
@@ -439,7 +446,10 @@ export async function activate(ctx: vscode.ExtensionContext) {
 
 	// Initialize DeviceManager and register transport/protocol
 	deviceManager = new DeviceManagerImpl();
-	deviceManager.registerTransport("openport2", new OpenPort2Transport());
+	deviceManager.registerTransport(
+		"openport2",
+		new OpenPort2Transport(options?.openPortRuntime),
+	);
 	deviceManager.registerProtocol(new Mut3Protocol());
 	deviceManager.registerProtocol(new MitsubishiBootloaderProtocol());
 	deviceManager.registerProtocol(new SubaruProtocol());

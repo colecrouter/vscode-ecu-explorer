@@ -14,16 +14,20 @@ The system follows a provider-based design to ensure extensibility across differ
 
 This separation allows adding support for a new hardware device (e.g., a J2534 passthru) without modifying the ECU protocol logic, and vice versa.
 
-### Technology Choice: `navigator.usb` vs `node-usb`
+### Technology Choice: runtime-specific transport backends
 
-We have chosen to use **WebUSB (`navigator.usb`)** via VS Code's web extension runtime instead of a native Node.js dependency like `node-usb`.
+OpenPort 2.0 support now follows a runtime-specific transport matrix instead of assuming raw USB everywhere.
+
+**Transport matrix:**
+- **Browser/web runtime**: WebUSB first, with WebHID only as an optional fallback if validated for the specific workflow.
+- **Desktop macOS**: prefer the CDC ACM serial endpoint exposed as `/dev/cu.usbmodem*` when available.
+- **Desktop Node/CLI**: serial adapters are allowed; USB and HID remain optional backends.
 
 **Tradeoffs & Rationale:**
-- **Portability**: WebUSB works in both VS Code Desktop and `vscode.dev` (web).
-- **No Native Binaries**: Avoids the complexity of `node-gyp`, Electron ABI matching, and pre-compiled binaries for different OS/architectures.
-- **Security**: Leverages the browser/VS Code's built-in permission model for hardware access.
-- **Constraint**: Requires a "Browser WebWorker" extension host, meaning Node.js APIs (`fs`, `child_process`) are unavailable. All file I/O must use `vscode.workspace.fs`.
-- **Constraint**: On Windows, users may need to use Zadig to switch the device driver to WinUSB.
+- **Portability**: WebUSB still serves browser-compatible flows.
+- **Desktop practicality**: macOS may expose OpenPort more reliably through CDC ACM serial than through libusb interface claims.
+- **Packaging boundary**: shared device packages stay runtime-agnostic, while desktop entrypoints inject Node-only backends such as serial.
+- **Constraint**: browser/web builds cannot pull Node-only serial modules into their bundle graph.
 
 ## Reference Implementations
 
@@ -319,13 +323,17 @@ export class DeviceManager {
 
 ---
 
-## USB Transport: `navigator.usb`
+## Browser USB Transport: `navigator.usb`
 
 ### Why `navigator.usb`
 
 VSCode 1.69 (June 2022) added experimental support for WebUSB, Web Serial, and WebHID in web extensions via `workbench.experimental.requestUsbDevice`. Critically, **the web extension runtime runs on VSCode desktop too** — a web extension (using the `browser` entry point in `package.json`) runs in a Browser WebWorker on both desktop VSCode and vscode.dev.
 
 This means `navigator.usb` is available in the extension host on all platforms without any native addons, `node-gyp` compilation, or Electron ABI concerns.
+
+### Desktop macOS serial transport
+
+When OpenPort 2.0 is exposed as a CDC ACM modem device on macOS, desktop runtimes should prefer that serial endpoint over libusb. The serial path uses the same adapter command protocol (`ati`, `ata`, `ato...`, `att...`, `AR...`) while avoiding interface-claim conflicts with the host OS.
 
 ### Extension Entry Point Change
 

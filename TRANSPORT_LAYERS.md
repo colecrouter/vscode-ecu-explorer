@@ -103,6 +103,7 @@ class OpenPort2Transport implements Transport {
 
 **Key Features**:
 - ✅ WebUSB API for direct hardware access
+- ✅ WebHID fallback when USB interface claim fails due to OS/kernel ownership
 - ✅ Non-blocking read/write with timeout
 - ✅ Automatic frame fragmentation for large payloads
 - ✅ Flow control handling (0x30 frames)
@@ -265,7 +266,7 @@ class KLineTransport implements Transport {
 
 | Feature | CAN | K-Line | Support |
 |---------|-----|--------|---------|
-| **USB Interface** | ✅ | ✅ | WebUSB (vendor 0x0403, product 0xcc4d) |
+| **USB Interface** | ✅ | ✅ | WebUSB (vendor 0x0403, product ID 0xcc4d), WebHID fallback |
 | **CAN Mode** | ✅ | — | 500 kbps, fully tested |
 | **K-Line Mode** | — | ⏳ | Under testing; init sequence being verified |
 | **Dual-Channel** | N/A | — | Can switch modes; not simultaneous |

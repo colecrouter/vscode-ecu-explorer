@@ -16,8 +16,8 @@
 		"@ecu-explorer/device": "*"
 	},
 	"devDependencies": {
-		"typescript": "*",
 		"@types/vscode-webview": "*",
-		"@types/w3c-web-usb": "*"
+		"@types/w3c-web-usb": "*",
+		"typescript": "*"
 	}
 }

@@ -203,6 +203,12 @@ ECU Explorer searches for ROM definitions in:
 |--------|-----|--------|--------|
 | **Tactrix OpenPort 2.0** | ✅ | ⏳ | Primary device |
 
+### OpenPort 2.0 transport notes
+
+- On macOS desktop, ECU Explorer should prefer the OpenPort CDC ACM serial device exposed as `/dev/cu.usbmodem*`.
+- WebHID support is provisional and should not be assumed to match USB or serial behavior.
+- The web extension build must remain free of Node-only serial dependencies.
+
 See [Transport Layers & Hardware Architecture](../TRANSPORT_LAYERS.md) for detailed hardware compatibility.
 
 ---

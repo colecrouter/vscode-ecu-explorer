@@ -17,6 +17,16 @@
 - [ ] Explore tree-shaking plotly
 - [x] Logs integration
 - [x] USB device support
+- [ ] Validate OpenPort 2.0 desktop transport matrix:
+  - macOS desktop should prefer CDC ACM serial when exposed by the device
+  - HID support remains provisional until end-to-end validation proves parity with USB/serial
+  - remove HID fallback if it cannot be validated for real OpenPort 2.0 workflows
+  - document current J2534 findings: serial handshake/channel open/filter setup work, but ECU RX traffic is still unverified pending CAN sniffing
+  - defer transport-level CAN ID / filter / flag tuning until hardware sniffing is available
+  - defer user-facing multi-device serial selection and saved workspace device preferences until OpenPort protocol traffic is validated
+- [ ] Add desktop serial device selection/persistence foundation for non-OpenPort devices
+  - split wideband and other USB-serial integrations into their own follow-up pass
+  - generalize desktop serial discovery/matching once OpenPort protocol traffic is validated
 - [x] "Open Graph" opens wrong graph, should open graph for active table/doc
 - [ ] ROM flash/readback via OpenPort 2.0
 - [x] MCP tools integration

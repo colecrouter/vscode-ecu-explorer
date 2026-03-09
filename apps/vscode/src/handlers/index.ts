@@ -4,7 +4,10 @@
  * Exports all handler functions for extension.ts
  */
 
-export { handleCellEdit, setCellEditHandlerContext } from "./cell-edit-handler.js";
+export {
+	handleCellEdit,
+	setCellEditHandlerContext,
+} from "./cell-edit-handler.js";
 export {
 	getRomDocumentForPanel,
 	handleTableOpen,

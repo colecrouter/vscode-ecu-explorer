@@ -1,6 +1,6 @@
 import type {
-	Table1DDefinition,
 	StaticArrayDefinition,
+	Table1DDefinition,
 	Table2DDefinition,
 	Table3DDefinition,
 	Unit,
@@ -46,9 +46,9 @@ describe("TableGrid Component", () => {
 	}
 
 	const def2d: Table2DDefinition = {
+		id: "table-2d-test",
 		kind: "table2d",
 		name: "Test 2D",
-		id: "grid-2d",
 		rows: 4,
 		cols: 4,
 		z: { id: "values-2d", name: "Values", address: 0, length: 16, dtype: "u8" },
@@ -64,13 +64,19 @@ describe("TableGrid Component", () => {
 
 	it("should show layer selector for 3D table", async () => {
 		const def3d: Table3DDefinition = {
+			id: "table-3d-test",
 			kind: "table3d",
 			name: "Test 3D",
-			id: "grid-3d",
 			rows: 4,
 			cols: 4,
 			depth: 2,
-			z: { id: "values-3d", name: "Values", address: 0, length: 32, dtype: "u8" },
+			z: {
+				id: "z-test-3d",
+				name: "Values",
+				address: 0,
+				length: 32,
+				dtype: "u8",
+			},
 		};
 		const view = new TableView(rom, def3d);
 		const screen = render(TableGrid, { view, definition: def3d });
