@@ -4,7 +4,6 @@ import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { McpConfig } from "../config.js";
 import * as logReader from "../log-reader.js";
-import { handleQueryLogs } from "./query-logs.js";
 import { handleReadLog } from "./read-log.js";
 
 vi.mock("../log-reader.js", async () => {
@@ -291,21 +290,5 @@ describe("handleReadLog", () => {
 		expect(result).toContain("- Load Avg");
 		expect(result).toContain("| 0.00");
 		expect(result).not.toContain("| 0.10");
-	});
-});
-
-describe("handleQueryLogs compatibility alias", () => {
-	it("requires file and directs callers to read_log", async () => {
-		await expect(
-			handleQueryLogs(
-				{
-					filter: "Engine RPM > 10",
-				},
-				{
-					definitionsPaths: [],
-					logsDir: "/tmp/logs",
-				},
-			),
-		).rejects.toThrow("`query_logs` is deprecated");
 	});
 });

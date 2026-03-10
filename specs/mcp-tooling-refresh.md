@@ -29,15 +29,15 @@ This spec supersedes the relevant portions of [`specs/mcp-server.md`](./mcp-serv
 
 ## High-Level Changes
 
-### Tool Renames / Role Changes
+### Tool Roles
 
-| Old | New | Role |
-|---|---|---|
-| `query_logs` | `read_log` | Inspect a single selected log file |
-| `list_logs` | `list_logs` | Discover log files and their metadata |
-| `list_tables` | `list_tables` | Discover tables and their metadata |
-| `read_table` | `read_table` | Read a full table or selected slice |
-| `patch_table` | `patch_table` | Modify a full table or selected slice |
+| Tool | Role |
+|---|---|
+| `read_log` | Inspect a single selected log file |
+| `list_logs` | Discover log files and their metadata |
+| `list_tables` | Discover tables and their metadata |
+| `read_table` | Read a full table or selected slice |
+| `patch_table` | Modify a full table or selected slice |
 
 ### Design Rules
 
@@ -434,13 +434,13 @@ Tools SHALL still fail helpfully if the agent skips a step.
 
 ## Compatibility
 
-`query_logs` MAY be retained temporarily as a compatibility alias for `read_log`, but all documentation and examples SHALL use `read_log`.
+`query_logs` is removed from the MCP surface. Agents must use `read_log`.
 
 ## Acceptance Criteria
 
 1. A new MCP resource exists for query/selector syntax documentation.
 2. `list_logs` supports metadata query plus pagination.
-3. `query_logs` is replaced by `read_log` for the documented MCP surface.
+3. `query_logs` is removed and replaced by `read_log`.
 4. `read_log(file)` returns log schema/details without requiring a separate tool.
 5. `read_log` row output operates on a single selected file only.
 6. `read_log` uses `step_ms` instead of `sample_rate`.

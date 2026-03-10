@@ -66,7 +66,6 @@ const currentOpenContext: OpenDocumentsContext = {
 import { handleListLogs } from "./tools/list-logs.js";
 import { handleListTables } from "./tools/list-tables.js";
 import { handlePatchTable } from "./tools/patch-table.js";
-import { handleQueryLogs } from "./tools/query-logs.js";
 import { handleReadLog } from "./tools/read-log.js";
 import { handleReadTable } from "./tools/read-table.js";
 import { handleRomInfo } from "./tools/rom-info.js";
@@ -413,58 +412,6 @@ server.tool(
 			if (step_ms !== undefined) readLogOptions.stepMs = step_ms;
 
 			const content = await handleReadLog(readLogOptions, config);
-			return { content: [{ type: "text", text: content }] };
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			return {
-				content: [{ type: "text", text: `Error: ${message}` }],
-				isError: true,
-			};
-		}
-	},
-);
-
-// ─── Tool: query_logs (compatibility alias) ──────────────────────────────────
-
-server.tool(
-	"query_logs",
-	"Deprecated compatibility alias for `read_log`. Prefer `read_log(file)` and `step_ms`.",
-	{
-		filter: z
-			.string()
-			.describe(
-				"Filter expression, e.g. 'RPM > 3000 && Knock > 0'. Channel names are case-sensitive.",
-			),
-		channels: z
-			.array(z.string())
-			.optional()
-			.describe("Additional channels to include beyond those in the filter"),
-		file: z
-			.string()
-			.optional()
-			.describe(
-				"Filename from list_logs to search; omit to search all log files",
-			),
-		sample_rate: z
-			.number()
-			.positive()
-			.optional()
-			.describe(
-				"Target sample rate in Hz; server computes stride from actual log rate",
-			),
-	},
-	async ({ filter, channels, file, sample_rate }) => {
-		try {
-			const queryOpts: {
-				filter: string;
-				channels?: string[];
-				file?: string;
-				sampleRate?: number;
-			} = { filter };
-			if (channels !== undefined) queryOpts.channels = channels;
-			if (file !== undefined) queryOpts.file = file;
-			if (sample_rate !== undefined) queryOpts.sampleRate = sample_rate;
-			const content = await handleQueryLogs(queryOpts, config);
 			return { content: [{ type: "text", text: content }] };
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);

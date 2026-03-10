@@ -439,7 +439,7 @@ export async function queryLogFile(
 
 /**
  * Parse all rows from a CSV log file, returning raw row objects.
- * Used by read_log / legacy query_logs for expression evaluation.
+ * Used by read_log for expression evaluation.
  *
  * @param filePath - Absolute path to the log CSV file
  * @returns Object with headers and rows as plain objects
