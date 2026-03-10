@@ -3,7 +3,7 @@
 > [!IMPORTANT]
 > Tool contract details in this document are partially outdated.
 > The current MCP surface is defined by [specs/mcp-tooling-refresh.md](./mcp-tooling-refresh.md).
-> In particular: `query_logs` is now `read_log`, `list_tables` and `list_logs` are queryable/paginated discovery tools, and `read_table` / `patch_table` use value-based `where` selectors instead of public row/column targeting.
+> In particular: `query_logs` has been removed in favor of `read_log`, `list_tables` and `list_logs` are queryable/paginated discovery tools, and `read_table` / `patch_table` use value-based `where` selectors instead of public row/column targeting.
 
 ## Overview
 

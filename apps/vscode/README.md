@@ -105,12 +105,12 @@ The extension includes an MCP server with tools for AI integration:
 - `patch_table` — Apply operations to tables
 - `rom_info` — Get ROM metadata
 - `list_logs` — List saved log files
-- `read_log` — Inspect one selected log file
+- `read_log` — Inspect one selected log file or return its schema/details
 
 The MCP server also exposes resources:
 
 - `ecu-explorer://docs/query-syntax` — Canonical `where` syntax reference for logs and tables
-- `ecu-explorer://context/open-documents` — Current ROM/table editing context; empty sections are omitted when nothing relevant is open
+- `ecu-explorer://context/open-documents` — Current ROM/table editing context, including dirty/focused state; empty sections are omitted when nothing relevant is open
 
 ---
 
