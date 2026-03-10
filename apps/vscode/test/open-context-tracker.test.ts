@@ -123,5 +123,22 @@ describe("OpenContextTracker", () => {
 			expect(context.roms).toHaveLength(0);
 			expect(context.tables).toHaveLength(0);
 		});
+
+		it("should include dirty state and focus timestamp for tracked ROMs", async () => {
+			const uri = vscode.Uri.file("/path/to/rom.bin");
+			const romDoc = new RomDocument(uri, new Uint8Array([0x00]));
+
+			tracker.addRomDocument(romDoc);
+			romDoc.makeDirty();
+			tracker.setRomFocused(uri.toString());
+
+			await new Promise((resolve) => setTimeout(resolve, 150));
+
+			const context = tracker.getContext();
+			expect(context.roms[0]?.isDirty).toBe(true);
+			expect(context.roms[0]?.lastFocusedAt).toBeDefined();
+
+			romDoc.dispose();
+		});
 	});
 });

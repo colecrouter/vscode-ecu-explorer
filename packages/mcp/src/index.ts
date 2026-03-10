@@ -20,6 +20,10 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { loadConfig } from "./config.js";
 import { setupContextIpc } from "./context-ipc.js";
+import {
+	buildOpenDocumentsContextPayload,
+	buildQuerySyntaxResourceText,
+} from "./resources.js";
 import type { PatchTableOptions } from "./tools/patch-table.js";
 
 /**
@@ -114,20 +118,7 @@ server.resource(
 	"ecu-explorer://context/open-documents",
 	"ecu-explorer://context/open-documents",
 	async () => {
-		const payload = JSON.stringify(
-			{
-				version: currentOpenContext.version,
-				timestamp: currentOpenContext.timestamp,
-				...(currentOpenContext.roms.length > 0
-					? { roms: currentOpenContext.roms }
-					: {}),
-				...(currentOpenContext.tables.length > 0
-					? { tables: currentOpenContext.tables }
-					: {}),
-			},
-			null,
-			2,
-		);
+		const payload = buildOpenDocumentsContextPayload(currentOpenContext);
 		return {
 			contents: [
 				{
@@ -148,23 +139,7 @@ server.resource(
 			{
 				uri: "ecu-explorer://docs/query-syntax",
 				mimeType: "text/markdown",
-				text: [
-					"# ECU Explorer Query Syntax",
-					"",
-					"Supported operators:",
-					"- `==`, `!=`, `>`, `>=`, `<`, `<=`",
-					"- `&&`, `||`",
-					"- parentheses",
-					"",
-					"Field names can be used exactly as exposed by the tool, including spaces and punctuation.",
-					"",
-					"Examples:",
-					"- `Engine RPM > 3000 && Knock Sum > 0`",
-					"- `RPM (rpm) >= 3000 && Load (g/rev) <= 2.0`",
-					"- `Coolant Temp (C) >= 60 && Coolant Temp (C) <= 90`",
-					"",
-					"For table selectors, equality matches exact breakpoint values only.",
-				].join("\n"),
+				text: buildQuerySyntaxResourceText(),
 			},
 		],
 	}),

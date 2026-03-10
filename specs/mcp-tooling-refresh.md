@@ -395,6 +395,13 @@ The existing open-documents context resource SHALL remain, but it SHALL be tight
 
 If the user is not editing a ROM or table, the resource SHOULD remain minimal.
 
+Current implementation status:
+
+- empty `roms` / `tables` sections are omitted from the MCP resource payload
+- ROM dirty state is included
+- focus timestamps are included when the extension records them
+- explicit boolean focused state is not yet wired from the extension
+
 ## ROM Loader Cache
 
 The ROM byte cache SHALL be removed.

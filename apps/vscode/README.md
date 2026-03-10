@@ -107,6 +107,11 @@ The extension includes an MCP server with tools for AI integration:
 - `list_logs` — List saved log files
 - `read_log` — Inspect one selected log file
 
+The MCP server also exposes resources:
+
+- `ecu-explorer://docs/query-syntax` — Canonical `where` syntax reference for logs and tables
+- `ecu-explorer://context/open-documents` — Current ROM/table editing context; empty sections are omitted when nothing relevant is open
+
 ---
 
 ## Supported Vehicles
