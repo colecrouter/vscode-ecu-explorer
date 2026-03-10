@@ -7,7 +7,10 @@
 
 import { findClosestMatches } from "@ecu-explorer/core";
 import type { McpConfig } from "../config.js";
-import { formatTable, formatTableSlice } from "../formatters/table-formatter.js";
+import {
+	formatTable,
+	formatTableSlice,
+} from "../formatters/table-formatter.js";
 import { loadRom } from "../rom-loader.js";
 import { selectTableCells } from "../table-selectors.js";
 
@@ -72,19 +75,14 @@ export async function handleReadTable(
 	const result =
 		where === undefined
 			? full
-			: formatTableSlice(
-					romPath,
-					tableDef,
-					romBytes,
-					{
-						...selectTableCells(
-							tableDef,
-							full.xAxisValues,
-							full.yAxisValues,
-							where,
-						),
+			: formatTableSlice(romPath, tableDef, romBytes, {
+					...selectTableCells(
+						tableDef,
+						full.xAxisValues,
+						full.yAxisValues,
 						where,
-					},
-				);
+					),
+					where,
+				});
 	return result.content;
 }

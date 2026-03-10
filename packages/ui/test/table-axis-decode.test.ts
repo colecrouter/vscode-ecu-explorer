@@ -6,18 +6,10 @@ describe("table axis decode behavior", () => {
 	it("decodes BE-like 16-bit byte pattern as interleaved values when axis dtype is u8", () => {
 		// Pattern represents big-endian 16-bit values: 0x001A, 0x0033, 0x004D, 0x0066.
 		const axisBytes = Uint8Array.from([
-			0x00,
-			0x1a,
-			0x00,
-			0x33,
-			0x00,
-			0x4d,
-			0x00,
-			0x66,
+			0x00, 0x1a, 0x00, 0x33, 0x00, 0x4d, 0x00, 0x66,
 		]);
 
 		const axis: AxisDefinition = {
-			id: "axis-u8",
 			kind: "dynamic",
 			id: "axis-u8-be",
 			name: "Axis",
@@ -38,18 +30,10 @@ describe("table axis decode behavior", () => {
 		// Same raw bytes as above, but interpreted as big-endian u16 elements.
 		// 0x001A, 0x0033, 0x004D, 0x0066 => 26, 51, 77, 102
 		const axisBytes = Uint8Array.from([
-			0x00,
-			0x1a,
-			0x00,
-			0x33,
-			0x00,
-			0x4d,
-			0x00,
-			0x66,
+			0x00, 0x1a, 0x00, 0x33, 0x00, 0x4d, 0x00, 0x66,
 		]);
 
 		const axis: AxisDefinition = {
-			id: "axis-u16",
 			kind: "dynamic",
 			id: "axis-u16-be",
 			name: "Axis",

@@ -427,8 +427,12 @@ export function formatTableSlice(
 			...full,
 			rows: slice.rowIndices.length,
 			cols: 1,
-			values: slice.rowIndices.map((rowIndex) => [full.values[rowIndex]?.[0] as number]),
-			xAxisValues: slice.rowIndices.map((rowIndex) => full.xAxisValues[rowIndex] as number),
+			values: slice.rowIndices.map((rowIndex) => [
+				full.values[rowIndex]?.[0] as number,
+			]),
+			xAxisValues: slice.rowIndices.map(
+				(rowIndex) => full.xAxisValues[rowIndex] as number,
+			),
 			yAxisValues: [],
 			content: `${frontmatter}\n${buildMarkdownTable(headers, tableRows)}`,
 		};
@@ -449,14 +453,17 @@ export function formatTableSlice(
 
 		const values = slice.rowIndices.map((rowIndex) =>
 			slice.colIndices.map(
-				(colIndex) => (full.values[rowIndex]?.[colIndex] as number) ?? Number.NaN,
+				(colIndex) =>
+					(full.values[rowIndex]?.[colIndex] as number) ?? Number.NaN,
 			),
 		);
 		const tableRows = slice.rowIndices.map((rowIndex, localRowIndex) => [
 			full.yAxisValues.length > rowIndex
 				? formatNumber(full.yAxisValues[rowIndex] as number)
 				: String(rowIndex),
-			...(values[localRowIndex] ?? []).map((value) => formatNumber(value as number)),
+			...(values[localRowIndex] ?? []).map((value) =>
+				formatNumber(value as number),
+			),
 		]);
 
 		return {
@@ -464,8 +471,12 @@ export function formatTableSlice(
 			rows: slice.rowIndices.length,
 			cols: slice.colIndices.length,
 			values,
-			xAxisValues: slice.colIndices.map((colIndex) => full.xAxisValues[colIndex] as number),
-			yAxisValues: slice.rowIndices.map((rowIndex) => full.yAxisValues[rowIndex] as number),
+			xAxisValues: slice.colIndices.map(
+				(colIndex) => full.xAxisValues[colIndex] as number,
+			),
+			yAxisValues: slice.rowIndices.map(
+				(rowIndex) => full.yAxisValues[rowIndex] as number,
+			),
 			content: `${frontmatter}\n${buildMarkdownTable(headers, tableRows)}`,
 		};
 	}

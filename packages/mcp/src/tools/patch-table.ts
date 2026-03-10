@@ -73,7 +73,9 @@ export async function handlePatchTable(
 	} = options;
 
 	if (where !== undefined && (row !== undefined || col !== undefined)) {
-		throw new Error(`Use either "where" or legacy row/col targeting, not both.`);
+		throw new Error(
+			`Use either "where" or legacy row/col targeting, not both.`,
+		);
 	}
 
 	// Validate operation parameters
@@ -212,7 +214,9 @@ export async function handlePatchTable(
 
 		if (op === "smooth") {
 			if (where !== undefined) {
-				throw new Error(`Operation "smooth" currently requires the whole table.`);
+				throw new Error(
+					`Operation "smooth" currently requires the whole table.`,
+				);
 			}
 			// smooth applies to entire table
 			const result = smoothValues(currentValues);
@@ -343,12 +347,10 @@ export async function handlePatchTable(
 						{ status: "patched", cellsWritten: selector.cellsMatched },
 					);
 				})()
-			: formatTable(
-					romPath,
-					tableDef,
-					reloaded.romBytes,
-					{ status: "patched", cellsWritten: fullTable.rows * fullTable.cols },
-				);
+			: formatTable(romPath, tableDef, reloaded.romBytes, {
+					status: "patched",
+					cellsWritten: fullTable.rows * fullTable.cols,
+				});
 	return result.content;
 }
 
@@ -419,7 +421,9 @@ function readTable1DPhysical(
 	for (let i = 0; i < length; i++) {
 		const byteOffset = z.address + i * elemSize;
 		const raw = decodeScalar(romBytes, byteOffset, z.dtype, { endian });
-		values.push(z.transform ? z.transform(raw) : raw * (z.scale ?? 1) + (z.offset ?? 0));
+		values.push(
+			z.transform ? z.transform(raw) : raw * (z.scale ?? 1) + (z.offset ?? 0),
+		);
 	}
 
 	return values;
@@ -450,7 +454,9 @@ function readTable2DPhysical(
 				byteOffset = z.address + r * rowStride + c * colStride;
 			}
 			const raw = decodeScalar(romBytes, byteOffset, z.dtype, { endian });
-			row.push(z.transform ? z.transform(raw) : raw * (z.scale ?? 1) + (z.offset ?? 0));
+			row.push(
+				z.transform ? z.transform(raw) : raw * (z.scale ?? 1) + (z.offset ?? 0),
+			);
 		}
 		result.push(row);
 	}

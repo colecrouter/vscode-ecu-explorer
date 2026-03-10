@@ -195,13 +195,15 @@ describe("RomExplorerTreeProvider - Phase 2: Active Table Tracking", () => {
 				createMockTable("Table1", "Fuel"),
 				createMockTable("Table2", "Fuel"),
 			];
+			const [table1] = tables;
+			if (table1 == null) throw new Error("Expected first table to be defined");
 			const definition = createMockDefinition(tables);
 
 			const document = new RomDocument(mockUri, mockBytes, definition);
 			treeProvider.addDocument(document);
 
 			// Set Table1 as active
-			treeProvider.setActiveTable(mockUri.toString(), tables[0]!.id);
+			treeProvider.setActiveTable(mockUri.toString(), table1.id);
 
 			// Get table nodes
 			const romNodes = await treeProvider.getChildren();
@@ -234,13 +236,15 @@ describe("RomExplorerTreeProvider - Phase 2: Active Table Tracking", () => {
 			const mockBytes = new Uint8Array([0x01, 0x02, 0x03]);
 
 			const tables = [createMockTable("Table1", "Fuel")];
+			const [table1] = tables;
+			if (table1 == null) throw new Error("Expected first table to be defined");
 			const definition = createMockDefinition(tables);
 
 			const document = new RomDocument(mockUri, mockBytes, definition);
 			treeProvider.addDocument(document);
 
 			// Set Table1 as active
-			treeProvider.setActiveTable(mockUri.toString(), tables[0]!.id);
+			treeProvider.setActiveTable(mockUri.toString(), table1.id);
 
 			// Get table node
 			const romNodes = await treeProvider.getChildren();
@@ -267,13 +271,17 @@ describe("RomExplorerTreeProvider - Phase 2: Active Table Tracking", () => {
 				createMockTable("Table1", "Fuel"),
 				createMockTable("Table2", "Fuel"),
 			];
+			const [table1, table2] = tables;
+			if (table1 == null || table2 == null) {
+				throw new Error("Expected tables to be defined");
+			}
 			const definition = createMockDefinition(tables);
 
 			const document = new RomDocument(mockUri, mockBytes, definition);
 			treeProvider.addDocument(document);
 
 			// Set Table1 as active
-			treeProvider.setActiveTable(mockUri.toString(), tables[0]!.id);
+			treeProvider.setActiveTable(mockUri.toString(), table1.id);
 
 			let romNodes = await treeProvider.getChildren();
 			const firstRomNode = romNodes[0];
@@ -291,7 +299,7 @@ describe("RomExplorerTreeProvider - Phase 2: Active Table Tracking", () => {
 			}
 
 			// Switch to Table2
-			treeProvider.setActiveTable(mockUri.toString(), tables[1]!.id);
+			treeProvider.setActiveTable(mockUri.toString(), table2.id);
 
 			romNodes = await treeProvider.getChildren();
 			const secondRomNode = romNodes[0];
@@ -320,6 +328,8 @@ describe("RomExplorerTreeProvider - Phase 2: Active Table Tracking", () => {
 
 			const tables1 = [createMockTable("Table1", "Fuel")];
 			const tables2 = [createMockTable("Table2", "Boost")];
+			const [table1] = tables1;
+			if (table1 == null) throw new Error("Expected ROM1 table to be defined");
 
 			const definition1 = createMockDefinition(tables1);
 			const definition2 = createMockDefinition(tables2);
@@ -331,7 +341,7 @@ describe("RomExplorerTreeProvider - Phase 2: Active Table Tracking", () => {
 			treeProvider.addDocument(document2);
 
 			// Set Table1 in ROM1 as active
-			treeProvider.setActiveTable(mockUri1.toString(), tables1[0]!.id);
+			treeProvider.setActiveTable(mockUri1.toString(), table1.id);
 
 			// Get ROM1 tables
 			const romNodes = await treeProvider.getChildren();
@@ -368,13 +378,15 @@ describe("RomExplorerTreeProvider - Phase 2: Active Table Tracking", () => {
 			const mockBytes = new Uint8Array([0x01, 0x02, 0x03]);
 
 			const tables = [createMockTable("Table1", "Fuel")];
+			const [table1] = tables;
+			if (table1 == null) throw new Error("Expected first table to be defined");
 			const definition = createMockDefinition(tables);
 
 			const document = new RomDocument(mockUri, mockBytes, definition);
 			treeProvider.addDocument(document);
 
 			// Set Table1 as active
-			treeProvider.setActiveTable(mockUri.toString(), tables[0]!.id);
+			treeProvider.setActiveTable(mockUri.toString(), table1.id);
 
 			let romNodes = await treeProvider.getChildren();
 			const firstRomNode = romNodes[0];

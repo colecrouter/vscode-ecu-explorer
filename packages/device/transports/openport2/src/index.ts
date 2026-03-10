@@ -29,7 +29,6 @@ const CAN_ID_MASK_11BIT = 0x7ff;
 const DEFAULT_TESTER_CAN_ID = 0x7e0;
 const DEFAULT_ECU_CAN_ID = 0x7e8;
 const PACKET_NORMAL = 0x00;
-const PACKET_TX_DONE = 0x10;
 const PACKET_RX_END = 0x40;
 const PACKET_NORMAL_START = 0x80;
 
@@ -370,7 +369,10 @@ export class OpenPort2Connection implements DeviceConnection {
 	/**
 	 * Read a single USB packet from the device.
 	 */
-	private async readUsbPacket(timeoutMs: number, maxLength = 64): Promise<Uint8Array> {
+	private async readUsbPacket(
+		timeoutMs: number,
+		maxLength = 64,
+	): Promise<Uint8Array> {
 		const result = await withTimeout(
 			this.device.transferIn(this.endpointIn, maxLength),
 			timeoutMs,
@@ -629,7 +631,10 @@ export class OpenPort2Connection implements DeviceConnection {
 				const packetLength = chunk[offset + 3] ?? 0;
 				const packetType = chunk[offset + 4] ?? 0;
 				const packetTotalLength = packetLength + 4;
-				if (packetTotalLength <= 0 || offset + packetTotalLength > chunk.length) {
+				if (
+					packetTotalLength <= 0 ||
+					offset + packetTotalLength > chunk.length
+				) {
 					break;
 				}
 
@@ -656,7 +661,9 @@ export class OpenPort2Connection implements DeviceConnection {
 					packetType === PACKET_NORMAL ||
 					packetType === PACKET_RX_END
 				) {
-					const combined = new Uint8Array(payload.length + packetPayload.length);
+					const combined = new Uint8Array(
+						payload.length + packetPayload.length,
+					);
 					combined.set(payload, 0);
 					combined.set(packetPayload, payload.length);
 					payload = combined;
@@ -666,9 +673,6 @@ export class OpenPort2Connection implements DeviceConnection {
 
 				if (packetType === PACKET_RX_END) {
 					return payload;
-				}
-				if (packetType === PACKET_TX_DONE && payload.length === 0) {
-					continue;
 				}
 			}
 		}
@@ -1055,7 +1059,10 @@ class OpenPort2SerialConnection implements DeviceConnection {
 				const packetLength = chunk[offset + 3] ?? 0;
 				const packetType = chunk[offset + 4] ?? 0;
 				const packetTotalLength = packetLength + 4;
-				if (packetTotalLength <= 0 || offset + packetTotalLength > chunk.length) {
+				if (
+					packetTotalLength <= 0 ||
+					offset + packetTotalLength > chunk.length
+				) {
 					break;
 				}
 
@@ -1082,7 +1089,9 @@ class OpenPort2SerialConnection implements DeviceConnection {
 					packetType === PACKET_NORMAL ||
 					packetType === PACKET_RX_END
 				) {
-					const combined = new Uint8Array(payload.length + packetPayload.length);
+					const combined = new Uint8Array(
+						payload.length + packetPayload.length,
+					);
 					combined.set(payload, 0);
 					combined.set(packetPayload, payload.length);
 					payload = combined;
@@ -1092,9 +1101,6 @@ class OpenPort2SerialConnection implements DeviceConnection {
 
 				if (packetType === PACKET_RX_END) {
 					return payload;
-				}
-				if (packetType === PACKET_TX_DONE && payload.length === 0) {
-					continue;
 				}
 			}
 		}

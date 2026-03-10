@@ -135,6 +135,11 @@ describe("ECU Explorer Commands - Phase 2", () => {
 
 			const definition1 = createMockDefinition(tables1);
 			const definition2 = createMockDefinition(tables2);
+			const [table1] = tables1;
+			const [table2] = tables2;
+			if (table1 == null || table2 == null) {
+				throw new Error("Expected tables to be defined");
+			}
 
 			const document1 = new RomDocument(mockUri1, mockBytes, definition1);
 			const document2 = new RomDocument(mockUri2, mockBytes, definition2);
@@ -143,17 +148,17 @@ describe("ECU Explorer Commands - Phase 2", () => {
 			treeProvider.addDocument(document2);
 
 			// Simulate opening Table1
-			treeProvider.setActiveTable(mockUri1.toString(), tables1[0]!.id);
+			treeProvider.setActiveTable(mockUri1.toString(), table1.id);
 			expect(treeProvider.getActiveTable()).toEqual({
 				romUri: mockUri1.toString(),
-				tableName: tables1[0]!.id,
+				tableName: table1.id,
 			});
 
 			// Simulate switching to Table2 (e.g., via tab switch)
-			treeProvider.setActiveTable(mockUri2.toString(), tables2[0]!.id);
+			treeProvider.setActiveTable(mockUri2.toString(), table2.id);
 			expect(treeProvider.getActiveTable()).toEqual({
 				romUri: mockUri2.toString(),
-				tableName: tables2[0]!.id,
+				tableName: table2.id,
 			});
 
 			// Verify tree reflects the active table for the second ROM
@@ -187,13 +192,15 @@ describe("ECU Explorer Commands - Phase 2", () => {
 				createMockTable("Table1", "Fuel"),
 				createMockTable("Table2", "Fuel"),
 			];
+			const [table1] = tables;
+			if (table1 == null) throw new Error("Expected first table to be defined");
 			const definition = createMockDefinition(tables);
 
 			const document = new RomDocument(mockUri, mockBytes, definition);
 			treeProvider.addDocument(document);
 
 			// Simulate command execution
-			treeProvider.setActiveTable(mockUri.toString(), tables[0]!.id);
+			treeProvider.setActiveTable(mockUri.toString(), table1.id);
 
 			// Verify tree reflects the change
 			const romNodes = await treeProvider.getChildren();
@@ -222,22 +229,26 @@ describe("ECU Explorer Commands - Phase 2", () => {
 				createMockTable("Table2", "Fuel"),
 				createMockTable("Table3", "Ignition"),
 			];
+			const [table1, table2, table3] = tables;
+			if (table1 == null || table2 == null || table3 == null) {
+				throw new Error("Expected tables to be defined");
+			}
 			const definition = createMockDefinition(tables);
 
 			const document = new RomDocument(mockUri, mockBytes, definition);
 			treeProvider.addDocument(document);
 
 			// Open Table1
-			treeProvider.setActiveTable(mockUri.toString(), tables[0]!.id);
-			expect(treeProvider.getActiveTable()?.tableName).toBe(tables[0]!.id);
+			treeProvider.setActiveTable(mockUri.toString(), table1.id);
+			expect(treeProvider.getActiveTable()?.tableName).toBe(table1.id);
 
 			// Switch to Table2
-			treeProvider.setActiveTable(mockUri.toString(), tables[1]!.id);
-			expect(treeProvider.getActiveTable()?.tableName).toBe(tables[1]!.id);
+			treeProvider.setActiveTable(mockUri.toString(), table2.id);
+			expect(treeProvider.getActiveTable()?.tableName).toBe(table2.id);
 
 			// Switch to Table3
-			treeProvider.setActiveTable(mockUri.toString(), tables[2]!.id);
-			expect(treeProvider.getActiveTable()?.tableName).toBe(tables[2]!.id);
+			treeProvider.setActiveTable(mockUri.toString(), table3.id);
+			expect(treeProvider.getActiveTable()?.tableName).toBe(table3.id);
 		});
 
 		it("should handle opening table from different ROM", async () => {
@@ -250,6 +261,11 @@ describe("ECU Explorer Commands - Phase 2", () => {
 
 			const definition1 = createMockDefinition(tables1);
 			const definition2 = createMockDefinition(tables2);
+			const [table1] = tables1;
+			const [table2] = tables2;
+			if (table1 == null || table2 == null) {
+				throw new Error("Expected tables to be defined");
+			}
 
 			const document1 = new RomDocument(mockUri1, mockBytes, definition1);
 			const document2 = new RomDocument(mockUri2, mockBytes, definition2);
@@ -258,17 +274,17 @@ describe("ECU Explorer Commands - Phase 2", () => {
 			treeProvider.addDocument(document2);
 
 			// Open Table1 from ROM1
-			treeProvider.setActiveTable(mockUri1.toString(), tables1[0]!.id);
+			treeProvider.setActiveTable(mockUri1.toString(), table1.id);
 			expect(treeProvider.getActiveTable()).toEqual({
 				romUri: mockUri1.toString(),
-				tableName: tables1[0]!.id,
+				tableName: table1.id,
 			});
 
 			// Switch to Table2 from ROM2
-			treeProvider.setActiveTable(mockUri2.toString(), tables2[0]!.id);
+			treeProvider.setActiveTable(mockUri2.toString(), table2.id);
 			expect(treeProvider.getActiveTable()).toEqual({
 				romUri: mockUri2.toString(),
-				tableName: tables2[0]!.id,
+				tableName: table2.id,
 			});
 		});
 	});

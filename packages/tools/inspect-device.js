@@ -57,7 +57,7 @@ const NODE_USB_TRANSFER_TIMEOUT_MS = 500;
  *     cb: (error: Error | null, result: unknown) => void,
  *   ) => void;
  * }} NodeUsbEndpointLike
-*/
+ */
 
 /**
  * @typedef {{
@@ -232,7 +232,7 @@ async function createNodeUSBInterface() {
 				}
 				return devices[0];
 			},
-	};
+		};
 
 		return /** @type {USB} */ (usbInterface);
 	} catch (error) {
@@ -372,17 +372,16 @@ function createWebUsbDevice(nodeDevice) {
 				return;
 			}
 			if (typeof endpoint.transfer !== "function") {
-				reject(new Error(`Endpoint ${endpointNumber} has no transfer() method`));
+				reject(
+					new Error(`Endpoint ${endpointNumber} has no transfer() method`),
+				);
 				return;
 			}
 			endpoint.timeout = NODE_USB_TRANSFER_TIMEOUT_MS;
 
 			endpoint.transfer(
 				length,
-				(
-					/** @type {Error | null} */ error,
-					/** @type {unknown} */ result,
-				) => {
+				(/** @type {Error | null} */ error, /** @type {unknown} */ result) => {
 					if (error) {
 						reject(new Error(`Transfer failed: ${error}`));
 						return;
@@ -416,7 +415,9 @@ function createWebUsbDevice(nodeDevice) {
 				return;
 			}
 			if (typeof endpoint.transfer !== "function") {
-				reject(new Error(`Endpoint ${endpointNumber} has no transfer() method`));
+				reject(
+					new Error(`Endpoint ${endpointNumber} has no transfer() method`),
+				);
 				return;
 			}
 			endpoint.timeout = NODE_USB_TRANSFER_TIMEOUT_MS;
@@ -424,19 +425,12 @@ function createWebUsbDevice(nodeDevice) {
 			const source =
 				data instanceof ArrayBuffer
 					? new Uint8Array(data)
-					: new Uint8Array(
-							data.buffer,
-							data.byteOffset,
-							data.byteLength,
-						);
+					: new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
 			const buffer = Buffer.from(source);
 
 			endpoint.transfer(
 				buffer,
-				(
-					/** @type {Error | null} */ error,
-					/** @type {unknown} */ result,
-				) => {
+				(/** @type {Error | null} */ error, /** @type {unknown} */ result) => {
 					if (error) {
 						reject(new Error(`Transfer failed: ${error}`));
 						return;
@@ -583,7 +577,8 @@ async function createNodeSerialInterface() {
 	 */
 	const buildDeviceKey = (port) => {
 		const vendorId = normalizeUsbIdentifier(port.vendorId) ?? "unknown-vendor";
-		const productId = normalizeUsbIdentifier(port.productId) ?? "unknown-product";
+		const productId =
+			normalizeUsbIdentifier(port.productId) ?? "unknown-product";
 		const serialNumber = port.serialNumber?.trim();
 		if (serialNumber != null && serialNumber.length > 0) {
 			return `${vendorId}:${productId}:${serialNumber}`;
@@ -827,7 +822,8 @@ function resolveMut3DefaultPids(names) {
 	return names
 		.map((name) => {
 			const match = mut3PidDescriptors.find(
-				(descriptor) => normalizePidToken(descriptor.name) === normalizePidToken(name),
+				(descriptor) =>
+					normalizePidToken(descriptor.name) === normalizePidToken(name),
 			);
 			return match?.pid ?? null;
 		})
@@ -843,7 +839,9 @@ function resolveMut3Pid(input) {
 		? parseNumericPidValue(input)
 		: null;
 	if (numericPid != null) {
-		const exact = mut3PidDescriptors.find((descriptor) => descriptor.pid === numericPid);
+		const exact = mut3PidDescriptors.find(
+			(descriptor) => descriptor.pid === numericPid,
+		);
 		if (exact == null) {
 			throw new Error(
 				`Invalid MUT-III PID: ${input}. Use a synthetic MUT-III PID (for example 0x${mut3PidDescriptors[0]?.pid.toString(16)}) or a parameter name like RPM.`,
@@ -953,7 +951,11 @@ function parsePidList(input, defaultPids = [0x0c]) {
  */
 function resolveLogPids(protocols, input) {
 	const [firstProtocol] = protocols;
-	if (protocols.length === 1 && firstProtocol != null && isMut3Protocol(firstProtocol)) {
+	if (
+		protocols.length === 1 &&
+		firstProtocol != null &&
+		isMut3Protocol(firstProtocol)
+	) {
 		const mut3Defaults = resolveMut3DefaultPids(DEFAULT_MUT3_PID_NAMES);
 		if (!input) {
 			return mut3Defaults;
@@ -987,7 +989,9 @@ function formatOperationSummary(summary) {
 				const lines = value.map((frame, index) => {
 					const record =
 						frame && typeof frame === "object"
-							? /** @type {{ timestamp?: unknown; pid?: unknown; value?: unknown; unit?: unknown }} */ (frame)
+							? /** @type {{ timestamp?: unknown; pid?: unknown; value?: unknown; unit?: unknown }} */ (
+									frame
+								)
 							: {};
 					return `  - [${index}] t=${String(record.timestamp)} pid=${String(record.pid)} value=${String(record.value)} unit=${String(record.unit ?? "")}`;
 				});
@@ -1031,7 +1035,9 @@ function formatHexBytes(data) {
  */
 function formatAsciiBytes(data) {
 	return Array.from(data)
-		.map((byte) => (byte >= 0x20 && byte <= 0x7e ? String.fromCharCode(byte) : "."))
+		.map((byte) =>
+			byte >= 0x20 && byte <= 0x7e ? String.fromCharCode(byte) : ".",
+		)
 		.join("");
 }
 
@@ -1041,7 +1047,9 @@ function formatAsciiBytes(data) {
  */
 function parseHexInput(input) {
 	if (!input) {
-		throw new Error("Raw mode requires --data with hex bytes, for example \"01 0c\" or \"10 03\".");
+		throw new Error(
+			'Raw mode requires --data with hex bytes, for example "01 0c" or "10 03".',
+		);
 	}
 
 	const normalized = input.replace(/,/g, " ").trim();
@@ -1051,7 +1059,9 @@ function parseHexInput(input) {
 
 	const tokens = normalized.split(/\s+/).filter((token) => token.length > 0);
 	const bytes = tokens.map((token) => {
-		const cleaned = token.toLowerCase().startsWith("0x") ? token.slice(2) : token;
+		const cleaned = token.toLowerCase().startsWith("0x")
+			? token.slice(2)
+			: token;
 		if (!/^[0-9a-fA-F]{1,2}$/.test(cleaned)) {
 			throw new Error(`Invalid hex byte: ${token}`);
 		}
@@ -1131,7 +1141,9 @@ function convertResult(result) {
 				},
 			}
 		: null;
-	formattedResult.protocol = result.protocol ? { name: result.protocol.name } : null;
+	formattedResult.protocol = result.protocol
+		? { name: result.protocol.name }
+		: null;
 	formattedResult.events = result.events.map(convertEvent);
 	if (result.error != null) {
 		formattedResult.error = result.error;
@@ -1691,7 +1703,7 @@ async function rawDevice(opts) {
 
 		selectedDevice =
 			opts.device != null
-				? devices.find((device) => device.id === opts.device) ?? null
+				? (devices.find((device) => device.id === opts.device) ?? null)
 				: (devices[0] ?? null);
 
 		if (selectedDevice == null) {
@@ -1785,7 +1797,7 @@ prog
 	.example("inspect-device log --duration 5000 --protocol mut3")
 	.example("inspect-device read-rom --protocol bootloader --out ./dump.bin")
 	.example("inspect-device read-rom --protocol mut3 --dry-run")
-	.example("inspect-device raw --data \"01 0c\" --ascii");
+	.example('inspect-device raw --data "01 0c" --ascii');
 
 // Global options
 prog
@@ -1901,7 +1913,7 @@ prog
 prog
 	.command("raw")
 	.describe("Send raw bytes and print the raw response")
-	.option("--data", "Hex bytes to send, for example \"01 0c\" or \"10 03\"")
+	.option("--data", 'Hex bytes to send, for example "01 0c" or "10 03"')
 	.option("--repeat", "Number of times to send the request", 1)
 	.option("--delay", "Delay in milliseconds between repeated requests", 0)
 	.option("--timeout", "Per-request response timeout in milliseconds", 500)

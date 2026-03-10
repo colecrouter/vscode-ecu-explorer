@@ -343,7 +343,11 @@ export class WorkspaceState {
 		const obj = deviceSelections as Record<string, unknown>;
 		const result: Record<string, DeviceSelectionState> = {};
 		for (const [key, value] of Object.entries(obj)) {
-			if (typeof key !== "string" || typeof value !== "object" || value === null) {
+			if (
+				typeof key !== "string" ||
+				typeof value !== "object" ||
+				value === null
+			) {
 				continue;
 			}
 			const entry = value as Record<string, unknown>;

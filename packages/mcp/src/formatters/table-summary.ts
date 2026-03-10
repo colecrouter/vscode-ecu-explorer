@@ -11,7 +11,14 @@ export function formatTableDimensions(table: TableDefinition): string {
 }
 
 export function formatTableListMarkdown(tables: TableDefinition[]): string {
-	const headers = ["Name", "Category", "Dimensions", "Unit", "X Axis", "Y Axis"];
+	const headers = [
+		"Name",
+		"Category",
+		"Dimensions",
+		"Unit",
+		"X Axis",
+		"Y Axis",
+	];
 	const rows = tables.map((table) => [
 		table.name,
 		table.category ?? "",

@@ -98,10 +98,10 @@ function sizeOf(dtype: ScalarType): number {
 /**
  * Load axis values from ROM or return static values
  */
-	export function loadAxisValues(
-		axis: AxisDefinition | undefined,
-		rom: Uint8Array,
-	): number[] | null {
+export function loadAxisValues(
+	axis: AxisDefinition | undefined,
+	rom: Uint8Array,
+): number[] | null {
 	// Return null if axis is undefined
 	if (!axis) {
 		return null;
@@ -133,9 +133,7 @@ function sizeOf(dtype: ScalarType): number {
 
 		// Decode and apply scale/offset
 		const raw = decodeScalarBytes(bytes, axis.dtype, endianness);
-		const scaled = axis.transform
-			? axis.transform(raw)
-			: raw * scale + offset;
+		const scaled = axis.transform ? axis.transform(raw) : raw * scale + offset;
 		values.push(scaled);
 	}
 

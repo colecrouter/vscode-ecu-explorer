@@ -8,8 +8,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OpenPort2Transport } from "../src/index.js";
 
 type TestConnection = DeviceConnection & {
+	initialize: () => Promise<void>;
 	sendFrame: (data: Uint8Array, timeoutMs?: number) => Promise<Uint8Array>;
 	receiveFrame: (maxLength: number) => Promise<Uint8Array>;
+};
+
+type FakeSerialPortFactory = () => FakeSerialPort;
+
+type FakeSerialPortInfo = {
+	path: string;
+	serialNumber?: string | null;
+	manufacturer?: string | null;
+	friendlyName?: string | null;
+	vendorId?: number | string | null;
+	productId?: number | string | null;
 };
 
 function createIso15765ResponseFrame(payload: Uint8Array): DataView {
@@ -170,19 +182,22 @@ class FakeSerialPort {
 }
 
 class FakeSerialRuntime {
-	private readonly ports;
-	private readonly factories;
+	private readonly ports: readonly FakeSerialPortInfo[];
+	private readonly factories: ReadonlyMap<string, FakeSerialPortFactory>;
 
-	constructor(ports, factories) {
+	constructor(
+		ports: readonly FakeSerialPortInfo[],
+		factories: ReadonlyMap<string, FakeSerialPortFactory>,
+	) {
 		this.ports = ports;
 		this.factories = factories;
 	}
 
-	async listPorts() {
+	async listPorts(): Promise<readonly FakeSerialPortInfo[]> {
 		return this.ports;
 	}
 
-	async openPort(path: string) {
+	async openPort(path: string): Promise<FakeSerialPort> {
 		const factory = this.factories.get(path);
 		if (factory == null) {
 			throw new Error(`Port not found: ${path}`);
@@ -373,7 +388,9 @@ describe("OpenPort2Transport", () => {
 						path,
 						() =>
 							new FakeSerialPort(path, [
-								new TextEncoder().encode("ari main code version : 1.17.4877\r\n"),
+								new TextEncoder().encode(
+									"ari main code version : 1.17.4877\r\n",
+								),
 								new TextEncoder().encode("aro\r\n"),
 							]),
 					],
@@ -456,9 +473,7 @@ describe("OpenPort2Transport", () => {
 		});
 
 		it("sendFrame times out when the device never responds", async () => {
-			fakeDevice.transferIn = vi.fn(
-				() => new Promise<never>(() => {}),
-			);
+			fakeDevice.transferIn = vi.fn(() => new Promise<never>(() => {}));
 
 			await expect(
 				connection.sendFrame(new Uint8Array([0xe5]), 10),
@@ -559,7 +574,9 @@ describe("OpenPort2Transport", () => {
 						path,
 						() =>
 							new FakeSerialPort(path, [
-								new TextEncoder().encode("ari main code version : 1.17.4877\r\n"),
+								new TextEncoder().encode(
+									"ari main code version : 1.17.4877\r\n",
+								),
 								new TextEncoder().encode("aro\r\n"),
 								new TextEncoder().encode("aro\r\n"),
 								new Uint8Array(0),
@@ -572,9 +589,9 @@ describe("OpenPort2Transport", () => {
 			);
 
 			const transport = new OpenPort2Transport({ serial });
-			const connection = /** @type {TestConnection} */ (
-				await transport.connect(`openport2-serial:${path}`)
-			);
+			const connection = (await transport.connect(
+				`openport2-serial:${path}`,
+			)) as TestConnection;
 			await connection.initialize();
 
 			await expect(connection.sendFrame(payload)).resolves.toEqual(payload);

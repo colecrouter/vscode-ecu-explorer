@@ -1308,16 +1308,16 @@ export class TableView<T extends TableDefinition> {
 
 		// table3d
 		const z: number[][][] = [];
-			for (let depth = 0; depth < def.depth; depth++) {
-				const layer: number[][] = [];
-				for (let row = 0; row < def.rows; row++) {
-					const rowData: number[] = [];
-					for (let col = 0; col < def.cols; col++) {
-						const address = this.cellOffset(row, col, depth);
-						const bytes = this.readBytes(address);
-						const raw = this.decodeScalarValue(bytes);
-						rowData.push(raw);
-					}
+		for (let depth = 0; depth < def.depth; depth++) {
+			const layer: number[][] = [];
+			for (let row = 0; row < def.rows; row++) {
+				const rowData: number[] = [];
+				for (let col = 0; col < def.cols; col++) {
+					const address = this.cellOffset(row, col, depth);
+					const bytes = this.readBytes(address);
+					const raw = this.decodeScalarValue(bytes);
+					rowData.push(raw);
+				}
 				layer.push(rowData);
 			}
 			z.push(layer);

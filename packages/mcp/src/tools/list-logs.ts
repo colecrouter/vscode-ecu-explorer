@@ -43,7 +43,10 @@ export async function handleListLogs(
 	const logsDir = config.logsDir;
 	const allFiles = await listLogFiles(logsDir);
 	const normalizedTokens =
-		query?.toLowerCase().split(/\s+/).filter((token) => token.length > 0) ?? [];
+		query
+			?.toLowerCase()
+			.split(/\s+/)
+			.filter((token) => token.length > 0) ?? [];
 
 	const files =
 		normalizedTokens.length > 0
@@ -66,8 +69,10 @@ export async function handleListLogs(
 			: allFiles;
 
 	const safePageSize = Math.max(1, pageSize);
-	const totalPages = files.length === 0 ? 0 : Math.ceil(files.length / safePageSize);
-	const safePage = totalPages === 0 ? 1 : Math.min(Math.max(1, page), totalPages);
+	const totalPages =
+		files.length === 0 ? 0 : Math.ceil(files.length / safePageSize);
+	const safePage =
+		totalPages === 0 ? 1 : Math.min(Math.max(1, page), totalPages);
 	const startIndex = (safePage - 1) * safePageSize;
 	const pagedFiles = files.slice(startIndex, startIndex + safePageSize);
 

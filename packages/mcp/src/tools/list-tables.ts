@@ -65,8 +65,10 @@ export async function handleListTables(
 			: definition.tables;
 
 	const safePageSize = Math.max(1, pageSize);
-	const totalPages = tables.length === 0 ? 0 : Math.ceil(tables.length / safePageSize);
-	const safePage = totalPages === 0 ? 1 : Math.min(Math.max(1, page), totalPages);
+	const totalPages =
+		tables.length === 0 ? 0 : Math.ceil(tables.length / safePageSize);
+	const safePage =
+		totalPages === 0 ? 1 : Math.min(Math.max(1, page), totalPages);
 	const startIndex = (safePage - 1) * safePageSize;
 	const pagedTables = tables.slice(startIndex, startIndex + safePageSize);
 

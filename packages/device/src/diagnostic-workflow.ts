@@ -4,14 +4,13 @@ import type {
 	DeviceTransport,
 	EcuProtocol,
 } from "./index.js";
+import { createTraceCallback, type TraceWriter } from "./trace.js";
 import type {
 	EcuEvent,
 	LiveDataFrame,
 	LiveDataHealth,
 	RomProgress,
 } from "./types.js";
-
-import { createTraceCallback, type TraceWriter } from "./trace.js";
 
 /**
  * Diagnostic workflow stages.
@@ -534,9 +533,7 @@ export async function runDiagnostic(
 				effectiveOptions,
 				DiagnosticStage.OPERATION,
 				DiagnosticStatus.START,
-				isDryRun
-					? "Starting ROM dry-run path"
-					: "Starting ROM read",
+				isDryRun ? "Starting ROM dry-run path" : "Starting ROM read",
 				{
 					operation,
 					dryRun: isDryRun,
@@ -556,7 +553,8 @@ export async function runDiagnostic(
 				progressState.totalBytes = progress.totalBytes;
 				progressState.percentComplete = progress.percentComplete;
 				if (progress.estimatedSecondsRemaining !== undefined) {
-					progressState.estimatedSecondsRemaining = progress.estimatedSecondsRemaining;
+					progressState.estimatedSecondsRemaining =
+						progress.estimatedSecondsRemaining;
 				}
 				if (progress.message !== undefined) {
 					progressState.message = progress.message;

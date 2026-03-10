@@ -1,5 +1,5 @@
-import * as vscode from "vscode";
 import * as path from "node:path";
+import * as vscode from "vscode";
 
 /**
  * Registers the ECU Explorer MCP server definition provider.

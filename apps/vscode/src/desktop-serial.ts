@@ -17,7 +17,9 @@ export interface DesktopSerialMatcher {
 	pathIncludes?: string[];
 }
 
-export function normalizeUsbIdentifier(value?: string | null): string | undefined {
+export function normalizeUsbIdentifier(
+	value?: string | null,
+): string | undefined {
 	if (typeof value !== "string") {
 		return undefined;
 	}
@@ -65,7 +67,9 @@ function buildDeviceKey(port: {
 	return `${vendorId}:${productId}:${manufacturer}:${suffix}`;
 }
 
-export async function listDesktopSerialDevices(): Promise<DesktopSerialDevice[]> {
+export async function listDesktopSerialDevices(): Promise<
+	DesktopSerialDevice[]
+> {
 	const ports = await SerialPort.list();
 	const grouped = new Map<string, DesktopSerialDevice>();
 
@@ -120,7 +124,10 @@ export function matchDesktopSerialDevice(
 		return false;
 	}
 
-	if (matcher.manufacturerIncludes != null && matcher.manufacturerIncludes.length > 0) {
+	if (
+		matcher.manufacturerIncludes != null &&
+		matcher.manufacturerIncludes.length > 0
+	) {
 		const manufacturer = device.manufacturer?.toLowerCase() ?? "";
 		if (
 			!matcher.manufacturerIncludes.some((entry) =>
@@ -134,7 +141,9 @@ export function matchDesktopSerialDevice(
 	if (matcher.pathIncludes != null && matcher.pathIncludes.length > 0) {
 		const haystack = device.allPaths.join(" ").toLowerCase();
 		if (
-			!matcher.pathIncludes.some((entry) => haystack.includes(entry.toLowerCase()))
+			!matcher.pathIncludes.some((entry) =>
+				haystack.includes(entry.toLowerCase()),
+			)
 		) {
 			return false;
 		}

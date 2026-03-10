@@ -54,7 +54,9 @@ export function rewriteExpressionWithAliases(
 	fieldToAlias: Map<string, string>,
 ): string {
 	let result = expr;
-	const entries = [...fieldToAlias.entries()].sort((a, b) => b[0].length - a[0].length);
+	const entries = [...fieldToAlias.entries()].sort(
+		(a, b) => b[0].length - a[0].length,
+	);
 
 	for (const [field, alias] of entries) {
 		if (field.length === 0) continue;

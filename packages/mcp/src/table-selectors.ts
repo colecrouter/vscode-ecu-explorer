@@ -2,12 +2,16 @@
  * Shared table selector helpers for read_table / patch_table.
  */
 
+import type {
+	Table1DDefinition,
+	Table2DDefinition,
+	TableDefinition,
+} from "@ecu-explorer/core";
 import { compileExpression } from "filtrex";
-import type { Table1DDefinition, Table2DDefinition, TableDefinition } from "@ecu-explorer/core";
 import {
 	buildAliasedObject,
-	buildUnknownFieldError,
 	buildFieldAliasMap,
+	buildUnknownFieldError,
 	detectUnknownFieldFragments,
 	escapeRegex,
 	normalizeExpression,
@@ -88,7 +92,10 @@ export function selectTableCells(
 		throw buildUnknownFieldError("axis name", unknownFragments, selectorAxes);
 	}
 
-	const rewritten = rewriteExpressionWithAliases(normalizeExpression(where), fieldToAlias);
+	const rewritten = rewriteExpressionWithAliases(
+		normalizeExpression(where),
+		fieldToAlias,
+	);
 
 	let selector: (values: Record<string, number>) => unknown;
 	try {
@@ -136,10 +143,7 @@ export function selectTableCells(
 	}
 
 	const rowIndices = uniqueSorted(matchedRows);
-	const colIndices =
-		table.kind === "table1d"
-			? [0]
-			: uniqueSorted(matchedCols);
+	const colIndices = table.kind === "table1d" ? [0] : uniqueSorted(matchedCols);
 
 	if (rowIndices.length === 0 || colIndices.length === 0) {
 		const axisSuggestions = [
