@@ -176,6 +176,111 @@ describe("handleReadLog", () => {
 
 		await rm(tempDir, { recursive: true, force: true });
 	});
+
+	it("expands matched rows into merged time windows and applies step_ms after selection", async () => {
+		const tempDir = await mkdtemp(path.join(os.tmpdir(), "ecu-mcp-read-log-"));
+		const target = path.join(tempDir, "session.csv");
+		await writeFile(target, "");
+
+		config = {
+			...baseConfig,
+			logsDir: tempDir,
+		};
+
+		vi.mocked(logReader.readLogFileMeta).mockResolvedValue({
+			filePath: target,
+			fileName: "session.csv",
+			fileSizeBytes: 1,
+			mtime: new Date("2026-03-10T00:00:00.000Z"),
+			channels: ["Engine RPM", "Knock Sum"],
+			units: ["rpm", "count"],
+			rowCount: 5,
+			durationMs: 400,
+			sampleRateHz: 10,
+		});
+		vi.mocked(logReader.parseLogFileRows).mockResolvedValue({
+			headers: ["Timestamp (ms)", "Engine RPM", "Knock Sum"],
+			timeColumnName: "Timestamp (ms)",
+			sampleRateHz: 10,
+			rows: [
+				{ "Timestamp (ms)": 1010, "Engine RPM": 2000, "Knock Sum": 1 },
+				{ "Timestamp (ms)": 1080, "Engine RPM": 2200, "Knock Sum": 0 },
+				{ "Timestamp (ms)": 1160, "Engine RPM": 2400, "Knock Sum": 1 },
+				{ "Timestamp (ms)": 1240, "Engine RPM": 2600, "Knock Sum": 0 },
+				{ "Timestamp (ms)": 1400, "Engine RPM": 2800, "Knock Sum": 0 },
+			],
+		});
+
+		const result = await handleReadLog(
+			{
+				file: "session.csv",
+				where: "Knock Sum > 0",
+				beforeMs: 100,
+				afterMs: 100,
+				stepMs: 70,
+			},
+			config,
+		);
+
+		await rm(tempDir, { recursive: true, force: true });
+
+		expect(result).toContain("rows_returned: 4");
+		expect(result).toContain("time_range_s:");
+		expect(result).toContain("| 1.01");
+		expect(result).toContain("| 1.08");
+		expect(result).toContain("| 1.16");
+		expect(result).toContain("| 1.24");
+		expect(result).not.toContain("| 1.40");
+	});
+
+	it("supports overlapping field names in where expressions", async () => {
+		const tempDir = await mkdtemp(path.join(os.tmpdir(), "ecu-mcp-read-log-"));
+		const target = path.join(tempDir, "session.csv");
+		await writeFile(target, "");
+
+		config = {
+			...baseConfig,
+			logsDir: tempDir,
+		};
+
+		vi.mocked(logReader.readLogFileMeta).mockResolvedValue({
+			filePath: target,
+			fileName: "session.csv",
+			fileSizeBytes: 1,
+			mtime: new Date("2026-03-10T00:00:00.000Z"),
+			channels: ["Load", "Load Avg"],
+			units: ["g/rev", "g/rev"],
+			rowCount: 2,
+			durationMs: 100,
+			sampleRateHz: 10,
+		});
+		vi.mocked(logReader.parseLogFileRows).mockResolvedValue({
+			headers: ["Timestamp (ms)", "Load", "Load Avg"],
+			timeColumnName: "Timestamp (ms)",
+			sampleRateHz: 10,
+			rows: [
+				{ "Timestamp (ms)": 0, Load: 1.2, "Load Avg": 1.0 },
+				{ "Timestamp (ms)": 100, Load: 0.8, "Load Avg": 1.1 },
+			],
+		});
+
+		const result = await handleReadLog(
+			{
+				file: "session.csv",
+				where: "Load > 1.0 && Load Avg < 1.1",
+			},
+			config,
+		);
+
+		await rm(tempDir, { recursive: true, force: true });
+
+		expect(result).toContain("rows_returned: 1");
+		expect(result).toContain("referenced_fields:");
+		expect(result).toContain("- Load");
+		expect(result).toContain("- Load Avg");
+		expect(result).toContain("| 0.00");
+		expect(result).not.toContain("| 0.10");
+	});
 });
 
 describe("handleQueryLogs compatibility alias", () => {

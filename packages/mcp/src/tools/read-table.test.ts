@@ -89,4 +89,17 @@ describe("handleReadTable", () => {
 			/Unknown axis name: Engine Speed, LoadValue\. Available axes: RPM \(rpm\), Load \(g\/rev\)/,
 		);
 	});
+
+	it("returns nearest breakpoint suggestions when exact equality matches no cells", async () => {
+		await expect(
+			handleReadTable(
+				"/tmp/sample.hex",
+				"High Octane Ignition",
+				config,
+				"RPM (rpm) == 4100 && Load (g/rev) == 1.9",
+			),
+		).rejects.toThrow(
+			/Table selector matched no cells\. Available axes: RPM \(rpm\), Load \(g\/rev\)\. RPM \(rpm\): nearest values are 4000, 3000 Load \(g\/rev\): nearest values are 2, 1.6/,
+		);
+	});
 });
