@@ -40,6 +40,7 @@ interface OpenDocumentsContext {
 		definition?: { name: string; uri?: string };
 		isDirty: boolean;
 		activeEditors: number;
+		isFocused?: boolean;
 		lastFocusedAt?: string;
 	}>;
 	tables: Array<{
@@ -52,6 +53,7 @@ interface OpenDocumentsContext {
 		unit?: string;
 		definitionUri?: string;
 		activeEditors: number;
+		isFocused?: boolean;
 		lastFocusedAt?: string;
 	}>;
 }
@@ -337,7 +339,9 @@ server.tool(
 		query: z
 			.string()
 			.optional()
-			.describe("Optional metadata query across filename, channels, date, row count, duration, and sample rate"),
+			.describe(
+				"Optional metadata query across filename, channels, date, row count, duration, and sample rate",
+			),
 		page: z.number().int().min(1).optional().describe("1-based page number"),
 		page_size: z
 			.number()
@@ -382,8 +386,16 @@ server.tool(
 			.array(z.string())
 			.optional()
 			.describe("Optional subset of channels to include in the output"),
-		start_s: z.number().nonnegative().optional().describe("Optional start time in seconds"),
-		end_s: z.number().nonnegative().optional().describe("Optional end time in seconds"),
+		start_s: z
+			.number()
+			.nonnegative()
+			.optional()
+			.describe("Optional start time in seconds"),
+		end_s: z
+			.number()
+			.nonnegative()
+			.optional()
+			.describe("Optional end time in seconds"),
 		before_ms: z
 			.number()
 			.nonnegative()
@@ -398,9 +410,20 @@ server.tool(
 			.number()
 			.positive()
 			.optional()
-			.describe("Optional minimum time spacing between returned rows in milliseconds"),
+			.describe(
+				"Optional minimum time spacing between returned rows in milliseconds",
+			),
 	},
-	async ({ file, where, channels, start_s, end_s, before_ms, after_ms, step_ms }) => {
+	async ({
+		file,
+		where,
+		channels,
+		start_s,
+		end_s,
+		before_ms,
+		after_ms,
+		step_ms,
+	}) => {
 		try {
 			const readLogOptions: Parameters<typeof handleReadLog>[0] = { file };
 			if (where !== undefined) readLogOptions.where = where;

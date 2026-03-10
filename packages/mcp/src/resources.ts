@@ -13,6 +13,7 @@ export interface OpenDocumentsContextResource {
 		definition?: { name: string; uri?: string };
 		isDirty: boolean;
 		activeEditors: number;
+		isFocused?: boolean;
 		lastFocusedAt?: string;
 	}>;
 	tables?: Array<{
@@ -25,6 +26,7 @@ export interface OpenDocumentsContextResource {
 		unit?: string;
 		definitionUri?: string;
 		activeEditors: number;
+		isFocused?: boolean;
 		lastFocusedAt?: string;
 	}>;
 }

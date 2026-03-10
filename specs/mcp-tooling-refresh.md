@@ -400,7 +400,7 @@ Current implementation status:
 - empty `roms` / `tables` sections are omitted from the MCP resource payload
 - ROM dirty state is included
 - focus timestamps are included when the extension records them
-- explicit boolean focused state is not yet wired from the extension
+- explicit boolean focused state is wired for ROM and table editors
 
 ## ROM Loader Cache
 

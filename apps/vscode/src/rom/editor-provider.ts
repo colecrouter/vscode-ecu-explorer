@@ -437,6 +437,17 @@ export class RomEditorProvider
 		// Clean up when panel is disposed
 		webviewPanel.onDidDispose(() => {
 			this.documentToPanelMap.delete(document);
+			this.contextTracker.clearRomFocus();
+		});
+
+		webviewPanel.onDidChangeViewState((event) => {
+			if (event.webviewPanel.active) {
+				this.contextTracker.setRomFocused(document.uri.toString());
+				this.contextTracker.clearTableFocus();
+				return;
+			}
+
+			this.contextTracker.clearRomFocus();
 		});
 
 		// If we have a table open callback, use it
@@ -488,6 +499,17 @@ export class RomEditorProvider
 		// Clean up when panel is disposed
 		webviewPanel.onDidDispose(() => {
 			this.romToTablePanelMap.delete(document.romDocument);
+			this.contextTracker.clearTableFocus();
+		});
+
+		webviewPanel.onDidChangeViewState((event) => {
+			if (event.webviewPanel.active) {
+				this.contextTracker.setTableFocused(document.uri.toString());
+				this.contextTracker.clearRomFocus();
+				return;
+			}
+
+			this.contextTracker.clearTableFocus();
 		});
 
 		// If we have a table open callback, use it with the TableDocument
