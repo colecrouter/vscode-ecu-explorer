@@ -35,6 +35,7 @@ describe("OpenContextTracker", () => {
 			expect(context.roms[0]?.sizeBytes).toBe(3);
 			expect(context.roms[0]?.isDirty).toBe(false);
 			expect(context.roms[0]?.activeEditors).toBe(1);
+			expect(context.roms[0]?.isFocused).toBe(false);
 
 			romDoc.dispose();
 		});
@@ -101,6 +102,21 @@ describe("OpenContextTracker", () => {
 
 			expect(newTime).toBeDefined();
 			expect(newTime).not.toBe(oldTime);
+			expect(context2.roms[0]?.isFocused).toBe(true);
+
+			romDoc.dispose();
+		});
+
+		it("should clear ROM focus state", () => {
+			const uri = vscode.Uri.file("/path/to/rom.bin");
+			const romDoc = new RomDocument(uri, new Uint8Array([0x00]));
+
+			tracker.addRomDocument(romDoc);
+			tracker.setRomFocused(uri.toString());
+			tracker.clearRomFocus();
+
+			const context = tracker.getContext();
+			expect(context.roms[0]?.isFocused).toBe(false);
 
 			romDoc.dispose();
 		});
@@ -122,6 +138,24 @@ describe("OpenContextTracker", () => {
 
 			expect(context.roms).toHaveLength(0);
 			expect(context.tables).toHaveLength(0);
+		});
+
+		it("should include dirty state and focus timestamp for tracked ROMs", async () => {
+			const uri = vscode.Uri.file("/path/to/rom.bin");
+			const romDoc = new RomDocument(uri, new Uint8Array([0x00]));
+
+			tracker.addRomDocument(romDoc);
+			romDoc.makeDirty();
+			tracker.setRomFocused(uri.toString());
+
+			await new Promise((resolve) => setTimeout(resolve, 150));
+
+			const context = tracker.getContext();
+			expect(context.roms[0]?.isDirty).toBe(true);
+			expect(context.roms[0]?.lastFocusedAt).toBeDefined();
+			expect(context.roms[0]?.isFocused).toBe(true);
+
+			romDoc.dispose();
 		});
 	});
 });

@@ -31,19 +31,59 @@ function formatDate(date: Date): string {
  * @param config - MCP server configuration
  * @returns Formatted output string
  */
-export async function handleListLogs(config: McpConfig): Promise<string> {
+export async function handleListLogs(
+	config: McpConfig,
+	options: {
+		query?: string;
+		page?: number;
+		pageSize?: number;
+	} = {},
+): Promise<string> {
+	const { query, page = 1, pageSize = 25 } = options;
 	const logsDir = config.logsDir;
-	const files = await listLogFiles(logsDir);
+	const allFiles = await listLogFiles(logsDir);
+	const normalizedTokens =
+		query?.toLowerCase().split(/\s+/).filter((token) => token.length > 0) ?? [];
+
+	const files =
+		normalizedTokens.length > 0
+			? allFiles.filter((file) => {
+					const haystack = [
+						file.fileName,
+						formatDate(file.mtime),
+						file.durationMs !== null ? (file.durationMs / 1000).toFixed(1) : "",
+						file.rowCount.toString(),
+						file.sampleRateHz !== null
+							? Math.round(file.sampleRateHz).toString()
+							: "",
+						...file.channels,
+					]
+						.join(" ")
+						.toLowerCase();
+
+					return normalizedTokens.every((token) => haystack.includes(token));
+				})
+			: allFiles;
+
+	const safePageSize = Math.max(1, pageSize);
+	const totalPages = files.length === 0 ? 0 : Math.ceil(files.length / safePageSize);
+	const safePage = totalPages === 0 ? 1 : Math.min(Math.max(1, page), totalPages);
+	const startIndex = (safePage - 1) * safePageSize;
+	const pagedFiles = files.slice(startIndex, startIndex + safePageSize);
 
 	// Build frontmatter
 	const frontmatterData: Record<string, unknown> = {
 		logs_dir: logsDir,
 		total_files: files.length,
+		page: safePage,
+		page_size: safePageSize,
+		total_pages: totalPages,
+		query: query ?? null,
 	};
 
 	const frontmatter = toYamlFrontmatter(frontmatterData);
 
-	if (files.length === 0) {
+	if (pagedFiles.length === 0) {
 		return `${frontmatter}\n(No log files found in ${logsDir})`;
 	}
 
@@ -59,8 +99,8 @@ export async function handleListLogs(config: McpConfig): Promise<string> {
 		"Channels",
 	];
 
-	const rows = files.map((file, index) => {
-		const num = String(index + 1);
+	const rows = pagedFiles.map((file, index) => {
+		const num = String(startIndex + index + 1);
 		const date = formatDate(file.mtime);
 		const durationS =
 			file.durationMs !== null ? (file.durationMs / 1000).toFixed(1) : "null";

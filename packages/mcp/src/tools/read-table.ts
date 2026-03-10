@@ -7,8 +7,9 @@
 
 import { findClosestMatches } from "@ecu-explorer/core";
 import type { McpConfig } from "../config.js";
-import { formatTable } from "../formatters/table-formatter.js";
+import { formatTable, formatTableSlice } from "../formatters/table-formatter.js";
 import { loadRom } from "../rom-loader.js";
+import { selectTableCells } from "../table-selectors.js";
 
 function toLoadRomOptions(definitionPath?: string) {
 	return definitionPath === undefined ? {} : { definitionPath };
@@ -26,6 +27,7 @@ export async function handleReadTable(
 	romPath: string,
 	tableName: string,
 	config: McpConfig,
+	where?: string,
 	definitionPath?: string,
 ): Promise<string> {
 	const loaded = await loadRom(
@@ -62,7 +64,27 @@ export async function handleReadTable(
 		);
 	}
 
-	// Read-only: format the table
-	const result = formatTable(romPath, tableDef, romBytes);
+	if (where !== undefined && tableDef.kind === "table3d") {
+		throw new Error("Table selectors are only supported for 1D and 2D tables.");
+	}
+
+	const full = formatTable(romPath, tableDef, romBytes);
+	const result =
+		where === undefined
+			? full
+			: formatTableSlice(
+					romPath,
+					tableDef,
+					romBytes,
+					{
+						...selectTableCells(
+							tableDef,
+							full.xAxisValues,
+							full.yAxisValues,
+							where,
+						),
+						where,
+					},
+				);
 	return result.content;
 }

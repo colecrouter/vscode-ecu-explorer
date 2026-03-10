@@ -101,10 +101,16 @@ Connect to a vehicle via OpenPort 2.0 and stream live data:
 The extension includes an MCP server with tools for AI integration:
 
 - `list_tables` — List all tables in a ROM
-- `process_table` — Apply operations to tables
+- `read_table` — Read a full table or selected slice
+- `patch_table` — Apply operations to tables
 - `rom_info` — Get ROM metadata
 - `list_logs` — List saved log files
-- `query_logs` — Query log data
+- `read_log` — Inspect one selected log file or return its schema/details
+
+The MCP server also exposes resources:
+
+- `ecu-explorer://docs/query-syntax` — Canonical `where` syntax reference for logs and tables
+- `ecu-explorer://context/open-documents` — Current ROM/table editing context, including dirty/focused state; empty sections are omitted when nothing relevant is open
 
 ---
 

@@ -16,7 +16,7 @@ The MCP package is a fully functional, standalone MCP server. Key facts:
 | Transport | `StdioServerTransport` — correct for a process-based server |
 | Entry point | `packages/mcp/src/index.ts` — has `#!/usr/bin/env node` shebang |
 | Build output | `tsc` → `packages/mcp/dist/index.js` (ESM, `.js` extension) |
-| Tools implemented | `list_tables`, `read_table`, `patch_table`, `rom_info`, `list_logs`, `query_logs` |
+| Tools implemented | `list_tables`, `read_table`, `patch_table`, `rom_info`, `list_logs`, `read_log` |
 | Config | `loadConfig()` reads CLI args, `ECU_DEFINITIONS_PATH` env var, `ECU_LOGS_DIR` env var, and `.vscode/settings.json` |
 
 **Problem for VSCode bundling**: The MCP package currently builds via `tsc` into `packages/mcp/dist/`. This produces many individual `.js` files with Node `import()` resolution. For bundling into the extension, we need a **single self-contained `.mjs` file** (or `.cjs`) that Vite/rollup can produce.

@@ -208,6 +208,12 @@ The project includes a CLI tools package at `packages/tools/` for headless opera
 **Available tools**:
 
 - `inspect-rom`: Inspects ROM files and outputs metadata
+- `rom-info`: Mirrors the MCP `rom_info` ROM metadata output
+- `list-tables`: Mirrors the MCP `list_tables` discovery output
+- `read-table`: Mirrors the MCP `read_table` slice output
+- `patch-table`: Mirrors the MCP `patch_table` mutation flow
+- `list-logs`: Mirrors the MCP `list_logs` discovery output
+- `read-log`: Mirrors the MCP `read_log` schema/slice output
 
 > [!WARN] All tools rely on existing packages in this repository. Make sure latest changes are built before running tools.
 
@@ -227,6 +233,17 @@ npm run tools:inspect-rom -- --rom ./path/to/rom.hex --definition ./path/to/defi
 ```
 
 > [!NOTE] Always pipe output to filter for the specific key you need, e.g. `| grep "Injector"` or `| findstr /c:"Injector"`.
+
+For direct parity with the MCP surfaces, prefer the more specific headless commands:
+
+```bash
+npm run tools:rom-info -- --rom ./path/to/rom.hex
+npm run tools:list-tables -- --rom ./path/to/rom.hex --page-size 25
+npm run tools:read-table -- --rom ./path/to/rom.hex --table "Fuel Injector Scaling"
+npm run tools:patch-table -- --rom ./path/to/rom.hex --table "Fuel Injector Scaling" --op set --value 540
+npm run tools:list-logs -- --logs-dir ./logs --query knock
+npm run tools:read-log -- --logs-dir ./logs --file session.csv --where "Engine RPM > 3000"
+```
 
 ### Test ROM File Format Confusion
 

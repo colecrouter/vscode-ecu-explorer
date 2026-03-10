@@ -40,6 +40,13 @@ export interface TableReadResult {
 	yAxisValues: number[];
 }
 
+export interface TableSliceOptions {
+	rowIndices: number[];
+	colIndices: number[];
+	where?: string;
+	selectorAxes?: string[];
+}
+
 /**
  * Get the byte size of a scalar type.
  */
@@ -360,6 +367,110 @@ export function formatTable(
 		xAxisValues: [],
 		yAxisValues: [],
 	};
+}
+
+/**
+ * Format a selected slice of a 1D/2D table using row/column indices.
+ */
+export function formatTableSlice(
+	romPath: string,
+	def: TableDefinition,
+	romBytes: Uint8Array,
+	slice: TableSliceOptions,
+	writeStatus?: { status: string; cellsWritten: number },
+): TableReadResult {
+	const full = formatTable(romPath, def, romBytes, writeStatus);
+	const frontmatterData: Record<string, unknown> = {
+		table: def.name,
+		rom: romPath,
+		kind: def.kind,
+		rows: slice.rowIndices.length,
+		cols: slice.colIndices.length,
+		unit: formatUnit(def.z.unit),
+	};
+
+	if (def.x) {
+		frontmatterData.x_axis_name = def.x.name;
+		frontmatterData.x_axis_unit = formatUnit(def.x.unit);
+	}
+	if ((def.kind === "table2d" || def.kind === "table3d") && def.y) {
+		frontmatterData.y_axis_name = def.y.name;
+		frontmatterData.y_axis_unit = formatUnit(def.y.unit);
+	}
+	if (slice.where !== undefined) {
+		frontmatterData.where = slice.where;
+	}
+	if (slice.selectorAxes !== undefined && slice.selectorAxes.length > 0) {
+		frontmatterData.selector_axes = slice.selectorAxes;
+	}
+	if (writeStatus) {
+		frontmatterData.write_status = writeStatus.status;
+		frontmatterData.cells_written = writeStatus.cellsWritten;
+	}
+
+	const frontmatter = toYamlFrontmatter(frontmatterData);
+
+	if (def.kind === "table1d") {
+		const axisName = def.x
+			? `${def.x.name} (${formatUnit(def.x.unit)})`
+			: "Index";
+		const valueName = `${def.name} (${formatUnit(def.z.unit)})`;
+		const headers = [axisName, valueName];
+		const tableRows = slice.rowIndices.map((rowIndex) => [
+			full.xAxisValues.length > rowIndex
+				? formatNumber(full.xAxisValues[rowIndex] as number)
+				: String(rowIndex),
+			formatNumber((full.values[rowIndex]?.[0] as number) ?? Number.NaN),
+		]);
+
+		return {
+			...full,
+			rows: slice.rowIndices.length,
+			cols: 1,
+			values: slice.rowIndices.map((rowIndex) => [full.values[rowIndex]?.[0] as number]),
+			xAxisValues: slice.rowIndices.map((rowIndex) => full.xAxisValues[rowIndex] as number),
+			yAxisValues: [],
+			content: `${frontmatter}\n${buildMarkdownTable(headers, tableRows)}`,
+		};
+	}
+
+	if (def.kind === "table2d") {
+		const yAxisLabel = def.y
+			? `${def.y.name}\\${def.x?.name ?? "X"}`
+			: `Y\\${def.x?.name ?? "X"}`;
+		const headers = [
+			yAxisLabel,
+			...slice.colIndices.map((colIndex) =>
+				full.xAxisValues.length > colIndex
+					? formatNumber(full.xAxisValues[colIndex] as number)
+					: String(colIndex),
+			),
+		];
+
+		const values = slice.rowIndices.map((rowIndex) =>
+			slice.colIndices.map(
+				(colIndex) => (full.values[rowIndex]?.[colIndex] as number) ?? Number.NaN,
+			),
+		);
+		const tableRows = slice.rowIndices.map((rowIndex, localRowIndex) => [
+			full.yAxisValues.length > rowIndex
+				? formatNumber(full.yAxisValues[rowIndex] as number)
+				: String(rowIndex),
+			...(values[localRowIndex] ?? []).map((value) => formatNumber(value as number)),
+		]);
+
+		return {
+			...full,
+			rows: slice.rowIndices.length,
+			cols: slice.colIndices.length,
+			values,
+			xAxisValues: slice.colIndices.map((colIndex) => full.xAxisValues[colIndex] as number),
+			yAxisValues: slice.rowIndices.map((rowIndex) => full.yAxisValues[rowIndex] as number),
+			content: `${frontmatter}\n${buildMarkdownTable(headers, tableRows)}`,
+		};
+	}
+
+	return full;
 }
 
 /**

@@ -22,10 +22,12 @@ import {
 import type { McpConfig } from "../config.js";
 import {
 	formatTable,
+	formatTableSlice,
 	writeTable1DValues,
 	writeTable2DValues,
 } from "../formatters/table-formatter.js";
 import { invalidateRomCache, loadRom } from "../rom-loader.js";
+import { selectTableCells } from "../table-selectors.js";
 
 function toLoadRomOptions(definitionPath?: string) {
 	return definitionPath === undefined ? {} : { definitionPath };
@@ -41,6 +43,7 @@ export interface PatchTableOptions {
 	value?: number;
 	min?: number;
 	max?: number;
+	where?: string;
 	row?: number;
 	col?: number;
 }
@@ -64,9 +67,14 @@ export async function handlePatchTable(
 		value,
 		min,
 		max,
+		where,
 		row,
 		col,
 	} = options;
+
+	if (where !== undefined && (row !== undefined || col !== undefined)) {
+		throw new Error(`Use either "where" or legacy row/col targeting, not both.`);
+	}
 
 	// Validate operation parameters
 	if (op === "set" || op === "add" || op === "multiply") {
@@ -132,13 +140,23 @@ export async function handlePatchTable(
 
 	// Make a mutable copy of ROM bytes
 	const mutableRomBytes = new Uint8Array(romBytes);
+	const fullTable = formatTable(romPath, tableDef, mutableRomBytes);
+	const selector =
+		where !== undefined
+			? selectTableCells(
+					tableDef,
+					fullTable.xAxisValues,
+					fullTable.yAxisValues,
+					where,
+				)
+			: undefined;
 
 	if (tableDef.kind === "table1d") {
 		// Read current values
 		const currentValues = readTable1DPhysical(mutableRomBytes, tableDef);
 		const numRows = currentValues.length;
 
-		// Validate row/col bounds
+		// Validate legacy row/col bounds
 		if (row !== undefined && row >= numRows) {
 			throw new Error(
 				`Row index ${row} is out of bounds for table "${tableName}" (${numRows} rows).`,
@@ -152,7 +170,11 @@ export async function handlePatchTable(
 
 		// Determine target indices
 		const targetIndices: number[] =
-			row !== undefined ? [row] : Array.from({ length: numRows }, (_, i) => i);
+			selector !== undefined
+				? selector.matchedCells.map((cell) => cell.row)
+				: row !== undefined
+					? [row]
+					: Array.from({ length: numRows }, (_, i) => i);
 
 		// Extract target values
 		const targetValues = targetIndices.map((i) => currentValues[i] as number);
@@ -189,6 +211,9 @@ export async function handlePatchTable(
 		let newValues: number[][];
 
 		if (op === "smooth") {
+			if (where !== undefined) {
+				throw new Error(`Operation "smooth" currently requires the whole table.`);
+			}
 			// smooth applies to entire table
 			const result = smoothValues(currentValues);
 			// Reshape flat result back to 2D
@@ -204,7 +229,14 @@ export async function handlePatchTable(
 			// Determine target cells
 			newValues = currentValues.map((r) => [...r]);
 
-			if (row !== undefined && col !== undefined) {
+			if (selector !== undefined) {
+				for (const cell of selector.matchedCells) {
+					const current = currentValues[cell.row]?.[cell.col];
+					if (current === undefined) continue;
+					const [newVal] = applyOp1D(op, [current], value, min, max);
+					(newValues[cell.row] as number[])[cell.col] = newVal as number;
+				}
+			} else if (row !== undefined && col !== undefined) {
 				// Single cell
 				const cell = currentValues[row]?.[col];
 				if (cell === undefined) {
@@ -294,7 +326,29 @@ export async function handlePatchTable(
 		config.definitionsPaths,
 		toLoadRomOptions(definitionPath),
 	);
-	const result = formatTable(romPath, tableDef, reloaded.romBytes);
+	const result =
+		selector !== undefined
+			? (() => {
+					const sliceOptions = {
+						...selector,
+					} as Parameters<typeof formatTableSlice>[3];
+					if (where !== undefined) {
+						sliceOptions.where = where;
+					}
+					return formatTableSlice(
+						romPath,
+						tableDef,
+						reloaded.romBytes,
+						sliceOptions,
+						{ status: "patched", cellsWritten: selector.cellsMatched },
+					);
+				})()
+			: formatTable(
+					romPath,
+					tableDef,
+					reloaded.romBytes,
+					{ status: "patched", cellsWritten: fullTable.rows * fullTable.cols },
+				);
 	return result.content;
 }
 

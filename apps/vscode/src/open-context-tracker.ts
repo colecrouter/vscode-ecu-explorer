@@ -25,6 +25,7 @@ export interface OpenRomState {
 	};
 	isDirty: boolean;
 	activeEditors: number;
+	isFocused: boolean;
 	lastFocusedAt?: string;
 }
 
@@ -41,6 +42,7 @@ export interface OpenTableState {
 	unit?: string;
 	definitionUri?: string;
 	activeEditors: number;
+	isFocused: boolean;
 	lastFocusedAt?: string;
 }
 
@@ -96,6 +98,7 @@ export class OpenContextTracker {
 			sizeBytes: document.romBytes.byteLength,
 			isDirty: document.isDirty,
 			activeEditors,
+			isFocused: false,
 			lastFocusedAt: new Date().toISOString(),
 		};
 
@@ -137,6 +140,7 @@ export class OpenContextTracker {
 			kind: document.tableDef.kind,
 			dimensions: this.getTableDimensions(document.tableDef),
 			activeEditors: 1,
+			isFocused: false,
 			lastFocusedAt: new Date().toISOString(),
 		};
 
@@ -168,22 +172,66 @@ export class OpenContextTracker {
 	 * Update focus timestamp for a ROM
 	 */
 	setRomFocused(uri: string): void {
-		const state = this.roms.get(uri);
-		if (state) {
-			state.lastFocusedAt = new Date().toISOString();
-			this.scheduleContextUpdate();
+		let changed = false;
+		for (const [romUri, state] of this.roms.entries()) {
+			const shouldBeFocused = romUri === uri;
+			if (state.isFocused !== shouldBeFocused) {
+				state.isFocused = shouldBeFocused;
+				changed = true;
+			}
+			if (shouldBeFocused) {
+				state.lastFocusedAt = new Date().toISOString();
+				changed = true;
+			}
 		}
+		if (changed) this.scheduleContextUpdate();
 	}
 
 	/**
 	 * Update focus timestamp for a table
 	 */
 	setTableFocused(uri: string): void {
-		const state = this.tables.get(uri);
-		if (state) {
-			state.lastFocusedAt = new Date().toISOString();
-			this.scheduleContextUpdate();
+		let changed = false;
+		for (const [tableUri, state] of this.tables.entries()) {
+			const shouldBeFocused = tableUri === uri;
+			if (state.isFocused !== shouldBeFocused) {
+				state.isFocused = shouldBeFocused;
+				changed = true;
+			}
+			if (shouldBeFocused) {
+				state.lastFocusedAt = new Date().toISOString();
+				changed = true;
+			}
 		}
+		if (changed) this.scheduleContextUpdate();
+	}
+
+	/**
+	 * Clear focused ROM state when no ROM editor is active
+	 */
+	clearRomFocus(): void {
+		let changed = false;
+		for (const state of this.roms.values()) {
+			if (state.isFocused) {
+				state.isFocused = false;
+				changed = true;
+			}
+		}
+		if (changed) this.scheduleContextUpdate();
+	}
+
+	/**
+	 * Clear focused table state when no table editor is active
+	 */
+	clearTableFocus(): void {
+		let changed = false;
+		for (const state of this.tables.values()) {
+			if (state.isFocused) {
+				state.isFocused = false;
+				changed = true;
+			}
+		}
+		if (changed) this.scheduleContextUpdate();
 	}
 
 	/**

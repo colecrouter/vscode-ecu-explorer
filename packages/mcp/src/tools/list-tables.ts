@@ -24,9 +24,14 @@ function toLoadRomOptions(definitionPath?: string) {
 export async function handleListTables(
 	romPath: string,
 	config: McpConfig,
-	categoryFilter?: string,
+	options: {
+		query?: string;
+		page?: number;
+		pageSize?: number;
+	} = {},
 	definitionPath?: string,
 ): Promise<string> {
+	const { query, page = 1, pageSize = 25 } = options;
 	const loaded = await loadRom(
 		romPath,
 		config.definitionsPaths,
@@ -34,26 +39,55 @@ export async function handleListTables(
 	);
 	const { definition } = loaded;
 
-	// Filter tables by category if provided
+	// Filter tables by metadata query if provided
 	const tables =
-		categoryFilter !== undefined
-			? definition.tables.filter((t) =>
-					(t.category ?? "")
+		query !== undefined
+			? definition.tables.filter((table) => {
+					const haystack = [
+						table.name,
+						table.category ?? "",
+						table.kind,
+						table.z.unit ?? "",
+						table.x?.name ?? "",
+						table.kind === "table2d" || table.kind === "table3d"
+							? (table.y?.name ?? "")
+							: "",
+					]
+						.join(" ")
+						.toLowerCase();
+
+					return query
 						.toLowerCase()
-						.includes(categoryFilter.toLowerCase()),
-				)
+						.split(/\s+/)
+						.filter((token) => token.length > 0)
+						.every((token) => haystack.includes(token));
+				})
 			: definition.tables;
+
+	const safePageSize = Math.max(1, pageSize);
+	const totalPages = tables.length === 0 ? 0 : Math.ceil(tables.length / safePageSize);
+	const safePage = totalPages === 0 ? 1 : Math.min(Math.max(1, page), totalPages);
+	const startIndex = (safePage - 1) * safePageSize;
+	const pagedTables = tables.slice(startIndex, startIndex + safePageSize);
 
 	// Build frontmatter
 	const frontmatterData: Record<string, unknown> = {
 		rom: romPath,
 		definition: definition.name,
-		table_count: tables.length,
+		total_tables: tables.length,
+		page: safePage,
+		page_size: safePageSize,
+		total_pages: totalPages,
+		query: query ?? null,
 	};
 
 	const frontmatter = toYamlFrontmatter(frontmatterData);
 
-	const tableContent = formatTableListMarkdown(tables);
+	if (pagedTables.length === 0) {
+		return `${frontmatter}\n(No tables matched the query)`;
+	}
+
+	const tableContent = formatTableListMarkdown(pagedTables);
 
 	return `${frontmatter}\n${tableContent}`;
 }

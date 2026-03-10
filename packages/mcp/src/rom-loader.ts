@@ -30,18 +30,8 @@ export interface LoadedRom {
 	mtime: number;
 }
 
-interface CacheEntry {
-	mtime: number;
-	definitionPath: string | null;
-	loaded: LoadedRom;
-}
-
-const cache = new Map<string, CacheEntry>();
-
 /**
  * Load a ROM file and resolve its definition.
- *
- * Uses a cache keyed by file path + mtime to avoid re-parsing on every call.
  *
  * @param romPath - Absolute or relative path to the ROM binary
  * @param definitionsPaths - Additional paths to search for definition files
@@ -62,18 +52,8 @@ export async function loadRom(
 			: path.isAbsolute(options.definitionPath)
 				? options.definitionPath
 				: path.resolve(process.cwd(), options.definitionPath);
-
-	// Check cache
 	const stat = await fs.stat(absolutePath);
 	const mtime = stat.mtimeMs;
-	const cached = cache.get(absolutePath);
-	if (
-		cached &&
-		cached.mtime === mtime &&
-		cached.definitionPath === explicitDefinitionPath
-	) {
-		return cached.loaded;
-	}
 
 	// Read ROM bytes
 	const buffer = await fs.readFile(absolutePath);
@@ -144,12 +124,6 @@ export async function loadRom(
 		fileSizeBytes: stat.size,
 		mtime,
 	};
-
-	cache.set(absolutePath, {
-		mtime,
-		definitionPath: explicitDefinitionPath,
-		loaded,
-	});
 	return loaded;
 }
 
@@ -159,15 +133,12 @@ export async function loadRom(
  * @param romPath - Path to invalidate
  */
 export function invalidateRomCache(romPath: string): void {
-	const absolutePath = path.isAbsolute(romPath)
-		? romPath
-		: path.resolve(process.cwd(), romPath);
-	cache.delete(absolutePath);
+	void romPath;
 }
 
 /**
  * Clear the entire ROM cache.
  */
 export function clearRomCache(): void {
-	cache.clear();
+	// No-op: ROM byte caching has been removed.
 }

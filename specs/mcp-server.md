@@ -1,5 +1,10 @@
 # MCP Server Specification — ECU Explorer
 
+> [!IMPORTANT]
+> Tool contract details in this document are partially outdated.
+> The current MCP surface is defined by [specs/mcp-tooling-refresh.md](./mcp-tooling-refresh.md).
+> In particular: `query_logs` has been removed in favor of `read_log`, `list_tables` and `list_logs` are queryable/paginated discovery tools, and `read_table` / `patch_table` use value-based `where` selectors instead of public row/column targeting.
+
 ## Overview
 
 The ECU Explorer MCP server exposes ROM calibration data and live-data logs to LLM agents. It enables AI-assisted ECU tuning workflows: reading and writing calibration tables, querying logged sensor data, and correlating table values with measured behavior.
@@ -32,20 +37,22 @@ The server is configured at startup via CLI arguments or environment variables �
 
 ### 1. `list_tables`
 
-**Description**: List all calibration tables in a ROM. Use `category` to filter (e.g. `'Fuel'`, `'Ignition'`). Call this first to discover table names before reading or patching.
+**Description**: List calibration tables in a ROM. Supports metadata search and pagination. Call this first to discover table names and selector axes before reading or patching.
 
 #### Input Parameters
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `rom` | `string` | Yes | Absolute or workspace-relative path to the ROM binary |
-| `category` | `string` | No | Filter string — only tables whose category contains this string (case-insensitive) are returned |
+| `query` | `string` | No | Metadata search across table name, category, dimensions, units, and axes |
+| `page` | `number` | No | 1-based page number |
+| `page_size` | `number` | No | Number of rows per page |
 
 #### Output Format
 
 YAML frontmatter with ROM metadata, followed by a markdown table listing all matching calibration tables.
 
-**Columns**: `name`, `category`, `dimensions` (e.g. `16x16`), `unit`
+**Columns**: `name`, `category`, `dimensions` (e.g. `16x16`), `unit`, `x_axis`, `y_axis`
 
 ```
 ---
@@ -67,7 +74,7 @@ table_count: 142
 
 ### 2. `read_table`
 
-**Description**: Read a calibration table from a ROM. Returns axis breakpoints and cell values. Use row/column indices from this output when calling `patch_table`.
+**Description**: Read a calibration table from a ROM. Returns axis breakpoints and cell values. Accepts an optional value-based `where` selector using the table axis names and returns the matching slice.
 
 #### Input Parameters
 
@@ -75,6 +82,7 @@ table_count: 142
 |---|---|---|---|
 | `rom` | `string` | Yes | Absolute or workspace-relative path to the ROM binary |
 | `table` | `string` | Yes | Exact table name (from `list_tables` output) |
+| `where` | `string` | No | Selector expression using the table axis names, e.g. `RPM (rpm) >= 3000 && Load (g/rev) >= 1.6` |
 
 #### Output Format
 
@@ -140,7 +148,7 @@ This tool is **read-only** — use `patch_table` to modify values.
 
 ### 3. `patch_table`
 
-**Description**: Apply a math operation to a calibration table and save to ROM. Returns the updated table for verification. `row`/`col` are 0-based indices from `read_table` output; omit both to apply to the entire table, omit one to apply to a full row or column.
+**Description**: Apply a math operation to a calibration table and save to ROM. Returns the affected post-patch slice for verification. Targeting is value-based via an optional `where` selector using the table axis names.
 
 #### Input Parameters
 
@@ -152,8 +160,7 @@ This tool is **read-only** — use `patch_table` to modify values.
 | `value` | `number` | Conditional | Required for `set`, `add`, `multiply` |
 | `min` | `number` | Conditional | Required for `clamp` — lower bound |
 | `max` | `number` | Conditional | Required for `clamp` — upper bound |
-| `row` | `number` | No | 0-based row index; omit to apply to all rows |
-| `col` | `number` | No | 0-based column index; omit to apply to all columns |
+| `where` | `string` | No | Selector expression using the table axis names; omit to target the whole table |
 
 #### Operations
 
@@ -167,12 +174,14 @@ This tool is **read-only** — use `patch_table` to modify values.
 
 #### Targeting
 
-| `row` | `col` | Effect |
-|---|---|---|
-| omitted | omitted | Entire table |
-| specified | omitted | Entire row |
-| omitted | specified | Entire column |
-| specified | specified | Single cell |
+Omit `where` to target the entire table. Provide a selector expression to target a cell, row, column, or rectangular region using axis values.
+
+Examples:
+
+- Single cell: `RPM (rpm) == 4000 && Load (g/rev) == 1.8`
+- Row: `Load (g/rev) == 2.0`
+- Column: `RPM (rpm) == 4500`
+- Region: `RPM (rpm) >= 3000 && RPM (rpm) <= 5000 && Load (g/rev) >= 1.6 && Load (g/rev) <= 2.2`
 
 #### Output Format
 
@@ -222,11 +231,15 @@ This tool reads from disk only — it does not reflect any unsaved in-memory sta
 
 ### 5. `list_logs`
 
-**Description**: List available log files sorted by recency (1 = most recent). Returns channel names available in each file. Use the filename with `query_logs` to filter a specific session, or omit to search all logs.
+**Description**: List available log files. Supports metadata search and pagination. Use this to discover the session you want before calling `read_log`.
 
 #### Input Parameters
 
-None. Uses the logs directory configured at server startup.
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `query` | `string` | No | Metadata search across filename, date text, channels, duration, row count, and sample rate |
+| `page` | `number` | No | 1-based page number |
+| `page_size` | `number` | No | Number of rows per page |
 
 #### Output Format
 
@@ -257,40 +270,48 @@ total_files: 12
 
 ---
 
-### 6. `query_logs`
+### 6. `read_log`
 
-**Description**: Query log data using a filter expression. Channel names are case-sensitive and must match `list_logs` output exactly. `sample_rate` reduces output density (e.g. `sample_rate: 10` on a 100 Hz log returns every 10th matching row). Omit `file` to search all logs — useful when you don't know which session contains the relevant data.
+**Description**: Read one selected log file. `read_log(file)` returns schema/details. Add `where` and optional range/window parameters to return a log slice. Field names come from the selected log’s schema.
 
 #### Input Parameters
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `filter` | `string` | Yes | Filter expression, e.g. `"RPM > 3000 && Knock > 0"`. Channel names must match `list_logs` output exactly (case-sensitive). Uses [filtrex](https://github.com/joewalnes/filtrex) expression syntax. |
-| `channels` | `string[]` | No | Additional channel names to include in output beyond those referenced in the filter expression |
-| `file` | `string` | No | Filename from `list_logs` output. Omit to search all log files. |
-| `sample_rate` | `number` | No | Target output sample rate in Hz. Server computes stride from actual log rate to downsample. Omit for full resolution. |
+| `file` | `string` | Yes | Filename from `list_logs` output |
+| `where` | `string` | No | Row filter expression using channel names from `read_log(file)` |
+| `channels` | `string[]` | No | Exact channels to include in row output |
+| `start_s` | `number` | No | Start time in seconds |
+| `end_s` | `number` | No | End time in seconds |
+| `before_ms` | `number` | No | Expand matched rows backward into a continuous time window |
+| `after_ms` | `number` | No | Expand matched rows forward into a continuous time window |
+| `step_ms` | `number` | No | Keep at most one row every N milliseconds after selection |
 
 #### Output Format
 
-YAML frontmatter with query metadata, followed by a markdown table with `time_s` as the first column and one column per channel.
+`read_log(file)` returns schema/details for the selected log. `read_log` with row-selection options returns YAML frontmatter plus a markdown table with `Time (s)` as the first column when a time field is available.
 
 **YAML frontmatter fields**:
 
 | Field | Description |
 |---|---|
-| `files_searched` | Number of log files searched |
-| `rows_matched` | Total rows matching the filter expression |
-| `actual_sample_rate_hz` | Sample rate of the source log(s) |
-| `output_sample_rate_hz` | Effective sample rate after downsampling (equals `actual_sample_rate_hz` if `sample_rate` was omitted) |
+| `file` | Selected filename |
+| `rows_returned` | Total rows returned in the slice |
+| `time_range_s` | Start/end time for returned rows |
+| `time_column` | Time field name, if available |
 | `channels` | List of channel names in the output table |
+| `where` | Selector expression used, or `null` |
+| `referenced_fields` | Fields referenced in the selector |
 
 ```
 ---
-files_searched: 3
-rows_matched: 847
-actual_sample_rate_hz: 100
-output_sample_rate_hz: 10
-channels: [Time, RPM, Load, Knock]
+file: log-2026-02-22T14-30-00-000Z.csv
+rows_returned: 4
+time_range_s: [0, 0.3]
+time_column: Timestamp (ms)
+channels: [RPM, Load, Knock]
+where: RPM > 3000 && Knock > 0
+referenced_fields: [RPM, Knock]
 ---
 
 | Time (s) | RPM  | Load | Knock |
@@ -336,17 +357,19 @@ Calibration tables are rendered as markdown tables because:
 | 0.20 | 2.34 | 2.56 | 2.78 | ...  |
 ```
 
-All values are in **physical units** (scaled, not raw binary). Row and column indices in the markdown table are **0-based** when referenced in `patch_table`.
+All values are in **physical units** (scaled, not raw binary). Table selection and patching use `where` expressions over the exposed axis names.
 
-### Log Output (`query_logs`)
+### Log Output (`read_log`)
 
 ```
 ---
-files_searched: 3
-rows_matched: 847
-actual_sample_rate_hz: 100
-output_sample_rate_hz: 10
-channels: [Time, RPM, Load, Knock]
+file: log-2026-02-22T14-30-00-000Z.csv
+rows_returned: 4
+time_range_s: [0, 0.3]
+time_column: Timestamp (ms)
+channels: [RPM, Load, Knock]
+where: RPM > 3000 && Knock > 0
+referenced_fields: [RPM, Knock]
 ---
 
 | Time (s) | RPM  | Load | Knock |
@@ -372,16 +395,16 @@ You are an ECU tuning assistant with access to calibration tables and live-data 
    checksum is valid. If `definition` is null, stop and report that the ROM is unrecognized.
 
 2. **Discover tables**: Call `list_tables` to find relevant calibration tables before reading.
-   Use the `category` filter to narrow results (e.g. 'Fuel', 'Ignition', 'Boost').
+   Use metadata search and axes in the results to narrow the list.
 
 3. **Read before patching**: Always call `read_table` before `patch_table` to understand
-   current values and to obtain the correct row/column indices.
+   current values and to confirm the selector axis names.
 
 4. **Verify after patching**: After `patch_table`, inspect the returned table to confirm the
    operation produced the expected result before proceeding.
 
-5. **Log analysis workflow**: Call `list_logs` first to see available channels and sessions,
-   then call `query_logs` with a specific filter expression targeting the channels of interest.
+5. **Log analysis workflow**: Call `list_logs` first to choose a session,
+   then call `read_log(file)` to inspect available fields before using `where`.
 
 6. **Never recommend flashing without a valid checksum**: Confirm `checksum_valid: true` in
    `rom_info` before recommending that the user flash the ROM to the ECU.
@@ -418,15 +441,17 @@ The MCP server reads ROM and log files directly from disk. It does **not** commu
 - The server uses the same `@repo/core` binary utilities and `@repo/definitions-ecuflash` definition parser as the extension
 - The server and extension may briefly have different views of the ROM if the extension has unsaved in-memory edits — users should save before using `patch_table`
 
-### Filter Expressions (`query_logs`)
+### Filter Expressions (`read_log`, `read_table`, `patch_table`)
 
-The `filter` parameter in `query_logs` uses **[filtrex](https://github.com/joewalnes/filtrex)** expression syntax. Channel names are substituted as variables. Examples:
+These tools use **[filtrex](https://github.com/joewalnes/filtrex)** expression syntax. Exposed field and axis names are rewritten to safe internal identifiers, so names with spaces and punctuation can be used directly in `where`. Examples:
 
 - `"RPM > 3000"` — rows where RPM exceeds 3000
 - `"RPM > 3000 && Knock > 0"` — rows with high RPM and knock activity
 - `"Load > 0.5 || Throttle > 80"` — rows with high load or high throttle
+- `"RPM (rpm) == 4000 && Load (g/rev) == 1.8"` — single table cell
+- `"Coolant Temp (C) >= 60 && Coolant Temp (C) <= 90"` — 1D table slice
 
-Channel names must match the `channels` column in `list_logs` output exactly (case-sensitive).
+Use `read_log(file)` to discover log fields, `list_tables` to discover table axes, and `read_table` to confirm table axes before patching.
 
 ### Checksum Handling
 
@@ -441,7 +466,7 @@ packages/mcp/
 └── src/
     ├── index.ts              # MCP server entry point; registers tools and starts server
     ├── config.ts             # Reads CLI args, env vars, .vscode/settings.json
-    ├── rom-loader.ts         # Loads ROM + resolves definition; caches by path + mtime
+    ├── rom-loader.ts         # Loads ROM + resolves definition
     ├── log-reader.ts         # Reads and parses CSV log files
     ├── tools/
     │   ├── list-tables.ts    # list_tables handler
@@ -449,7 +474,7 @@ packages/mcp/
     │   ├── patch-table.ts    # patch_table handler
     │   ├── rom-info.ts       # rom_info handler
     │   ├── list-logs.ts      # list_logs handler
-    │   └── query-logs.ts     # query_logs handler
+    │   └── read-log.ts       # read_log handler
     └── formatters/
         ├── table-formatter.ts    # Renders TableData as YAML frontmatter + markdown table
         ├── log-formatter.ts      # Renders log rows as YAML frontmatter + markdown table
@@ -464,4 +489,4 @@ packages/mcp/
 | `@repo/mcp` | `@repo/definitions-ecuflash` | Definition discovery and XML parsing |
 | `@repo/mcp` | `@modelcontextprotocol/sdk` | MCP server framework |
 | `@repo/mcp` | `js-yaml` | YAML serialization for output |
-| `@repo/mcp` | `filtrex` | Filter expression evaluation for `query_logs` |
+| `@repo/mcp` | `filtrex` | Filter expression evaluation for `read_log` and table selectors |

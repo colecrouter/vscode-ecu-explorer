@@ -7,6 +7,12 @@
 	"scripts": {
 		"build": "echo 'No build step required for JS package'",
 		"inspect-rom": "node ./inspect-rom.js",
+		"rom-info": "node ./rom-info.js",
+		"list-tables": "node ./list-tables.js",
+		"read-table": "node ./read-table.js",
+		"patch-table": "node ./patch-table.js",
+		"list-logs": "node ./list-logs.js",
+		"read-log": "node ./read-log.js",
 		"inspect-device": "node ./inspect-device.js",
 		"check": "tsc --noEmit"
 	},

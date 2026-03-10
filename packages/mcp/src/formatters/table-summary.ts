@@ -11,12 +11,16 @@ export function formatTableDimensions(table: TableDefinition): string {
 }
 
 export function formatTableListMarkdown(tables: TableDefinition[]): string {
-	const headers = ["Name", "Category", "Dimensions", "Unit"];
+	const headers = ["Name", "Category", "Dimensions", "Unit", "X Axis", "Y Axis"];
 	const rows = tables.map((table) => [
 		table.name,
 		table.category ?? "",
 		formatTableDimensions(table),
 		formatUnit(table.z.unit),
+		table.x?.name ?? "",
+		table.kind === "table2d" || table.kind === "table3d"
+			? (table.y?.name ?? "")
+			: "",
 	]);
 
 	return buildMarkdownTable(headers, rows);

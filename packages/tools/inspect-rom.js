@@ -7,7 +7,6 @@
  */
 
 import * as fs from "node:fs/promises";
-import * as path from "node:path";
 import {
 	findClosestMatches,
 	planRomDefinitionResolution,
@@ -18,8 +17,7 @@ import sade from "sade";
 import { formatTable } from "../mcp/dist/formatters/table-formatter.js";
 import { formatTableListMarkdown } from "../mcp/dist/formatters/table-summary.js";
 import { toYamlFrontmatter } from "../mcp/dist/formatters/yaml-formatter.js";
-
-console.warn = () => {};
+import { resolveCliPath } from "./mcp-cli.js";
 
 /**
  * Converts a filesystem path to a file:// URI.
@@ -131,32 +129,36 @@ function findTableByName(definition, tableName) {
  * @returns {Promise<void>}
  */
 async function inspectRom(romPath, opts) {
-	const definitionsRoots = opts.definitionsRoot
-		? [path.resolve(opts.definitionsRoot)]
+	const definitionsRoot = opts["definitions-root"];
+	const definitionsRoots = definitionsRoot
+		? [resolveCliPath(definitionsRoot)]
 		: [];
-	const definitionPath = opts.definition;
-	const romBytes = new Uint8Array(await fs.readFile(romPath));
+	const resolvedRomPath = resolveCliPath(romPath);
+	const definitionPath = opts.definition
+		? resolveCliPath(opts.definition)
+		: undefined;
+	const romBytes = new Uint8Array(await fs.readFile(resolvedRomPath));
 	const provider = new EcuFlashProvider(definitionsRoots);
 	const resolved = await resolveDefinition(
-		romPath,
+		resolvedRomPath,
 		romBytes,
 		provider,
 		definitionPath,
 	);
 
-	if (opts.listMarkdown) {
-		console.log(buildListTablesOutput(romPath, resolved.definition));
+	if (opts["list-markdown"]) {
+		console.log(buildListTablesOutput(resolvedRomPath, resolved.definition));
 		return;
 	}
 
-	const readTableName = opts.readTable ?? opts["read-table"];
+	const readTableName = opts["read-table"];
 	if (readTableName) {
 		const tableDef = findTableByName(resolved.definition, readTableName);
-		console.log(formatTable(romPath, tableDef, romBytes).content);
+		console.log(formatTable(resolvedRomPath, tableDef, romBytes).content);
 		return;
 	}
 
-	console.log(buildListTablesOutput(romPath, resolved.definition));
+	console.log(buildListTablesOutput(resolvedRomPath, resolved.definition));
 }
 
 // Create CLI with Sade

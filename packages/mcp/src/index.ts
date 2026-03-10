@@ -20,6 +20,10 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { loadConfig } from "./config.js";
 import { setupContextIpc } from "./context-ipc.js";
+import {
+	buildOpenDocumentsContextPayload,
+	buildQuerySyntaxResourceText,
+} from "./resources.js";
 import type { PatchTableOptions } from "./tools/patch-table.js";
 
 /**
@@ -36,6 +40,7 @@ interface OpenDocumentsContext {
 		definition?: { name: string; uri?: string };
 		isDirty: boolean;
 		activeEditors: number;
+		isFocused?: boolean;
 		lastFocusedAt?: string;
 	}>;
 	tables: Array<{
@@ -48,6 +53,7 @@ interface OpenDocumentsContext {
 		unit?: string;
 		definitionUri?: string;
 		activeEditors: number;
+		isFocused?: boolean;
 		lastFocusedAt?: string;
 	}>;
 }
@@ -62,7 +68,7 @@ const currentOpenContext: OpenDocumentsContext = {
 import { handleListLogs } from "./tools/list-logs.js";
 import { handleListTables } from "./tools/list-tables.js";
 import { handlePatchTable } from "./tools/patch-table.js";
-import { handleQueryLogs } from "./tools/query-logs.js";
+import { handleReadLog } from "./tools/read-log.js";
 import { handleReadTable } from "./tools/read-table.js";
 import { handleRomInfo } from "./tools/rom-info.js";
 
@@ -113,7 +119,7 @@ server.resource(
 	"ecu-explorer://context/open-documents",
 	"ecu-explorer://context/open-documents",
 	async () => {
-		const payload = JSON.stringify(currentOpenContext, null, 2);
+		const payload = buildOpenDocumentsContextPayload(currentOpenContext);
 		return {
 			contents: [
 				{
@@ -124,6 +130,20 @@ server.resource(
 			],
 		};
 	},
+);
+
+server.resource(
+	"ecu-explorer://docs/query-syntax",
+	"ecu-explorer://docs/query-syntax",
+	async () => ({
+		contents: [
+			{
+				uri: "ecu-explorer://docs/query-syntax",
+				mimeType: "text/markdown",
+				text: buildQuerySyntaxResourceText(),
+			},
+		],
+	}),
 );
 
 /**
@@ -145,7 +165,7 @@ export function updateOpenContext(
 
 server.tool(
 	"list_tables",
-	"List all calibration tables in a ROM. Use `category` to filter (e.g. 'Fuel', 'Ignition'). Call this first to discover table names before reading or patching.",
+	"Discover calibration tables in a ROM. Supports metadata query and pagination. Includes axis names so agents can transition directly into read_table or patch_table selectors.",
 	{
 		rom: z
 			.string()
@@ -154,16 +174,33 @@ server.tool(
 			.string()
 			.optional()
 			.describe("Optional explicit path to an ECU definition XML file"),
-		category: z
+		query: z
 			.string()
 			.optional()
 			.describe(
-				"Filter string — only tables whose category contains this string (case-insensitive) are returned",
+				"Optional metadata query across table name, category, dimensions, unit, and axis names",
 			),
+		page: z.number().int().min(1).optional().describe("1-based page number"),
+		page_size: z
+			.number()
+			.int()
+			.min(1)
+			.optional()
+			.describe("Maximum rows to return per page"),
 	},
-	async ({ rom, definition, category }) => {
+	async ({ rom, definition, query, page, page_size }) => {
 		try {
-			const content = await handleListTables(rom, config, category, definition);
+			const listTableOptions: Parameters<typeof handleListTables>[2] = {};
+			if (query !== undefined) listTableOptions.query = query;
+			if (page !== undefined) listTableOptions.page = page;
+			if (page_size !== undefined) listTableOptions.pageSize = page_size;
+
+			const content = await handleListTables(
+				rom,
+				config,
+				listTableOptions,
+				definition,
+			);
 			return { content: [{ type: "text", text: content }] };
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
@@ -179,7 +216,7 @@ server.tool(
 
 server.tool(
 	"read_table",
-	"Read a calibration table from a ROM. Returns axis breakpoints and cell values. Use row/column indices from this output when calling patch_table.",
+	"Read a calibration table from a ROM. Omit `where` to read the full table, or use `where` with the table's real axis names to read a selected slice.",
 	{
 		rom: z
 			.string()
@@ -189,10 +226,22 @@ server.tool(
 			.optional()
 			.describe("Optional explicit path to an ECU definition XML file"),
 		table: z.string().describe("Table name (from list_tables)"),
+		where: z
+			.string()
+			.optional()
+			.describe(
+				"Optional selector expression using the table's real axis names, e.g. 'RPM (rpm) == 4000 && Load (g/rev) == 1.8'",
+			),
 	},
-	async ({ rom, definition, table }) => {
+	async ({ rom, definition, table, where }) => {
 		try {
-			const content = await handleReadTable(rom, table, config, definition);
+			const content = await handleReadTable(
+				rom,
+				table,
+				config,
+				where,
+				definition,
+			);
 			return { content: [{ type: "text", text: content }] };
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
@@ -208,7 +257,7 @@ server.tool(
 
 server.tool(
 	"patch_table",
-	"Apply an operation to cells in a ROM table, returns the updated table. (Note: this produces rounding errors, due to how the ROM stores values.)",
+	"Apply an operation to cells in a ROM table using a value-based `where` selector. Returns the affected slice after the patch. Equality matches exact axis breakpoint values.",
 	{
 		rom: z.string().describe("Path to ROM file"),
 		definition: z
@@ -222,20 +271,14 @@ server.tool(
 		value: z.number().optional().describe("Operand for set/add/multiply"),
 		min: z.number().optional().describe("Lower bound for clamp"),
 		max: z.number().optional().describe("Upper bound for clamp"),
-		row: z
-			.number()
-			.int()
-			.min(0)
+		where: z
+			.string()
 			.optional()
-			.describe("0-based row index; omit for all rows"),
-		col: z
-			.number()
-			.int()
-			.min(0)
-			.optional()
-			.describe("0-based column index; omit for all columns"),
+			.describe(
+				"Optional selector expression using the table's real axis names, e.g. 'RPM (rpm) >= 3000 && Load (g/rev) <= 2.0'",
+			),
 	},
-	async ({ rom, definition, table, op, value, min, max, row, col }) => {
+	async ({ rom, definition, table, op, value, min, max, where }) => {
 		try {
 			const opts: PatchTableOptions = {
 				rom,
@@ -246,8 +289,7 @@ server.tool(
 			if (value !== undefined) opts.value = value;
 			if (min !== undefined) opts.min = min;
 			if (max !== undefined) opts.max = max;
-			if (row !== undefined) opts.row = row;
-			if (col !== undefined) opts.col = col;
+			if (where !== undefined) opts.where = where;
 			const content = await handlePatchTable(opts, config);
 			return { content: [{ type: "text", text: content }] };
 		} catch (err) {
@@ -292,11 +334,30 @@ server.tool(
 
 server.tool(
 	"list_logs",
-	"List available log files sorted by recency (1 = most recent). Returns channel names available in each file. Use the filename with `query_logs` to filter a specific session, or omit to search all logs.",
-	{},
-	async () => {
+	"Discover available log files. Supports metadata search and pagination. Use `read_log(file)` to inspect one selected log.",
+	{
+		query: z
+			.string()
+			.optional()
+			.describe(
+				"Optional metadata query across filename, channels, date, row count, duration, and sample rate",
+			),
+		page: z.number().int().min(1).optional().describe("1-based page number"),
+		page_size: z
+			.number()
+			.int()
+			.min(1)
+			.optional()
+			.describe("Maximum rows to return per page"),
+	},
+	async ({ query, page, page_size }) => {
 		try {
-			const content = await handleListLogs(config);
+			const listLogOptions: Parameters<typeof handleListLogs>[1] = {};
+			if (query !== undefined) listLogOptions.query = query;
+			if (page !== undefined) listLogOptions.page = page;
+			if (page_size !== undefined) listLogOptions.pageSize = page_size;
+
+			const content = await handleListLogs(config, listLogOptions);
 			return { content: [{ type: "text", text: content }] };
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
@@ -308,47 +369,72 @@ server.tool(
 	},
 );
 
-// ─── Tool: query_logs ─────────────────────────────────────────────────────────
+// ─── Tool: read_log ───────────────────────────────────────────────────────────
 
 server.tool(
-	"query_logs",
-	"Query log data using a filter expression. Channel names are case-sensitive and must match `list_logs` output exactly. `sample_rate` reduces output density (e.g. `sample_rate: 10` on a 100 Hz log returns every 10th matching row). Omit `file` to search all logs — useful when you don't know which session contains the relevant data.",
+	"read_log",
+	"Inspect one selected log file. Call with only `file` to get fields/units/schema. Add `where`, time range, and `step_ms` to read a slice from that log.",
 	{
-		filter: z
+		file: z.string().describe("Filename from list_logs"),
+		where: z
 			.string()
+			.optional()
 			.describe(
-				"Filter expression, e.g. 'RPM > 3000 && Knock > 0'. Channel names are case-sensitive.",
+				"Optional row filter expression using fields from read_log(file), e.g. 'Engine RPM > 3000 && Knock Sum > 0'",
 			),
 		channels: z
 			.array(z.string())
 			.optional()
-			.describe("Additional channels to include beyond those in the filter"),
-		file: z
-			.string()
+			.describe("Optional subset of channels to include in the output"),
+		start_s: z
+			.number()
+			.nonnegative()
 			.optional()
-			.describe(
-				"Filename from list_logs to search; omit to search all log files",
-			),
-		sample_rate: z
+			.describe("Optional start time in seconds"),
+		end_s: z
+			.number()
+			.nonnegative()
+			.optional()
+			.describe("Optional end time in seconds"),
+		before_ms: z
+			.number()
+			.nonnegative()
+			.optional()
+			.describe("Optional context window before each where match"),
+		after_ms: z
+			.number()
+			.nonnegative()
+			.optional()
+			.describe("Optional context window after each where match"),
+		step_ms: z
 			.number()
 			.positive()
 			.optional()
 			.describe(
-				"Target sample rate in Hz; server computes stride from actual log rate",
+				"Optional minimum time spacing between returned rows in milliseconds",
 			),
 	},
-	async ({ filter, channels, file, sample_rate }) => {
+	async ({
+		file,
+		where,
+		channels,
+		start_s,
+		end_s,
+		before_ms,
+		after_ms,
+		step_ms,
+	}) => {
 		try {
-			const queryOpts: {
-				filter: string;
-				channels?: string[];
-				file?: string;
-				sampleRate?: number;
-			} = { filter };
-			if (channels !== undefined) queryOpts.channels = channels;
-			if (file !== undefined) queryOpts.file = file;
-			if (sample_rate !== undefined) queryOpts.sampleRate = sample_rate;
-			const content = await handleQueryLogs(queryOpts, config);
+			const readLogOptions: Parameters<typeof handleReadLog>[0] = { file };
+			if (where !== undefined) readLogOptions.where = where;
+			if (channels !== undefined) readLogOptions.channels = channels;
+			if (start_s !== undefined) readLogOptions.startS = start_s;
+			if (end_s !== undefined) readLogOptions.endS = end_s;
+			if (before_ms !== undefined) readLogOptions.beforeMs = before_ms;
+			if (after_ms !== undefined) readLogOptions.afterMs = after_ms;
+			if (step_ms !== undefined) readLogOptions.stepMs = step_ms;
+
+			const content = await handleReadLog(readLogOptions, config);
 			return { content: [{ type: "text", text: content }] };
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);

@@ -30,6 +30,8 @@ export interface LogFile {
 	durationMs: number | null;
 	/** Sample rate in Hz computed from time column; null if no time column */
 	sampleRateHz: number | null;
+	/** Time column unit when detected */
+	timeUnit: "ms" | "s" | null;
 }
 
 export interface LogMetadata {
@@ -41,6 +43,8 @@ export interface LogMetadata {
 	durationS: number | null;
 	/** Sample rate in Hz; null if no time column */
 	sampleRateHz: number | null;
+	/** Time column unit when detected */
+	timeUnit: "ms" | "s" | null;
 }
 
 export interface LogRow {
@@ -108,6 +112,39 @@ function detectTimeColumnIndex(headerFields: string[]): number {
 	return -1;
 }
 
+function detectTimeUnit(headerName: string | undefined): "ms" | "s" | null {
+	if (!headerName) return null;
+	const normalized = headerName.toLowerCase();
+
+	if (
+		normalized.includes("(ms)") ||
+		normalized.includes("milliseconds") ||
+		normalized.includes("timestamp_ms")
+	) {
+		return "ms";
+	}
+
+	if (
+		normalized.includes("(s)") ||
+		normalized.includes("seconds") ||
+		normalized.includes("timestamp_s")
+	) {
+		return "s";
+	}
+
+	return null;
+}
+
+function toSeconds(value: number, unit: "ms" | "s" | null): number {
+	if (unit === "ms") return value / 1000;
+	return value;
+}
+
+function toMilliseconds(value: number, unit: "ms" | "s" | null): number {
+	if (unit === "s") return value * 1000;
+	return value;
+}
+
 /**
  * Get log metadata from a file without loading all rows.
  * Reads only the header, units, first data row, and last data row.
@@ -120,7 +157,13 @@ export async function getLogMetadata(filePath: string): Promise<LogMetadata> {
 	const lines = content.split("\n").filter((l) => l.trim().length > 0);
 
 	if (lines.length < 1) {
-		return { channels: [], rowCount: 0, durationS: null, sampleRateHz: null };
+		return {
+			channels: [],
+			rowCount: 0,
+			durationS: null,
+			sampleRateHz: null,
+			timeUnit: null,
+		};
 	}
 
 	// Parse header row — all columns are channels
@@ -143,6 +186,8 @@ export async function getLogMetadata(filePath: string): Promise<LogMetadata> {
 
 	// Detect time column
 	const timeColIdx = detectTimeColumnIndex(headerFields);
+	const timeUnit =
+		timeColIdx >= 0 ? detectTimeUnit(headerFields[timeColIdx]) : null;
 
 	let durationS: number | null = null;
 	let sampleRateHz: number | null = null;
@@ -154,11 +199,8 @@ export async function getLogMetadata(filePath: string): Promise<LogMetadata> {
 		const lastTs = Number.parseFloat(lastRow[timeColIdx] ?? "");
 
 		if (Number.isFinite(firstTs) && Number.isFinite(lastTs)) {
-			// Determine if timestamps are in ms or s
-			// If values are large (> 1000), assume ms; otherwise assume s
-			const isMs = Math.abs(lastTs) > 1000 || Math.abs(firstTs) > 1000;
-			const firstS = isMs ? firstTs / 1000 : firstTs;
-			const lastS = isMs ? lastTs / 1000 : lastTs;
+			const firstS = toSeconds(firstTs, timeUnit);
+			const lastS = toSeconds(lastTs, timeUnit);
 			durationS = lastS - firstS;
 
 			if (durationS > 0 && rowCount > 1) {
@@ -167,7 +209,7 @@ export async function getLogMetadata(filePath: string): Promise<LogMetadata> {
 		}
 	}
 
-	return { channels, rowCount, durationS, sampleRateHz };
+	return { channels, rowCount, durationS, sampleRateHz, timeUnit };
 }
 
 /**
@@ -195,6 +237,7 @@ export async function readLogFileMeta(filePath: string): Promise<LogFile> {
 			rowCount: 0,
 			durationMs: null,
 			sampleRateHz: null,
+			timeUnit: null,
 		};
 	}
 
@@ -215,13 +258,15 @@ export async function readLogFileMeta(filePath: string): Promise<LogFile> {
 	let durationMs: number | null = null;
 	let sampleRateHz: number | null = null;
 
+	const timeUnit = detectTimeUnit(headerFields[0]);
+
 	if (dataLines.length > 1) {
 		const firstRow = parseCsvLine(dataLines[0] ?? "");
 		const lastRow = parseCsvLine(dataLines[dataLines.length - 1] ?? "");
 		const firstTs = Number.parseFloat(firstRow[0] ?? "0");
 		const lastTs = Number.parseFloat(lastRow[0] ?? "0");
 		if (Number.isFinite(firstTs) && Number.isFinite(lastTs)) {
-			durationMs = lastTs - firstTs;
+			durationMs = toMilliseconds(lastTs - firstTs, timeUnit);
 			const durationS = durationMs / 1000;
 			if (durationS > 0 && rowCount > 1) {
 				sampleRateHz = (rowCount - 1) / durationS;
@@ -239,6 +284,7 @@ export async function readLogFileMeta(filePath: string): Promise<LogFile> {
 		rowCount,
 		durationMs,
 		sampleRateHz,
+		timeUnit,
 	};
 }
 
@@ -316,6 +362,8 @@ export async function queryLogFile(
 	const allUnits = unitFields.slice(1);
 
 	// Determine which channels to include
+	const timeUnit = detectTimeUnit(headerFields[0]);
+
 	const includedChannels =
 		filterChannels !== undefined
 			? allChannels.filter((ch) => filterChannels.includes(ch))
@@ -344,8 +392,9 @@ export async function queryLogFile(
 		const tsStr = fields[0];
 		if (!tsStr) continue;
 
-		const timestampMs = Number.parseFloat(tsStr);
-		if (!Number.isFinite(timestampMs)) continue;
+		const timestampValue = Number.parseFloat(tsStr);
+		if (!Number.isFinite(timestampValue)) continue;
+		const timestampMs = toMilliseconds(timestampValue, timeUnit);
 
 		// Apply time range filter
 		if (startMs !== undefined && timestampMs < startMs) continue;
@@ -390,7 +439,7 @@ export async function queryLogFile(
 
 /**
  * Parse all rows from a CSV log file, returning raw row objects.
- * Used by query_logs for filter expression evaluation.
+ * Used by read_log for expression evaluation.
  *
  * @param filePath - Absolute path to the log CSV file
  * @returns Object with headers and rows as plain objects
@@ -398,6 +447,7 @@ export async function queryLogFile(
 export async function parseLogFileRows(filePath: string): Promise<{
 	headers: string[];
 	timeColumnName: string | null;
+	timeUnit: "ms" | "s" | null;
 	rows: Record<string, number>[];
 	sampleRateHz: number | null;
 }> {
@@ -405,7 +455,13 @@ export async function parseLogFileRows(filePath: string): Promise<{
 	const lines = content.split("\n").filter((l) => l.trim().length > 0);
 
 	if (lines.length < 1) {
-		return { headers: [], timeColumnName: null, rows: [], sampleRateHz: null };
+		return {
+			headers: [],
+			timeColumnName: null,
+			timeUnit: null,
+			rows: [],
+			sampleRateHz: null,
+		};
 	}
 
 	const headerFields = parseCsvLine(lines[0] ?? "");
@@ -426,6 +482,8 @@ export async function parseLogFileRows(filePath: string): Promise<{
 	const timeColIdx = detectTimeColumnIndex(headerFields);
 	const timeColumnName =
 		timeColIdx >= 0 ? (headerFields[timeColIdx] ?? null) : null;
+	const timeUnit =
+		timeColIdx >= 0 ? detectTimeUnit(headerFields[timeColIdx]) : null;
 
 	// Parse all rows
 	const rows: Record<string, number>[] = [];
@@ -452,10 +510,8 @@ export async function parseLogFileRows(filePath: string): Promise<{
 		if (timeKey && firstRow && lastRow) {
 			const firstTs = firstRow[timeKey] ?? 0;
 			const lastTs = lastRow[timeKey] ?? 0;
-			// Determine if timestamps are in ms or s
-			const isMs = Math.abs(lastTs) > 1000 || Math.abs(firstTs) > 1000;
-			const firstS = isMs ? firstTs / 1000 : firstTs;
-			const lastS = isMs ? lastTs / 1000 : lastTs;
+			const firstS = toSeconds(firstTs, timeUnit);
+			const lastS = toSeconds(lastTs, timeUnit);
 			const durationS = lastS - firstS;
 			if (durationS > 0) {
 				sampleRateHz = (rows.length - 1) / durationS;
@@ -463,5 +519,11 @@ export async function parseLogFileRows(filePath: string): Promise<{
 		}
 	}
 
-	return { headers: headerFields, timeColumnName, rows, sampleRateHz };
+	return {
+		headers: headerFields,
+		timeColumnName,
+		timeUnit,
+		rows,
+		sampleRateHz,
+	};
 }
