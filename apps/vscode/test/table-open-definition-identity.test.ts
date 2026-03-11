@@ -52,7 +52,7 @@ describe("table open definition identity", () => {
 		workspaceState = new WorkspaceState(mockMemento);
 	});
 
-	test("[`openTableInCustomEditor()`](apps/vscode/src/commands/table-commands.ts:51) includes the saved definition URI and stable table id in the table URI", async () => {
+	test("`openTableInCustomEditor()` includes the saved definition URI and stable table id in the table URI", async () => {
 		const romUri = vscode.Uri.file("/test/rom.hex");
 		workspaceState.saveRomDefinition(
 			romUri.fsPath,
@@ -75,10 +75,40 @@ describe("table open definition identity", () => {
 				query: expect.stringContaining("table=cyl-fuel-trim-2::fuel::0x1000"),
 			}),
 			"romViewer.tableEditor",
+			expect.objectContaining({
+				preview: undefined,
+				preserveFocus: undefined,
+			}),
 		);
 	});
 
-	test("[`handleOpenTableFromTree()`](apps/vscode/src/commands/table-commands.ts:197) forwards the stable table id and display name", async () => {
+	test("`openTableInCustomEditor()` forwards preview open options to vscode.openWith", async () => {
+		const romUri = vscode.Uri.file("/test/rom.hex");
+		workspaceState.saveRomDefinition(
+			romUri.fsPath,
+			"file:///defs/resolved.xml",
+		);
+		setTableCommandsContext({ list: () => [] }, workspaceState);
+		const executeSpy = vi
+			.spyOn(vscode.commands, "executeCommand")
+			.mockResolvedValue(undefined);
+
+		await openTableInCustomEditor(
+			romUri,
+			"cyl-fuel-trim-2::fuel::0x1000",
+			"Cylinder Fuel Trim #2",
+			{ preview: true },
+		);
+
+		expect(executeSpy).toHaveBeenCalledWith(
+			"vscode.openWith",
+			expect.anything(),
+			"romViewer.tableEditor",
+			expect.objectContaining({ preview: true }),
+		);
+	});
+
+	test("`handleOpenTableFromTree()` forwards the stable table id and display name", async () => {
 		const openTableSpy = vi.fn(async () => undefined);
 
 		await handleOpenTableFromTree(
@@ -93,10 +123,30 @@ describe("table open definition identity", () => {
 			expect.objectContaining({ fsPath: "/test/rom.hex" }),
 			"shared-label::ignition::0x2000",
 			"Shared Label",
+			expect.objectContaining({ preview: true }),
 		);
 	});
 
-	test("[`RomEditorProvider.openCustomDocument()`](apps/vscode/src/rom/editor-provider.ts:179) can reopen a table using the carried definition URI", async () => {
+	test("`handleOpenTableFromTree()` opens tree tables in preview mode", async () => {
+		const openTableSpy = vi.fn(async () => undefined);
+
+		await handleOpenTableFromTree(
+			{} as vscode.ExtensionContext,
+			"file:///test/rom.hex",
+			"shared-label::ignition::0x2000",
+			"Shared Label",
+			openTableSpy,
+		);
+
+		expect(openTableSpy).toHaveBeenCalledWith(
+			expect.objectContaining({ fsPath: "/test/rom.hex" }),
+			"shared-label::ignition::0x2000",
+			"Shared Label",
+			expect.objectContaining({ preview: true }),
+		);
+	});
+
+	test("`RomEditorProvider.openCustomDocument()` can reopen a table using the carried definition URI", async () => {
 		const romUri = vscode.Uri.file("/test/rom.hex");
 		const definitionUri = "file:///defs/resolved.xml";
 		const definition = createDefinition(definitionUri);
@@ -148,7 +198,7 @@ describe("table open definition identity", () => {
 		expect(provider.parse).toHaveBeenCalledWith(definitionUri);
 	});
 
-	test("[`RomEditorProvider.openCustomDocument()`](apps/vscode/src/rom/editor-provider.ts:194) resolves duplicate display names by stable id", async () => {
+	test("`RomEditorProvider.openCustomDocument()` resolves duplicate display names by stable id", async () => {
 		const romUri = vscode.Uri.file("/test/rom.hex");
 		const definitionUri = "file:///defs/resolved.xml";
 		const definition: ROMDefinition = {

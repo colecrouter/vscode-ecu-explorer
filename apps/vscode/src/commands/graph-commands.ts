@@ -203,6 +203,11 @@ export async function handleOpenTableFromTree(
 		romUri: vscode.Uri,
 		tableId: string,
 		tableName?: string,
+		options?: {
+			viewColumn?: vscode.ViewColumn;
+			preserveFocus?: boolean;
+			preview?: boolean;
+		},
 	) => Promise<void>,
 ): Promise<void> {
 	try {
@@ -211,7 +216,9 @@ export async function handleOpenTableFromTree(
 
 		// Use the unified openTableInCustomEditor function with preview mode
 		// This makes the tab temporary until the user edits it
-		await openTableInCustomEditor(uri, tableId, tableName);
+		await openTableInCustomEditor(uri, tableId, tableName, {
+			preview: true,
+		});
 	} catch (error) {
 		vscode.window.showErrorMessage(
 			`Failed to open table: ${error instanceof Error ? error.message : String(error)}`,

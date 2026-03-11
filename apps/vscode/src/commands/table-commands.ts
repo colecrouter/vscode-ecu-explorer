@@ -52,7 +52,7 @@ export async function openTableInCustomEditor(
 	romUri: vscode.Uri,
 	tableId: string,
 	tableName?: string,
-	_options?: {
+	options?: {
 		viewColumn?: vscode.ViewColumn;
 		preserveFocus?: boolean;
 		preview?: boolean;
@@ -101,10 +101,27 @@ export async function openTableInCustomEditor(
 	console.log(
 		"[DEBUG] openTableInCustomEditor - viewType: romViewer.tableEditor",
 	);
+	const editorOptions = {
+		preview: options?.preview,
+		preserveFocus: options?.preserveFocus,
+	};
+
+	if (options?.viewColumn !== undefined) {
+		await vscode.commands.executeCommand(
+			"vscode.openWith",
+			tableUri,
+			"romViewer.tableEditor",
+			options.viewColumn,
+			editorOptions,
+		);
+		return;
+	}
+
 	await vscode.commands.executeCommand(
 		"vscode.openWith",
 		tableUri,
 		"romViewer.tableEditor",
+		editorOptions,
 	);
 }
 
