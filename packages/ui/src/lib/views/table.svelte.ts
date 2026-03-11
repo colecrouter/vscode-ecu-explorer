@@ -583,8 +583,13 @@ export class TableView<T extends TableDefinition> {
 			};
 		}
 
-		const explicitCol = coord.col ?? 0;
-		const index = coord.row === 0 ? explicitCol : (coord.col ?? coord.row);
+		const explicitCol = coord.col;
+		const index =
+			coord.row === 0
+				? (explicitCol ?? 0)
+				: explicitCol === undefined || explicitCol === 0
+					? coord.row
+					: explicitCol;
 		return {
 			row: 0,
 			col: index,
@@ -1195,14 +1200,25 @@ export class TableView<T extends TableDefinition> {
 	private getConstraints(): MathOpConstraints {
 		const { dtype } = this.def.z;
 		const range = getRangeForDataType(dtype);
+		const transform = this.def.z.transform;
 		const scale = this.def.z.scale ?? 1;
 		const offset = this.def.z.offset ?? 0;
 
-		// Apply scale and offset to range
-		const scaledMin = range.min * scale + offset;
-		const scaledMax = range.max * scale + offset;
+		if (transform) {
+			const transformedMin = transform(range.min);
+			const transformedMax = transform(range.max);
+			return {
+				min: Math.min(transformedMin, transformedMax),
+				max: Math.max(transformedMin, transformedMax),
+				dtype,
+			};
+		}
 
-		return { min: scaledMin, max: scaledMax, dtype };
+		return {
+			min: range.min * scale + offset,
+			max: range.max * scale + offset,
+			dtype,
+		};
 	}
 
 	/**

@@ -47,6 +47,7 @@
 		}
 		return null;
 	});
+	const hasYAxis = $derived((yAxisValues?.length ?? 0) > 0);
 
 	const maxDepth = $derived(
 		definition.kind === "table3d" ? definition.depth : 1,
@@ -128,6 +129,10 @@
 
 	function focusGrid(): void {
 		gridRoot?.focus();
+	}
+
+	export function focusActiveCell(): void {
+		focusGrid();
 	}
 
 	function ensureActiveCellSelected(): void {
@@ -243,12 +248,8 @@
 	const endiannessLookup = $derived(definition.z.endianness ?? "le");
 	const scaleLookup = $derived(definition.z.scale ?? 1);
 	const offsetLookup = $derived(definition.z.offset ?? 0);
-	const transformLookup = $derived(
-		definition.z.transform ?? ((raw: number) => raw),
-	);
-	const inverseTransformLookup = $derived(
-		definition.z.inverseTransform ?? ((physical: number) => physical),
-	);
+	const transformLookup = $derived(definition.z.transform);
+	const inverseTransformLookup = $derived(definition.z.inverseTransform);
 
 	const normalizedMap = $derived.by(() => {
 		if (!matrix || matrix.length === 0)
@@ -289,7 +290,18 @@
 	function handleCellMouseDown(row: number, col: number, event: MouseEvent) {
 		if (disabled) return;
 
-		activeCell = getCellCoord(row, col);
+		const nextCell = getCellCoord(row, col);
+		if (editingCell && !sameCell(editingCell, nextCell)) {
+			const activeElement = document.activeElement;
+			if (activeElement instanceof HTMLInputElement) {
+				activeElement.blur();
+			}
+			if (editingCell) {
+				return;
+			}
+		}
+
+		activeCell = nextCell;
 		if (event.shiftKey && view.anchor) {
 			event.preventDefault();
 			view.selectCell(activeCell, "range");
@@ -457,10 +469,7 @@
 				if (region) {
 					activeCell = getCellCoord(region.minRow, region.minCol);
 					view.selectCell(activeCell, "replace");
-					view.selectCell(
-						getCellCoord(region.maxRow, region.maxCol),
-						"range",
-					);
+					view.selectCell(getCellCoord(region.maxRow, region.maxCol), "range");
 				}
 			} catch (err) {
 				console.error("Failed to paste from clipboard:", err);
@@ -498,7 +507,14 @@
 	<div class="clipboard-feedback">Cut to clipboard</div>
 {/if}
 
-<div class="table-wrapper" tabindex="0" role="grid" bind:this={gridRoot}>
+<div
+	class="table-wrapper"
+	tabindex="0"
+	role="grid"
+	bind:this={gridRoot}
+	onfocus={() => ensureActiveCellSelected()}
+	onmousedown={() => focusGrid()}
+>
 	{#if definition.kind === "table3d" && maxDepth > 1}
 		<div class="table-grid__controls">
 			<label class="table-grid__depth-label">
@@ -518,11 +534,22 @@
 		</div>
 	{/if}
 
-	<table class="table-grid" style={gradientCssVars}>
+	<table
+		class="table-grid"
+		style={`${gradientCssVars} --data-column-count: ${Math.max(1, colCount)}; --legend-column-width: ${hasYAxis ? "88px" : "0px"}; --cell-min-width: 56px;`}
+	>
+		<colgroup>
+			{#if hasYAxis}
+				<col class="table-grid__col table-grid__col--legend" />
+			{/if}
+			{#each Array.from( { length: colCount }, ) as _, colIndex (`col-${colIndex}`)}
+				<col class="table-grid__col table-grid__col--data" />
+			{/each}
+		</colgroup>
 		{#if xAxisValues && xAxisValues.length > 0}
 			<thead>
 				<tr>
-					{#if yAxisValues && yAxisValues.length > 0}
+					{#if hasYAxis}
 						<th class="table-grid__corner">
 							{#if (definition.kind === "table2d" || definition.kind === "table3d") && definition.y?.unit?.symbol}
 								<span class="table-grid__unit table-grid__unit--y">
@@ -557,6 +584,7 @@
 							style={getCellStyle(rowIndex, colIndex)}
 							class:selected={view.isSelected(getCellCoord(rowIndex, colIndex))}
 							class:active={isActiveCell(rowIndex, colIndex)}
+							class:editing={isEditingCell(rowIndex, colIndex)}
 							data-cell="{rowIndex},{colIndex}"
 							onmousedown={(e) => handleCellMouseDown(rowIndex, colIndex, e)}
 							onmouseenter={(e) => handleCellMouseEnter(rowIndex, colIndex, e)}
@@ -572,10 +600,12 @@
 								inverseTransform={inverseTransformLookup}
 								isActive={isActiveCell(rowIndex, colIndex)}
 								isEditing={isEditingCell(rowIndex, colIndex)}
-								editSeed={isEditingCell(rowIndex, colIndex) ? editSeed : undefined}
+								editSeed={isEditingCell(rowIndex, colIndex)
+									? editSeed
+									: undefined}
 								on:commit={(event: CustomEvent) =>
 									handleCommit(rowIndex, colIndex, event)}
-								on:complete={(event: CustomEvent<{ move: "next" | "prev" | null }>) =>
+								on:complete={(event: CustomEvent) =>
 									exitEditMode(event.detail.move)}
 								on:cancel={() => {
 									editingCell = null;
@@ -602,17 +632,34 @@
 	}
 
 	.table-grid {
-		width: 100%;
+		width: max(
+			100%,
+			calc(
+				var(--legend-column-width) +
+					(var(--data-column-count) * var(--cell-min-width))
+			)
+		);
 		border-collapse: collapse;
+		table-layout: fixed;
 		--gradient-low: #73c991;
 		--gradient-mid: #e2c08d;
 		--gradient-high: #f48771;
 	}
 
+	.table-grid__col--legend {
+		width: var(--legend-column-width);
+	}
+
+	.table-grid__col--data {
+		width: max(
+			var(--cell-min-width),
+			calc((100% - var(--legend-column-width)) / var(--data-column-count))
+		);
+	}
+
 	.table-grid td {
 		padding: 0;
 		border: 1px solid var(--vscode-panel-border);
-		min-width: 48px;
 		height: 32px;
 		--cell-text-color: color-mix(
 			in srgb,
@@ -632,7 +679,6 @@
 	.table-grid__corner {
 		background-color: var(--vscode-editor-background);
 		border-color: var(--vscode-panel-border);
-		min-width: 48px;
 		position: relative;
 		padding: 0;
 	}
@@ -678,12 +724,7 @@
 		font-size: 0.875rem;
 	}
 
-	.table-grid__axis-header--x {
-		min-width: 48px;
-	}
-
 	.table-grid__axis-header--y {
-		min-width: 48px;
 		text-align: right;
 	}
 
@@ -725,16 +766,18 @@
 		content: "";
 		position: absolute;
 		inset: 0;
-		background-color: var(
-			--vscode-list-activeSelectionBackground,
-			rgba(0, 122, 204, 0.1)
-		);
+		background-color: var(--vscode-list-activeSelectionBackground);
 		pointer-events: none;
 		z-index: -1;
 	}
 
+	.table-grid td.editing {
+		outline: 3px solid var(--vscode-focusBorder);
+		outline-offset: -3px;
+	}
+
 	.table-grid td.active:not(.selected) {
-		outline: 2px solid color-mix(in srgb, var(--vscode-focusBorder) 70%, transparent);
+		outline: 2px solid var(--vscode-focusBorder);
 		outline-offset: -2px;
 	}
 

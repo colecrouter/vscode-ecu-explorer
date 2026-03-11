@@ -111,6 +111,22 @@ describe("TableView Math Operations", () => {
 			}
 		});
 
+		it("should apply transformed set values in display units", () => {
+			const rom = createROM(0x2000);
+			const def = create1DTableDef(2);
+			def.z.transform = transform;
+			def.z.inverseTransform = inverseTransform;
+			const table = new TableView(rom, def);
+
+			table.selectCell({ row: 0, col: 0 }, "replace");
+
+			const { result, transaction } = table.applySetValueOperation(300);
+
+			expect(result.values).toEqual([300]);
+			expect(transaction).not.toBeNull();
+			expect(rom[0x1000]).toBe(150);
+		});
+
 		it("should apply add operation to multiple cells in 1D table", () => {
 			const rom = createROM(0x2000);
 			const def = create1DTableDef(16);
@@ -142,6 +158,23 @@ describe("TableView Math Operations", () => {
 				expect(data1d[4]?.[0]).toBe(original4 + 10);
 				expect(data1d[5]?.[0]).toBe(original5 + 10);
 			}
+		});
+
+		it("should clamp add operations using transformed limits", () => {
+			const rom = createROM(0x2000);
+			const def = create1DTableDef(1);
+			rom[0x1000] = 120;
+			def.z.transform = transform;
+			def.z.inverseTransform = inverseTransform;
+			const table = new TableView(rom, def);
+
+			table.selectCell({ row: 0, col: 0 }, "replace");
+
+			const { result, transaction } = table.applyAddOperation(40);
+
+			expect(result.values).toEqual([280]);
+			expect(transaction).not.toBeNull();
+			expect(rom[0x1000]).toBe(140);
 		});
 
 		it("should apply multiply operation to multiple cells in 1D table", () => {

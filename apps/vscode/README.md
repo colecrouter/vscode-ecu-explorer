@@ -71,9 +71,10 @@ The ECU Explorer view shows:
 
 - Full spreadsheet interface with keyboard navigation
 - Multi-cell selection with mouse or Shift+Arrow
+- Intuitive keyboard shortcuts for navigation and editing
 - Cell validation with min/max bounds
 - Axis labels with units (RPM, kPa, °C, etc.)
-- Copy/paste support (TSV format)
+- Copy/paste support (TSV format, Excel-compatible)
 - Math operations on selections: Add, Multiply, Clamp, Smooth
 
 ### Graph Visualization

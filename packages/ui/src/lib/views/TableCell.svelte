@@ -36,8 +36,8 @@
 		endianness?: Endianness;
 		scale?: number;
 		offset?: number;
-		transform?: (raw: number) => number;
-		inverseTransform?: (physical: number) => number;
+		transform?: ((raw: number) => number) | undefined;
+		inverseTransform?: ((physical: number) => number) | undefined;
 		min?: number;
 		max?: number;
 		isActive?: boolean;
@@ -88,12 +88,6 @@
 		wasEditing = true;
 		tick().then(() => {
 			inputElement?.focus();
-			if (editSeed === undefined) {
-				inputElement?.select();
-			} else if (inputElement) {
-				const length = inputElement.value.length;
-				inputElement.setSelectionRange(length, length);
-			}
 		});
 	});
 
@@ -378,11 +372,16 @@
 	.table-cell__display,
 	.table-cell__input {
 		font: inherit;
-		padding: 0.375rem 0.25rem;
+		padding: 0.375rem 0.4rem;
 		border: none;
 		width: 100%;
+		max-width: 100%;
+		min-width: 0;
+		min-inline-size: 0;
 		flex: 1;
 		box-sizing: border-box;
+		display: block;
+		margin: 0;
 		text-align: center;
 		color: var(--cell-text-color, inherit);
 		background: transparent;
@@ -396,7 +395,8 @@
 	}
 
 	.table-cell__display--active {
-		outline: 1px solid color-mix(in srgb, var(--vscode-focusBorder) 60%, transparent);
+		outline: 1px solid
+			color-mix(in srgb, var(--vscode-focusBorder) 60%, transparent);
 		outline-offset: -1px;
 	}
 
@@ -408,6 +408,12 @@
 	.table-cell__input:focus {
 		outline: 2px solid var(--vscode-focusBorder);
 		outline-offset: -2px;
+		background-color: color-mix(
+			in srgb,
+			var(--vscode-focusBorder) 12%,
+			transparent
+		);
+		font-weight: 600;
 	}
 
 	.table-cell__input--error {

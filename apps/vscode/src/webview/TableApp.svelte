@@ -13,6 +13,10 @@
 	import type { ThemeColors } from "@ecu-explorer/ui";
 	import { onMount } from "svelte";
 
+	type TableGridInstance = {
+		focusActiveCell: () => void;
+	};
+
 	let vscode: ReturnType<typeof acquireVsCodeApi>;
 	try {
 		vscode = acquireVsCodeApi();
@@ -29,6 +33,7 @@
 	let saveStatus: "idle" | "saving" | "success" | "error" = $state("idle");
 	let isInitialLoad = $state(true); // Track if this is the initial load
 	let themeColors: ThemeColors | undefined = $state(undefined);
+	let tableGridRef = $state<TableGridInstance | null>(null);
 
 	// Reactive state for table data
 	let tableSnapshot = $state<any>(null);
@@ -367,6 +372,11 @@
 						after: Array.from(edit.after),
 					})),
 				});
+
+				requestAnimationFrame(() => {
+					window.focus();
+					tableGridRef?.focusActiveCell();
+				});
 			}
 		} catch (error) {
 			console.error("Math operation failed:", error);
@@ -442,13 +452,19 @@
 		<div class="table-container">
 			{#if themeColors}
 				<TableGrid
+					bind:this={tableGridRef}
 					view={tableView}
 					{definition}
 					{themeColors}
 					disabled={false}
 				/>
 			{:else}
-				<TableGrid view={tableView} {definition} disabled={false} />
+				<TableGrid
+					bind:this={tableGridRef}
+					view={tableView}
+					{definition}
+					disabled={false}
+				/>
 			{/if}
 		</div>
 	{:else}

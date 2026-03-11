@@ -101,9 +101,10 @@ describe("TableGrid Component", () => {
 	it("navigates with arrow keys in navigation mode", async () => {
 		const view = new TableView(rom, def2d);
 		const screen = render(TableGrid, { view, definition: def2d });
-		const grid = screen.getByRole("grid");
+		const cells = screen.getByRole("cell");
 
-		await grid.click();
+		await expect.poll(() => cells.all().length).toBe(16);
+		await cells.nth(0).click();
 		await userEvent.keyboard("{ArrowRight}");
 
 		await expect.poll(() => view.isSelected({ row: 0, col: 1 })).toBe(true);
@@ -112,9 +113,10 @@ describe("TableGrid Component", () => {
 	it("extends selection with Shift+Arrow", async () => {
 		const view = new TableView(rom, def2d);
 		const screen = render(TableGrid, { view, definition: def2d });
-		const grid = screen.getByRole("grid");
+		const cells = screen.getByRole("cell");
 
-		await grid.click();
+		await expect.poll(() => cells.all().length).toBe(16);
+		await cells.nth(0).click();
 		await userEvent.keyboard("{Shift>}{ArrowRight}{/Shift}");
 
 		expect(view.getSelectionCount()).toBe(2);
@@ -125,9 +127,10 @@ describe("TableGrid Component", () => {
 	it("jumps to the edge with Ctrl+Arrow", async () => {
 		const view = new TableView(rom, def2d);
 		const screen = render(TableGrid, { view, definition: def2d });
-		const grid = screen.getByRole("grid");
+		const cells = screen.getByRole("cell");
 
-		await grid.click();
+		await expect.poll(() => cells.all().length).toBe(16);
+		await cells.nth(0).click();
 		await userEvent.keyboard("{Control>}{ArrowRight}{/Control}");
 
 		await expect.poll(() => view.isSelected({ row: 0, col: 3 })).toBe(true);
@@ -183,6 +186,33 @@ describe("TableGrid Component", () => {
 		await expect.element(display).toBeVisible();
 	});
 
+	it("renders scaled values when no custom transform is defined", async () => {
+		const romForScale = createROM();
+
+		const def: Table1DDefinition = {
+			kind: "table1d",
+			name: "Scaled Table",
+			id: "grid-scaled-1d",
+			rows: 1,
+			z: {
+				id: "values-scaled",
+				name: "Values",
+				address: 0,
+				length: 1,
+				dtype: "u8",
+				scale: 0.19347,
+				offset: 0,
+			},
+		};
+
+		romForScale[0] = 26;
+		const view = new TableView(romForScale, def);
+		const screen = render(TableGrid, { view, definition: def });
+
+		const display = screen.getByText("5.0302");
+		await expect.element(display).toBeVisible();
+	});
+
 	it("encodes edits using z.inverseTransform when defined", async () => {
 		const romForInverse = createROM();
 
@@ -219,6 +249,42 @@ describe("TableGrid Component", () => {
 		expect(romForInverse[0]).toBe(10);
 	});
 
+	it("encodes edits using scale and offset when no inverseTransform is defined", async () => {
+		const romForScale = createROM();
+
+		const def: Table1DDefinition = {
+			kind: "table1d",
+			name: "Scaled Edit Table",
+			id: "grid-scaled-edit-1d",
+			rows: 1,
+			z: {
+				id: "values-scaled-edit",
+				name: "Values",
+				address: 0,
+				length: 1,
+				dtype: "u8",
+				scale: 0.19347,
+				offset: 0,
+			},
+		};
+
+		const view = new TableView(romForScale, def);
+		const screen = render(TableGrid, { view, definition: def });
+		const grid = screen.getByRole("grid");
+
+		await grid.click();
+		await userEvent.keyboard("{Enter}");
+
+		const input = screen.getByRole("spinbutton");
+		await input.fill("5");
+		await userEvent.keyboard("{Tab}");
+
+		const tx = view.commit("Set scaled cell");
+		expect(tx).not.toBeNull();
+		expect(tx?.edits[0]?.after[0]).toBe(26);
+		expect(romForScale[0]).toBe(26);
+	});
+
 	it("moves horizontally in 1D tables with arrow keys", async () => {
 		const def1d: Table1DDefinition = {
 			id: "table-1d-nav",
@@ -229,11 +295,59 @@ describe("TableGrid Component", () => {
 		};
 		const view = new TableView(rom, def1d);
 		const screen = render(TableGrid, { view, definition: def1d });
-		const grid = screen.getByRole("grid");
+		const cells = screen.getByRole("cell");
 
-		await grid.click();
+		await expect.poll(() => cells.all().length).toBe(4);
+		await cells.nth(0).click();
 		await userEvent.keyboard("{ArrowRight}{ArrowRight}");
 
 		await expect.poll(() => view.isSelected({ row: 0, col: 2 })).toBe(true);
+	});
+
+	it("exits edit mode when clicking another cell so arrow keys work again", async () => {
+		const view = new TableView(createROM(), def2d);
+		const screen = render(TableGrid, { view, definition: def2d });
+		const cells = screen.getByRole("cell");
+
+		await expect.poll(() => cells.all().length).toBe(16);
+		await cells.nth(0).click();
+		await userEvent.keyboard("{Enter}");
+		await expect.element(screen.getByRole("spinbutton")).toBeVisible();
+
+		await cells.nth(1).click();
+		await userEvent.keyboard("{ArrowRight}");
+
+		await expect.poll(() => view.isSelected({ row: 0, col: 2 })).toBe(true);
+	});
+
+	it("cancels editing on Escape and returns to navigation mode", async () => {
+		const view = new TableView(createROM(), def2d);
+		const screen = render(TableGrid, { view, definition: def2d });
+		const cells = screen.getByRole("cell");
+
+		await expect.poll(() => cells.all().length).toBe(16);
+		await cells.nth(0).click();
+		await userEvent.keyboard("{Enter}");
+		const input = screen.getByRole("spinbutton");
+		await input.fill("12");
+		await userEvent.keyboard("{Escape}");
+		await userEvent.keyboard("{ArrowRight}");
+
+		await expect.poll(() => view.isSelected({ row: 0, col: 1 })).toBe(true);
+		const tx = view.commit("Cancel check");
+		expect(tx).toBeNull();
+	});
+
+	it("marks the active cell as editing while an input is open", async () => {
+		const view = new TableView(createROM(), def2d);
+		const screen = render(TableGrid, { view, definition: def2d });
+		const cells = screen.getByRole("cell");
+
+		await expect.poll(() => cells.all().length).toBe(16);
+		await cells.nth(0).click();
+		await userEvent.keyboard("{Enter}");
+
+		const cell = screen.container.querySelector('[data-cell="0,0"]');
+		expect(cell?.classList.contains("editing")).toBe(true);
 	});
 });

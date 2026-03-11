@@ -40,7 +40,7 @@ describe("TableGrid cell editing — index correctness", () => {
 
 			// A 1D table with 8 rows is displayed as 1 row × 8 columns
 			const cells = screen.getByRole("cell");
-			await expect(() => cells.all().length).toBe(8);
+			await expect.poll(() => cells.all().length).toBe(8);
 
 			// Edit the 4th cell (colIndex=3)
 			const targetCell = cells.nth(3);
@@ -97,7 +97,7 @@ describe("TableGrid cell editing — index correctness", () => {
 			const screen = render(TableGrid, { view, definition: def });
 
 			const cells = screen.getByRole("cell");
-			await expect(() => cells.all().length).toBe(5);
+			await expect.poll(() => cells.all().length).toBe(5);
 
 			// Edit the last cell (colIndex=4)
 			const lastCell = cells.nth(4);
@@ -149,7 +149,7 @@ describe("TableGrid cell editing — index correctness", () => {
 			const screen = render(TableGrid, { view, definition: def });
 
 			const cells = screen.getByRole("cell");
-			await expect(() => cells.all().length).toBe(16);
+			await expect.poll(() => cells.all().length).toBe(16);
 
 			// row=1, col=2 → linear index = 1*4+2 = 6 (7th cell)
 			const targetCell = cells.nth(6);
