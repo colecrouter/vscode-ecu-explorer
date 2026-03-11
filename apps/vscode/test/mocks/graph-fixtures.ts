@@ -57,7 +57,7 @@ export const PRIMARY_GRAPH_ROM2_CASE = {
 
 const GRAPH_TABLE_DEFINITION = {
 	id: GRAPH_TABLE_ID,
-	name: GRAPH_TABLE_ID,
+	name: GRAPH_TABLE_NAME,
 	kind: "table2d",
 	rows: 2,
 	cols: 2,

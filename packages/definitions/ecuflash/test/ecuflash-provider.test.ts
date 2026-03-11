@@ -1,55 +1,137 @@
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 import { snapshotTable } from "@ecu-explorer/core";
 import { describe, expect, it } from "vitest";
 import { EcuFlashProvider } from "../src/index.js";
 
-const testDir = path.dirname(fileURLToPath(import.meta.url));
-const validFixtureDir = path.join(testDir, "fixtures", "valid-xml");
-const invalidFixtureDir = path.join(testDir, "fixtures", "invalid-xml");
-
 describe("EcuFlashProvider", () => {
-	it.skip("resolves include token by xmlid with real fixture files when include filename differs", async () => {
-		const provider = new EcuFlashProvider([validFixtureDir]);
-		const topLevelPath = path.join(validFixtureDir, "TephraMOD-56890313.xml");
-
-		const def = await provider.parse(pathToFileURL(topLevelPath).toString());
-		const t = def.tables.find(
-			(x) => x.name === "Boost Target Engine Load #1A (High Gear Range)",
+	it("resolves include token by xmlid when the include filename differs", async () => {
+		const tmpDir = await fs.mkdtemp(
+			path.join(os.tmpdir(), "ecuflash-xmlid-include-"),
 		);
+		try {
+			const defsRoot = path.join(tmpDir, "defs");
+			await fs.mkdir(defsRoot, { recursive: true });
 
-		expect(t).toBeTruthy();
-		expect(t?.kind).toBe("table2d");
-		if (!t || t.kind !== "table2d") throw new Error("expected table2d");
-		expect(t.cols).toBe(9);
-		expect(t.rows).toBe(18);
-		expect(t.x?.kind).toBe("dynamic");
-		expect(t.y?.kind).toBe("dynamic");
+			const includedPath = path.join(defsRoot, "renamed-base-definition.xml");
+			const topLevelPath = path.join(defsRoot, "top-level.xml");
+			const includedXml = `<?xml version="1.0"?>
+<rom>
+	<romid>
+		<xmlid>56890013</xmlid>
+		<internalidaddress>0</internalidaddress>
+	</romid>
+	<scaling name="byte" units="raw" toexpr="x" storagetype="uint8" endian="little" />
+	<table name="Resolved By XmlId" category="Fuel" type="1D" address="1234" scaling="byte" />
+</rom>
+`;
+			const topLevelXml = `<?xml version="1.0"?>
+<rom>
+	<romid>
+		<xmlid>top-level</xmlid>
+		<internalidaddress>0</internalidaddress>
+	</romid>
+	<include>56890013</include>
+</rom>
+`;
+
+			await fs.writeFile(includedPath, includedXml, "utf8");
+			await fs.writeFile(topLevelPath, topLevelXml, "utf8");
+
+			const provider = new EcuFlashProvider([defsRoot]);
+			const def = await provider.parse(pathToFileURL(topLevelPath).toString());
+			const t = def.tables.find((x) => x.name === "Resolved By XmlId");
+
+			expect(t).toBeTruthy();
+			expect(t?.kind).toBe("table1d");
+			if (!t || t.kind !== "table1d") throw new Error("expected table1d");
+			expect(t.category).toBe("Fuel");
+			expect(t.z.address).toBe(0x1234);
+			expect(t.z.dtype).toBe("u8");
+			expect(t.z.endianness).toBe("le");
+		} finally {
+			await fs.rm(tmpDir, { recursive: true, force: true });
+		}
 	});
 
-	it.skip("loads recursive include chain from disk fixtures and inherits scaling units for x/y/z", async () => {
-		const provider = new EcuFlashProvider([validFixtureDir]);
-		const topLevelPath = path.join(validFixtureDir, "TephraMOD-56890313.xml");
-
-		const def = await provider.parse(pathToFileURL(topLevelPath).toString());
-		const t = def.tables.find(
-			(x) => x.name === "Boost Target Engine Load #1A (High Gear Range)",
+	it("loads recursive include chain and inherits scaling units for x/y/z", async () => {
+		const tmpDir = await fs.mkdtemp(
+			path.join(os.tmpdir(), "ecuflash-recursive-units-"),
 		);
+		try {
+			const defsRoot = path.join(tmpDir, "defs");
+			await fs.mkdir(defsRoot, { recursive: true });
 
-		expect(t).toBeTruthy();
-		expect(t?.kind).toBe("table2d");
-		if (!t || t.kind !== "table2d") throw new Error("expected table2d");
+			const basePath = path.join(defsRoot, "base-definition.xml");
+			const midPath = path.join(defsRoot, "mid-definition.xml");
+			const topLevelPath = path.join(defsRoot, "top-level.xml");
 
-		expect(t.z.unit?.symbol).toBe("psia");
-		expect(t.x?.kind).toBe("dynamic");
-		if (t.x?.kind === "dynamic") {
-			expect(t.x.unit?.symbol).toBe("%");
-		}
-		expect(t.y?.kind).toBe("dynamic");
-		if (t.y?.kind === "dynamic") {
-			expect(t.y.unit?.symbol).toBe("RPM");
+			const baseXml = `<?xml version="1.0"?>
+<rom>
+	<romid>
+		<xmlid>evo10base</xmlid>
+		<internalidaddress>0</internalidaddress>
+	</romid>
+	<scaling name="Boost" units="psia" toexpr="x" storagetype="uint8" endian="big" />
+	<scaling name="Load" units="%" toexpr="x" storagetype="uint16" endian="big" />
+	<scaling name="Rpm" units="RPM" toexpr="x" storagetype="uint16" endian="big" />
+	<table name="Boost Target" category="Fuel" type="3D" scaling="Boost">
+		<table name="Load Axis" type="X Axis" elements="3" scaling="Load" />
+		<table name="RPM Axis" type="Y Axis" elements="2" scaling="Rpm" />
+	</table>
+</rom>
+`;
+			const midXml = `<?xml version="1.0"?>
+<rom>
+	<romid>
+		<xmlid>56890013</xmlid>
+		<internalidaddress>0</internalidaddress>
+	</romid>
+	<include>evo10base</include>
+</rom>
+`;
+			const topLevelXml = `<?xml version="1.0"?>
+<rom>
+	<romid>
+		<xmlid>top-level</xmlid>
+		<internalidaddress>0</internalidaddress>
+	</romid>
+	<include>56890013</include>
+	<table name="Boost Target" address="4000">
+		<table name="Load Axis" type="X Axis" address="4100" />
+		<table name="RPM Axis" type="Y Axis" address="4200" />
+	</table>
+</rom>
+`;
+
+			await fs.writeFile(basePath, baseXml, "utf8");
+			await fs.writeFile(midPath, midXml, "utf8");
+			await fs.writeFile(topLevelPath, topLevelXml, "utf8");
+
+			const provider = new EcuFlashProvider([defsRoot]);
+			const def = await provider.parse(pathToFileURL(topLevelPath).toString());
+			const t = def.tables.find((x) => x.name === "Boost Target");
+
+			expect(t).toBeTruthy();
+			expect(t?.kind).toBe("table2d");
+			if (!t || t.kind !== "table2d") throw new Error("expected table2d");
+			expect(t.z.unit?.symbol).toBe("psia");
+			expect(t.x?.kind).toBe("dynamic");
+			if (t.x?.kind === "dynamic") {
+				expect(t.x.unit?.symbol).toBe("%");
+				expect(t.x.address).toBe(0x4100);
+				expect(t.x.length).toBe(3);
+			}
+			expect(t.y?.kind).toBe("dynamic");
+			if (t.y?.kind === "dynamic") {
+				expect(t.y.unit?.symbol).toBe("RPM");
+				expect(t.y.address).toBe(0x4200);
+				expect(t.y.length).toBe(2);
+			}
+		} finally {
+			await fs.rm(tmpDir, { recursive: true, force: true });
 		}
 	});
 
@@ -183,18 +265,19 @@ describe("EcuFlashProvider", () => {
 		}
 	});
 
-	it.skip("throws when duplicate stable table ids resolve to materially different parsed tables", async () => {
+	it("preserves inherited static axis identity when child omits local axis data", async () => {
 		const provider = new EcuFlashProvider();
 
 		const tmpDir = await fs.mkdtemp(
-			path.join(os.tmpdir(), "ecuflash-duplicate-stable-id-conflict-"),
+			path.join(os.tmpdir(), "ecuflash-inherited-static-axis-id-"),
 		);
 		try {
-			const xmlPath = path.join(tmpDir, "conflicting-duplicate-stable-id.xml");
-			const xmlContent = `<?xml version="1.0"?>
+			const baseXmlPath = path.join(tmpDir, "base.xml");
+			const romXmlPath = path.join(tmpDir, "rom.xml");
+			const baseXml = `<?xml version="1.0"?>
 <rom>
 	<romid>
-		<xmlid>conflicting-duplicate-stable-id</xmlid>
+		<xmlid>base</xmlid>
 		<internalidaddress>0</internalidaddress>
 	</romid>
 	<scaling name="byte" units="raw" toexpr="x" storagetype="uint8" endian="little" />
@@ -202,88 +285,144 @@ describe("EcuFlashProvider", () => {
 		<table name="Axis A">
 			<data>0</data>
 			<data>1</data>
-		</table>
-	</table>
-	<table name="Shared Label" category="Fuel" type="2D" address="1000" scaling="byte">
-		<table name="Axis B">
-			<data>10</data>
-			<data>20</data>
-			<data>30</data>
+			<data>2</data>
 		</table>
 	</table>
 </rom>
 `;
+			const romXml = `<?xml version="1.0"?>
+<rom>
+	<romid>
+		<xmlid>rom</xmlid>
+		<internalidaddress>0</internalidaddress>
+	</romid>
+	<include>base</include>
+	<table name="Shared Label" category="Fuel" type="2D" address="1000" scaling="byte">
+		<table name="Axis A" />
+	</table>
+</rom>
+`;
 
-			await fs.writeFile(xmlPath, xmlContent, "utf8");
+			await fs.writeFile(baseXmlPath, baseXml, "utf8");
+			await fs.writeFile(romXmlPath, romXml, "utf8");
 
-			const def = await provider.parse(pathToFileURL(xmlPath).toString());
+			const def = await provider.parse(pathToFileURL(romXmlPath).toString());
 
-			expect(def.tables).toHaveLength(2);
-			expect(new Set(def.tables.map((table) => table.id)).size).toBe(2);
-			expect(def.tables.map((table) => table.id)).toEqual([
-				"Shared Label::Fuel::0x1000::x=Axis A::static::2",
-				"Shared Label::Fuel::0x1000::x=Axis B::static::3",
-			]);
+			expect(def.tables).toHaveLength(1);
+			expect(def.tables[0]?.id).toBe(
+				"Shared Label::Fuel::0x1000::x=Axis A::static::3",
+			);
+			expect(def.tables[0]?.kind).toBe("table1d");
+			if (!def.tables[0] || def.tables[0].kind !== "table1d") {
+				throw new Error("Expected inherited static-axis table1d");
+			}
+			expect(def.tables[0].rows).toBe(3);
+			expect(def.tables[0].x?.kind).toBe("static");
+			if (def.tables[0].x?.kind === "static") {
+				expect(def.tables[0].x.values).toEqual([0, 1, 2]);
+			}
 		} finally {
 			await fs.rm(tmpDir, { recursive: true, force: true });
 		}
 	});
 
-	it.skip("disambiguates duplicate stable ids using dynamic axis addresses", async () => {
+	it("preserves inherited dynamic axis identity when child omits local axis address and elements", async () => {
 		const provider = new EcuFlashProvider();
 
 		const tmpDir = await fs.mkdtemp(
-			path.join(os.tmpdir(), "ecuflash-duplicate-axis-address-stable-id-"),
+			path.join(os.tmpdir(), "ecuflash-inherited-dynamic-axis-id-"),
 		);
 		try {
-			const xmlPath = path.join(tmpDir, "duplicate-axis-address-stable-id.xml");
-			const xmlContent = `<?xml version="1.0"?>
+			const baseXmlPath = path.join(tmpDir, "base.xml");
+			const romXmlPath = path.join(tmpDir, "rom.xml");
+			const baseXml = `<?xml version="1.0"?>
 <rom>
 	<romid>
-		<xmlid>duplicate-axis-address-stable-id</xmlid>
+		<xmlid>base</xmlid>
 		<internalidaddress>0</internalidaddress>
 	</romid>
 	<scaling name="byte" units="raw" toexpr="x" storagetype="uint8" endian="little" />
 	<table name="Shared Label" category="Fuel" type="2D" address="1000" scaling="byte">
 		<table name="Axis" type="X Axis" address="2000" elements="2" scaling="byte" />
 	</table>
+</rom>
+`;
+			const romXml = `<?xml version="1.0"?>
+<rom>
+	<romid>
+		<xmlid>rom</xmlid>
+		<internalidaddress>0</internalidaddress>
+	</romid>
+	<include>base</include>
 	<table name="Shared Label" category="Fuel" type="2D" address="1000" scaling="byte">
-		<table name="Axis" type="X Axis" address="2100" elements="2" scaling="byte" />
+		<table name="Axis" type="X Axis" />
 	</table>
 </rom>
 `;
 
-			await fs.writeFile(xmlPath, xmlContent, "utf8");
-			const def = await provider.parse(pathToFileURL(xmlPath).toString());
+			await fs.writeFile(baseXmlPath, baseXml, "utf8");
+			await fs.writeFile(romXmlPath, romXml, "utf8");
+			const def = await provider.parse(pathToFileURL(romXmlPath).toString());
 
-			expect(def.tables).toHaveLength(2);
-			expect(def.tables.map((table) => table.id)).toEqual([
+			expect(def.tables).toHaveLength(1);
+			expect(def.tables[0]?.id).toBe(
 				"Shared Label::Fuel::0x1000::x=Axis::0x2000",
-				"Shared Label::Fuel::0x1000::x=Axis::0x2100",
-			]);
+			);
+			expect(def.tables[0]?.kind).toBe("table1d");
+			if (!def.tables[0] || def.tables[0].kind !== "table1d") {
+				throw new Error("Expected inherited dynamic-axis table1d");
+			}
+			expect(def.tables[0].rows).toBe(2);
+			expect(def.tables[0].x?.kind).toBe("dynamic");
+			if (def.tables[0].x?.kind === "dynamic") {
+				expect(def.tables[0].x.address).toBe(0x2000);
+				expect(def.tables[0].x.length).toBe(2);
+			}
 		} finally {
 			await fs.rm(tmpDir, { recursive: true, force: true });
 		}
 	});
 
-	it.skip("throws descriptive error for missing include using repository fixture file", async () => {
-		const provider = new EcuFlashProvider([invalidFixtureDir]);
-		const romXmlPath = path.join(invalidFixtureDir, "missing-include.xml");
-
-		let thrown: Error | undefined;
+	it("throws descriptive error for missing include with searched roots and lookup guidance", async () => {
+		const tmpDir = await fs.mkdtemp(
+			path.join(os.tmpdir(), "ecuflash-missing-include-"),
+		);
 		try {
-			await provider.parse(pathToFileURL(romXmlPath).toString());
-		} catch (error) {
-			thrown = error as Error;
-		}
+			const defsRoot = path.join(tmpDir, "defs");
+			const nestedDir = path.join(defsRoot, "external", "manual");
+			await fs.mkdir(nestedDir, { recursive: true });
 
-		expect(thrown).toBeTruthy();
-		expect(thrown?.message).toContain('include "does-not-exist"');
-		expect(thrown?.message).toContain(path.resolve(romXmlPath));
-		expect(thrown?.message).toContain("configured search roots");
-		expect(thrown?.message).toContain("Search roots:");
-		expect(thrown?.message).toContain("Attempted filename and xmlid lookup");
-		expect(thrown?.message).toContain("external/manual folder");
+			const provider = new EcuFlashProvider([defsRoot]);
+			const romXmlPath = path.join(nestedDir, "missing-include.xml");
+			const romXml = `<?xml version="1.0"?>
+<rom>
+	<romid>
+		<xmlid>missing-include</xmlid>
+		<internalidaddress>0</internalidaddress>
+	</romid>
+	<include>does-not-exist</include>
+</rom>
+`;
+
+			await fs.writeFile(romXmlPath, romXml, "utf8");
+
+			let thrown: Error | undefined;
+			try {
+				await provider.parse(pathToFileURL(romXmlPath).toString());
+			} catch (error) {
+				thrown = error as Error;
+			}
+
+			expect(thrown).toBeTruthy();
+			expect(thrown?.message).toContain('include "does-not-exist"');
+			expect(thrown?.message).toContain(path.resolve(romXmlPath));
+			expect(thrown?.message).toContain("configured search roots");
+			expect(thrown?.message).toContain("Search roots:");
+			expect(thrown?.message).toContain("Attempted filename and xmlid lookup");
+			expect(thrown?.message).toContain("external/manual folder");
+		} finally {
+			await fs.rm(tmpDir, { recursive: true, force: true });
+		}
 	});
 
 	it("resolves include from a parent directory for external/manual definition layouts", async () => {
@@ -988,7 +1127,7 @@ describe("EcuFlashProvider", () => {
 		}
 	});
 
-	it.skip("parses 3D table with static axis from template", async () => {
+	it("inherits static x/y axes from a template across include files", async () => {
 		const provider = new EcuFlashProvider();
 
 		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "ecuflash-test-"));
@@ -1025,7 +1164,10 @@ describe("EcuFlashProvider", () => {
 		<internalidhex>TESTTEMPL</internalidhex>
 	</romid>
 	<include>base</include>
-	<table name="Template Table" address="3000" scaling="Value" />
+	<table name="Template Table" address="3000" scaling="Value">
+		<table name="X Axis" type="X Axis" />
+		<table name="Y Axis" type="Y Axis" />
+	</table>
 </rom>
 `;
 
@@ -1037,15 +1179,21 @@ describe("EcuFlashProvider", () => {
 
 			const t = def.tables.find((x) => x.name === "Template Table");
 			expect(t).toBeTruthy();
-			expect(t?.kind).toBe("table1d");
-			if (!t || t.kind !== "table1d") throw new Error("expected table1d");
+			expect(t?.kind).toBe("table2d");
+			if (!t || t.kind !== "table2d") throw new Error("expected table2d");
 
-			// A single inherited name-only stub remains scalar under canonical child-count semantics.
-			expect(t.rows).toBe(1);
-
-			// Scalar tables should not materialize inherited axes.
-			expect(t.x).toBeUndefined();
-			expect((t as { y?: unknown }).y).toBeUndefined();
+			expect(t.cols).toBe(3);
+			expect(t.rows).toBe(2);
+			expect(t.z.length).toBe(6);
+			expect(t.z.address).toBe(0x3000);
+			expect(t.x?.kind).toBe("static");
+			if (t.x?.kind === "static") {
+				expect(t.x.values).toEqual([1, 2, 3]);
+			}
+			expect(t.y?.kind).toBe("static");
+			if (t.y?.kind === "static") {
+				expect(t.y.values).toEqual([10, 20]);
+			}
 		} finally {
 			await fs.rm(tmpDir, { recursive: true, force: true });
 		}
@@ -1668,7 +1816,7 @@ describe("EcuFlashProvider", () => {
 		}
 	});
 
-	it.skip("regression: inherited name-only stub resolves to scalar only when base table has zero child axes", async () => {
+	it("regression: inherited name-only stub resolves to scalar only when base table has zero child axes", async () => {
 		const provider = new EcuFlashProvider();
 
 		const tmpDir = await fs.mkdtemp(
@@ -1720,7 +1868,7 @@ describe("EcuFlashProvider", () => {
 		}
 	});
 
-	it.skip("regression: inherited name-only stub resolves to 1D when base table has exactly one child axis", async () => {
+	it("regression: inherited name-only stub resolves to 1D when base table has exactly one child axis", async () => {
 		const provider = new EcuFlashProvider();
 
 		const tmpDir = await fs.mkdtemp(
@@ -1781,7 +1929,7 @@ describe("EcuFlashProvider", () => {
 		}
 	});
 
-	it.skip("regression: inherited name-only stub resolves to 2D when base table has exactly two child axes", async () => {
+	it("regression: inherited name-only stub resolves to 2D when base table has exactly two child axes", async () => {
 		const provider = new EcuFlashProvider();
 
 		const tmpDir = await fs.mkdtemp(

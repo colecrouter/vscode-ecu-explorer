@@ -228,6 +228,7 @@ describe("Graph Windows E2E", () => {
 			expect(panel.webview.postMessage).toHaveBeenCalledWith({
 				type: "init",
 				snapshot,
+				tableId: "table1",
 				tableName: "Test Table",
 				romPath: "/test/rom.hex",
 				themeColors: expect.objectContaining({
@@ -463,6 +464,7 @@ describe("Graph Windows E2E", () => {
 			expect(panel.webview.postMessage).toHaveBeenCalledWith({
 				type: "init",
 				snapshot,
+				tableId: "table1",
 				tableName: "Test Table",
 				romPath: "/test/rom.hex",
 				themeColors: expect.objectContaining({
@@ -595,7 +597,7 @@ describe("Graph Windows E2E", () => {
 			expect(manager.getPanel("/test/rom.hex", "table1")).toBe(panel);
 		});
 
-		it.skip("should deserialize panel state after reload", async () => {
+		it("should deserialize panel state after reload", async () => {
 			// Simulate VSCode reload with saved state
 			const savedState = {
 				romPath: "/test/rom.hex",
@@ -615,7 +617,7 @@ describe("Graph Windows E2E", () => {
 			expect(panel).toBe(restoredPanel);
 		});
 
-		it.skip("should handle deserialization with missing ROM", async () => {
+		it("should handle deserialization with missing ROM", async () => {
 			const savedState = {
 				romPath: "/nonexistent/rom.hex",
 				tableId: "table1",
@@ -633,7 +635,7 @@ describe("Graph Windows E2E", () => {
 			expect(vscode.window.showErrorMessage).toHaveBeenCalled();
 		});
 
-		it.skip("should handle deserialization with invalid state", async () => {
+		it("should handle deserialization with invalid state", async () => {
 			const invalidState = {
 				// Missing required fields
 				romPath: "/test/rom.hex",
@@ -650,7 +652,7 @@ describe("Graph Windows E2E", () => {
 			expect(vscode.window.showErrorMessage).toHaveBeenCalled();
 		});
 
-		it.skip("should restore panel and continue synchronization", async () => {
+		it("should restore panel and continue synchronization", async () => {
 			// 1. Deserialize panel
 			const savedState = {
 				romPath: "/test/rom.hex",

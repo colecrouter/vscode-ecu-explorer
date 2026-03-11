@@ -101,13 +101,15 @@ export class GraphPanelSerializer implements vscode.WebviewPanelSerializer {
 			}
 
 			// Find table definition
-			const tableDef = definition.tables.find((t) => t.name === tableId);
+			const tableDef =
+				definition.tables.find((t) => t.id === tableId) ??
+				definition.tables.find((t) => t.name === tableName);
 			if (!tableDef) {
 				console.error(
-					`[GraphPanelSerializer] Table not found: ${tableId} in ROM: ${romPath}`,
+					`[GraphPanelSerializer] Table not found: ${tableId} (${tableName}) in ROM: ${romPath}`,
 				);
 				vscode.window.showErrorMessage(
-					`Failed to restore graph: Table "${tableId}" not found in ROM`,
+					`Failed to restore graph: Table "${tableName}" not found in ROM`,
 				);
 				webviewPanel.dispose();
 				return;

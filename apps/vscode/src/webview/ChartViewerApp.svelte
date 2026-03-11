@@ -36,10 +36,27 @@
 	// State
 	let chartState = new ChartState();
 	let snapshot = $state<TableSnapshot | null>(null);
+	let tableId = $state("");
 	let tableName = $state("");
 	let romPath = $state("");
 	let isReady = $state(false);
 	let themeColors = $state<ThemeColors | undefined>(undefined);
+
+	type PersistedGraphPanelState = {
+		romPath: string;
+		tableId: string;
+		tableName: string;
+		zoom?: number;
+		pan?: { x: number; y: number };
+		layer?: number;
+	};
+
+	const persistedState = vscode.getState() as PersistedGraphPanelState | undefined;
+	if (persistedState) {
+		tableId = persistedState.tableId ?? "";
+		tableName = persistedState.tableName ?? "";
+		romPath = persistedState.romPath ?? "";
+	}
 
 	// Sync chartState with snapshot reactively
 	$effect(() => {
@@ -59,6 +76,16 @@
 				selection: [chartState.selectedCell],
 			});
 		}
+	});
+
+	$effect(() => {
+		if (!tableId || !tableName || !romPath) return;
+
+		vscode.setState({
+			romPath,
+			tableId,
+			tableName,
+		} satisfies PersistedGraphPanelState);
 	});
 
 	/**
@@ -105,12 +132,14 @@
 	function handleInit(message: {
 		type: "init";
 		snapshot: TableSnapshot;
+		tableId: string;
 		tableName: string;
 		romPath: string;
 		preferredChartType?: "line" | "heatmap";
 		themeColors?: ThemeColors;
 	}) {
 		snapshot = message.snapshot;
+		tableId = message.tableId;
 		tableName = message.tableName;
 		romPath = message.romPath;
 

@@ -521,6 +521,7 @@ describe("GraphPanelManager", () => {
 			expect(panel.webview.postMessage).toHaveBeenCalledWith({
 				type: "init",
 				snapshot,
+				tableId: "table1",
 				tableName: "Test Table",
 				romPath: "/test/rom.hex",
 				themeColors: expect.objectContaining({

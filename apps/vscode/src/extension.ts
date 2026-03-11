@@ -1672,7 +1672,8 @@ async function handleOpenGraph(chartType?: "line" | "heatmap"): Promise<void> {
 	// Try to get active table from active custom editor
 	const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
 	let rom: RomInstance | null = activeRom;
-	let tableName: string | null = activeTableName;
+	let tableId: string | null = activeTableName;
+	let tableName: string | null = activeTableDef?.name ?? null;
 	let tableDef: TableDefinition | null = activeTableDef;
 	let panel: vscode.WebviewPanel | null = activePanel;
 
@@ -1680,7 +1681,8 @@ async function handleOpenGraph(chartType?: "line" | "heatmap"): Promise<void> {
 		const uri = activeTab.input.uri;
 		const tableDoc = editorProvider?.getTableDocument(uri);
 		if (tableDoc) {
-			tableName = tableDoc.tableId;
+			tableId = tableDoc.tableId;
+			tableName = tableDoc.tableDef.name;
 			tableDef = tableDoc.tableDef;
 
 			if (!tableDoc.romDocument.definition) {
@@ -1700,7 +1702,7 @@ async function handleOpenGraph(chartType?: "line" | "heatmap"): Promise<void> {
 		}
 	}
 
-	if (!rom || !tableName || !tableDef || !panel) {
+	if (!rom || !tableId || !tableName || !tableDef || !panel) {
 		vscode.window.showErrorMessage("No active table editor");
 		return;
 	}
@@ -1708,9 +1710,6 @@ async function handleOpenGraph(chartType?: "line" | "heatmap"): Promise<void> {
 	try {
 		// Get ROM path from active ROM
 		const romPath = vscode.Uri.parse(rom.romUri).fsPath;
-
-		// Generate table ID (using table name as ID for now)
-		const tableId = tableName;
 
 		// Get current snapshot
 		const snapshot = snapshotTable(tableDef, rom.bytes);
@@ -1749,6 +1748,7 @@ async function handleOpenGraphParameterized(
 		const tableData = treeItem.data;
 		const romUri = vscode.Uri.parse(tableData.romUri);
 		const tableDef = tableData.tableDef;
+		const tableId = tableDef.id;
 		const tableName = tableDef.name;
 
 		try {
@@ -1763,9 +1763,6 @@ async function handleOpenGraphParameterized(
 				vscode.window.showErrorMessage("ROM definition not loaded");
 				return;
 			}
-
-			// Generate table ID (using table name as ID for now)
-			const tableId = tableName;
 
 			// Get current snapshot
 			const snapshot = snapshotTable(tableDef, document.romBytes);

@@ -1,5 +1,13 @@
+import type { TableDefinition } from "@ecu-explorer/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
+import {
+	handleMathOpAdd,
+	handleMathOpClamp,
+	handleMathOpMultiply,
+	handleMathOpSmooth,
+	setEditCommandsContext,
+} from "../src/commands/edit-commands.js";
 import { activate } from "../src/extension.js";
 import {
 	type EditOperation,
@@ -101,6 +109,44 @@ function getRequiredAddress(op: EditOperation): number {
 		throw new Error("Expected edit operation address to be defined");
 	}
 	return op.address;
+}
+
+function setMathCommandState(options?: {
+	activePanel?: vscode.WebviewPanel | null;
+	activeTableDef?: TableDefinition | null;
+}): void {
+	setEditCommandsContext(() => ({
+		activeRom: null,
+		activePanel: options?.activePanel ?? null,
+		activeTableDef: options?.activeTableDef ?? null,
+		undoRedoManager: null,
+		getRomDocumentForPanel: () => undefined,
+	}));
+}
+
+function createActivePanel(): vscode.WebviewPanel {
+	// biome-ignore lint: Need to properly mock this later
+	return {
+		webview: {
+			postMessage: vi.fn().mockResolvedValue(true),
+		},
+	} as unknown as vscode.WebviewPanel;
+}
+
+function create2DTableDef() {
+	return {
+		kind: "table2d",
+		name: "Test Table",
+		id: "table1",
+		rows: 2,
+		cols: 2,
+		z: {
+			id: "table1-z",
+			name: "Values",
+			address: 0x1000,
+			dtype: "u8",
+		},
+	} satisfies TableDefinition;
 }
 
 /**
@@ -258,14 +304,13 @@ describe("Math Operations Commands", () => {
 	});
 
 	describe("Command Execution", () => {
-		// TODO: These tests require an active ROM/panel context to work properly
-		// They should be rewritten to set up the full context or test the handlers directly
-		it.skip("should show input box for add operation", async () => {
+		it("should show input box for add operation", async () => {
+			setMathCommandState({ activePanel: createActivePanel() });
 			const showInputBoxSpy = vi
 				.spyOn(vscode.window, "showInputBox")
 				.mockResolvedValue(undefined);
 
-			await vscode.commands.executeCommand("rom.mathOpAdd");
+			await handleMathOpAdd();
 
 			expect(showInputBoxSpy).toHaveBeenCalledWith(
 				expect.objectContaining({
@@ -276,12 +321,13 @@ describe("Math Operations Commands", () => {
 			showInputBoxSpy.mockRestore();
 		});
 
-		it.skip("should show input box for multiply operation", async () => {
+		it("should show input box for multiply operation", async () => {
+			setMathCommandState({ activePanel: createActivePanel() });
 			const showInputBoxSpy = vi
 				.spyOn(vscode.window, "showInputBox")
 				.mockResolvedValue(undefined);
 
-			await vscode.commands.executeCommand("rom.mathOpMultiply");
+			await handleMathOpMultiply();
 
 			expect(showInputBoxSpy).toHaveBeenCalledWith(
 				expect.objectContaining({
@@ -292,12 +338,13 @@ describe("Math Operations Commands", () => {
 			showInputBoxSpy.mockRestore();
 		});
 
-		it.skip("should show input boxes for clamp operation", async () => {
+		it("should show input boxes for clamp operation", async () => {
+			setMathCommandState({ activePanel: createActivePanel() });
 			const showInputBoxSpy = vi
 				.spyOn(vscode.window, "showInputBox")
 				.mockResolvedValueOnce(undefined);
 
-			await vscode.commands.executeCommand("rom.mathOpClamp");
+			await handleMathOpClamp();
 
 			expect(showInputBoxSpy).toHaveBeenCalledWith(
 				expect.objectContaining({
@@ -308,12 +355,16 @@ describe("Math Operations Commands", () => {
 			showInputBoxSpy.mockRestore();
 		});
 
-		it.skip("should show quick pick for smooth operation", async () => {
+		it("should show quick pick for smooth operation", async () => {
+			setMathCommandState({
+				activePanel: createActivePanel(),
+				activeTableDef: create2DTableDef(),
+			});
 			const showQuickPickSpy = vi
 				.spyOn(vscode.window, "showQuickPick")
 				.mockResolvedValue(undefined);
 
-			await vscode.commands.executeCommand("rom.mathOpSmooth");
+			await handleMathOpSmooth();
 
 			expect(showQuickPickSpy).toHaveBeenCalledWith(
 				expect.arrayContaining(["3", "5", "7", "9"]),

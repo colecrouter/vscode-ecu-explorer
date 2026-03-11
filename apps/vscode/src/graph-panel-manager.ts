@@ -371,6 +371,7 @@ export class GraphPanelManager {
 		panel.webview.postMessage({
 			type: "init",
 			snapshot: context.snapshot,
+			tableId: context.tableId,
 			tableName: context.tableName,
 			romPath: context.romPath,
 			preferredChartType: context.preferredChartType,

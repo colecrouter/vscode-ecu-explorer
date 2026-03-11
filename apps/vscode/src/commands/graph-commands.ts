@@ -65,7 +65,8 @@ export async function handleOpenGraph(
 	// Try to get active table from active custom editor
 	const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
 	let rom: RomInstance | null = state.activeRom;
-	let tableName: string | null = state.activeTableName;
+	let tableId: string | null = state.activeTableName;
+	let tableName: string | null = state.activeTableDef?.name ?? null;
 	let tableDef: TableDefinition | null = state.activeTableDef;
 	let panel: vscode.WebviewPanel | null = state.activePanel;
 
@@ -78,7 +79,8 @@ export async function handleOpenGraph(
 					"Cannot open graph: ROM definition is missing for active table document",
 				);
 			}
-			tableName = tableDoc.tableId;
+			tableId = tableDoc.tableId;
+			tableName = tableDoc.tableDef.name;
 			tableDef = tableDoc.tableDef;
 			rom = {
 				id: tableDoc.romDocument.uri.toString(),
@@ -93,7 +95,7 @@ export async function handleOpenGraph(
 		}
 	}
 
-	if (!rom || !tableName || !tableDef || !panel) {
+	if (!rom || !tableId || !tableName || !tableDef || !panel) {
 		vscode.window.showErrorMessage("No active table editor");
 		return;
 	}
@@ -101,9 +103,6 @@ export async function handleOpenGraph(
 	try {
 		// Get ROM path from active ROM
 		const romPath = vscode.Uri.parse(rom.romUri).fsPath;
-
-		// Generate table ID (using table name as ID for now)
-		const tableId = tableName;
 
 		// Get current snapshot
 		const snapshot = snapshotTable(tableDef, rom.bytes);
@@ -144,6 +143,7 @@ export async function handleOpenGraphParameterized(
 		const tableData = treeItem.data;
 		const romUri = vscode.Uri.parse(tableData.romUri);
 		const tableDef = tableData.tableDef;
+		const tableId = tableDef.id;
 		const tableName = tableDef.name;
 
 		try {
@@ -158,9 +158,6 @@ export async function handleOpenGraphParameterized(
 				vscode.window.showErrorMessage("ROM definition not loaded");
 				return;
 			}
-
-			// Generate table ID (using table name as ID for now)
-			const tableId = tableName;
 
 			// Get current snapshot
 			const snapshot = snapshotTable(tableDef, document.romBytes);
