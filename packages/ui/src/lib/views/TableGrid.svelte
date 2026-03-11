@@ -4,7 +4,7 @@
 	import type { TableView } from "./table.svelte";
 	import { computeNormalizedValues } from "./colorMap.js";
 	import type { ThemeColors } from "./colorMap.js";
-	import { loadAxisValues, formatAxisValue } from "./table.js";
+	import { formatAxisValue, formatUnitLabel, loadAxisValues } from "./table.js";
 	import { onDestroy, onMount } from "svelte";
 
 	type GridCell = {
@@ -75,6 +75,39 @@
 	const depthOptions = $derived.by(() =>
 		Array.from({ length: maxDepth }, (_, index) => index),
 	);
+
+	const unitSummaries = $derived.by(() => {
+		const summaries: Array<{ key: string; label: string; value: string }> = [];
+
+		if (definition.z.unit?.symbol) {
+			summaries.push({
+				key: "z",
+				label: "Value Unit",
+				value: formatUnitLabel(definition.z.unit),
+			});
+		}
+
+		if (definition.x?.unit?.symbol) {
+			summaries.push({
+				key: "x",
+				label: "X Unit",
+				value: formatUnitLabel(definition.x.unit),
+			});
+		}
+
+		if (
+			(definition.kind === "table2d" || definition.kind === "table3d") &&
+			definition.y?.unit?.symbol
+		) {
+			summaries.push({
+				key: "y",
+				label: "Y Unit",
+				value: formatUnitLabel(definition.y.unit),
+			});
+		}
+
+		return summaries;
+	});
 
 	$effect(() => {
 		const maxRow = Math.max(0, rowCount - 1);
@@ -528,9 +561,14 @@
 		</div>
 	{/if}
 
-	{#if definition.z.unit?.symbol}
-		<div class="table-grid__z-unit">
-			Unit: {definition.z.unit.symbol}
+	{#if unitSummaries.length > 0}
+		<div class="table-grid__meta" aria-label="Table unit summary">
+			{#each unitSummaries as summary (summary.key)}
+				<span class="table-grid__meta-item">
+					<span class="table-grid__meta-label">{summary.label}:</span>
+					<span>{summary.value}</span>
+				</span>
+			{/each}
 		</div>
 	{/if}
 
@@ -550,18 +588,7 @@
 			<thead>
 				<tr>
 					{#if hasYAxis}
-						<th class="table-grid__corner">
-							{#if (definition.kind === "table2d" || definition.kind === "table3d") && definition.y?.unit?.symbol}
-								<span class="table-grid__unit table-grid__unit--y">
-									{definition.y.unit.symbol}
-								</span>
-							{/if}
-							{#if definition.x?.unit?.symbol}
-								<span class="table-grid__unit table-grid__unit--x">
-									{definition.x.unit.symbol}
-								</span>
-							{/if}
-						</th>
+						<th class="table-grid__corner" aria-hidden="true"></th>
 					{/if}
 					{#each xAxisValues as xValue, colIndex (colIndex)}
 						<th class="table-grid__axis-header table-grid__axis-header--x">
@@ -699,24 +726,6 @@
 		pointer-events: none;
 	}
 
-	.table-grid__unit {
-		position: absolute;
-		font-size: 0.65rem;
-		font-weight: normal;
-		color: var(--vscode-descriptionForeground);
-		opacity: 0.8;
-	}
-
-	.table-grid__unit--y {
-		bottom: 2px;
-		left: 4px;
-	}
-
-	.table-grid__unit--x {
-		top: 2px;
-		right: 4px;
-	}
-
 	.table-grid__axis-header {
 		background-color: var(--vscode-editor-background);
 		color: var(--vscode-editor-foreground);
@@ -748,11 +757,32 @@
 		border-radius: 0.25rem;
 	}
 
-	.table-grid__z-unit {
+	.table-grid__meta {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.375rem 0.75rem;
+		margin-bottom: 1rem;
 		font-size: 0.75rem;
 		color: var(--vscode-descriptionForeground);
-		margin-bottom: 0.25rem;
-		text-align: right;
+	}
+
+	.table-grid__meta-item {
+		display: inline-flex;
+		align-items: baseline;
+		gap: 0.25rem;
+		padding: 0.125rem 0.375rem;
+		border: 1px solid var(--vscode-panel-border);
+		border-radius: 999px;
+		background: color-mix(
+			in srgb,
+			var(--vscode-editor-background) 80%,
+			var(--vscode-editorWidget-background, transparent)
+		);
+		white-space: normal;
+	}
+
+	.table-grid__meta-label {
+		font-weight: 600;
 	}
 
 	.table-grid td.selected {

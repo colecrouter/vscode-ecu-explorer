@@ -76,6 +76,21 @@ export function formatAxisValue(value: number, unit?: Unit): string {
 }
 
 /**
+ * Format a unit label for display in table legends.
+ */
+export function formatUnitLabel(unit?: Unit): string {
+	if (!unit?.symbol) {
+		return "";
+	}
+
+	if (unit.name && unit.name !== unit.symbol) {
+		return `${unit.name} (${unit.symbol})`;
+	}
+
+	return unit.name ?? unit.symbol;
+}
+
+/**
  * Get the byte size of a scalar type
  */
 function sizeOf(dtype: ScalarType): number {

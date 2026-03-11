@@ -11,9 +11,10 @@ import { render } from "vitest-browser-svelte";
 import TableGrid from "../src/lib/views/TableGrid.svelte";
 import { TableView } from "../src/lib/views/table.svelte.js";
 
-function createUnit(symbol: string): Unit {
+function createUnit(symbol: string, name?: string): Unit {
 	return {
 		symbol,
+		...(name ? { name } : {}),
 		min: Number.NEGATIVE_INFINITY,
 		max: Number.POSITIVE_INFINITY,
 		step: 1,
@@ -139,24 +140,33 @@ describe("TableGrid Component", () => {
 	it("renders units in headers", async () => {
 		const defWithUnits: Table2DDefinition = {
 			...def2d,
-			x: createStaticAxis("X Axis", [1, 2, 3, 4], createUnit("RPM")),
+			x: createStaticAxis(
+				"X Axis",
+				[1, 2, 3, 4],
+				createUnit("RPM", "Revolutions per minute"),
+			),
 			y: createStaticAxis("Y Axis", [10, 20, 30, 40], createUnit("Load")),
 			z: {
 				...def2d.z,
-				unit: createUnit("%"),
+				unit: createUnit("%", "Percent"),
 			},
 		};
 		const view = new TableView(rom, defWithUnits);
 		const screen = render(TableGrid, { view, definition: defWithUnits });
 
-		const xUnit = screen.getByText("RPM");
+		const xUnit = screen.getByText("X Unit:");
 		await expect.element(xUnit).toBeVisible();
+		await expect
+			.element(screen.getByText("Revolutions per minute (RPM)"))
+			.toBeVisible();
 
-		const yUnit = screen.getByText("Load");
+		const yUnit = screen.getByText("Y Unit:");
 		await expect.element(yUnit).toBeVisible();
+		await expect.element(screen.getByText("Load")).toBeVisible();
 
-		const zUnit = screen.getByText("Unit: %");
+		const zUnit = screen.getByText("Value Unit:");
 		await expect.element(zUnit).toBeVisible();
+		await expect.element(screen.getByText("Percent (%)")).toBeVisible();
 	});
 
 	it("renders transformed values in navigation mode", async () => {
@@ -291,7 +301,13 @@ describe("TableGrid Component", () => {
 			kind: "table1d",
 			name: "1D Navigation",
 			rows: 4,
-			z: { id: "values-1d", name: "Values", address: 0, length: 4, dtype: "u8" },
+			z: {
+				id: "values-1d",
+				name: "Values",
+				address: 0,
+				length: 4,
+				dtype: "u8",
+			},
 		};
 		const view = new TableView(rom, def1d);
 		const screen = render(TableGrid, { view, definition: def1d });

@@ -169,10 +169,13 @@ type ScalingTransform = {
 	toRaw?: (physical: number) => number;
 };
 
-function unitFromSymbol(symbol: string | undefined): Unit | undefined {
+function unitFromScaling(scaling: ScalingNode | undefined): Unit | undefined {
+	const symbol = scaling?.units;
 	if (!symbol) return undefined;
+	const name = scaling?.name?.trim();
 	return {
 		symbol,
+		...(name && name !== symbol ? { name } : {}),
 		min: Number.NEGATIVE_INFINITY,
 		max: Number.POSITIVE_INFINITY,
 		step: 1,
@@ -1340,7 +1343,7 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 				const scaling = scalingName ? scalings.get(scalingName) : undefined;
 				const affine = affineFromScaling(scaling);
 				const transform = transformFromScaling(scaling);
-				const zUnit = unitFromSymbol(scaling?.units);
+				const zUnit = unitFromScaling(scaling);
 
 				const z: Table1DDefinition["z"] = {
 					id: buildParsedTableId(name, category, address),
@@ -1485,7 +1488,7 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 		if (!axisNode && template?.data && template.data.length) {
 			const scalingName = template.scaling;
 			const scaling = scalingName ? scalings.get(scalingName) : undefined;
-			const unit = unitFromSymbol(scaling?.units);
+			const unit = unitFromScaling(scaling);
 			return {
 				id: `${template.name ?? "Axis"}::static`,
 				kind: "static",
@@ -1512,7 +1515,7 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 				.filter((n) => Number.isFinite(n));
 			const inheritedValues = values.length ? values : template?.data;
 			if (!inheritedValues?.length) return undefined;
-			const unit = unitFromSymbol(scaling?.units);
+			const unit = unitFromScaling(scaling);
 			return {
 				id: `${axisNode.name ?? "Axis"}::static`,
 				kind: "static",
@@ -1531,7 +1534,7 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 		const inferredDynamicAxisEndianness = hasUnresolvedNamedScaling
 			? "be"
 			: scalingEndianness(scaling?.endian);
-		const unit = unitFromSymbol(scaling?.units);
+		const unit = unitFromScaling(scaling);
 		return {
 			id: `${axisNode.name ?? template?.name ?? "Axis"}::0x${inheritedAxisAddress.toString(16)}`,
 			kind: "dynamic",

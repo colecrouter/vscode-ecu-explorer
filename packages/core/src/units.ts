@@ -3,6 +3,7 @@ import type { Endianness, ScalarType } from "./binary.js";
 /** Scale definition for converting between raw and scaled values */
 export interface Unit {
 	symbol: string;
+	name?: string;
 	min: number;
 	max: number;
 	step: number;

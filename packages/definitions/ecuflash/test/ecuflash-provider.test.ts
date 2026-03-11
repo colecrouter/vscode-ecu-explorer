@@ -1483,16 +1483,19 @@ describe("EcuFlashProvider", () => {
 
 			// Z data should have unit symbol from scaling
 			expect(t.z.unit?.symbol).toBe("psia");
+			expect(t.z.unit?.name).toBe("psia8");
 
 			// X axis should have unit symbol from scaling
 			expect(t.x?.kind).toBe("dynamic");
 			if (t.x?.kind === "dynamic") {
 				expect(t.x.unit?.symbol).toBe("%");
+				expect(t.x.unit?.name).toBe("Throttle%");
 			}
 
 			expect(t.y?.kind).toBe("dynamic");
 			if (t.y?.kind === "dynamic") {
 				expect(t.y.unit?.symbol).toBe("RPM");
+				expect(t.y.unit?.name).toBeUndefined();
 			}
 		} finally {
 			await fs.rm(tmpDir, { recursive: true, force: true });
