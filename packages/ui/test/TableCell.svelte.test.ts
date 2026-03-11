@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
 import { render } from "vitest-browser-svelte";
 import TableCell from "../src/lib/views/TableCell.svelte";
 

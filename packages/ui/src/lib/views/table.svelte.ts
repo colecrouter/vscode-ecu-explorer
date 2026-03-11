@@ -626,9 +626,7 @@ export class TableView<T extends TableDefinition> {
 			return {
 				row: 0,
 				col: normalized.col ?? 0,
-				...(normalized.depth !== undefined
-					? { depth: normalized.depth }
-					: {}),
+				...(normalized.depth !== undefined ? { depth: normalized.depth } : {}),
 			};
 		}
 

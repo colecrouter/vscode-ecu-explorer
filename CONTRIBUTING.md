@@ -43,10 +43,9 @@ Use descriptive branch names that reflect the feature or fix (e.g., `feature/add
 
 ### 2. Before You Start
 
-- Read the relevant specification in the [`specs/`](specs/) folder
+- Read relevant specifications in the [`specs/`](specs/) folder
 - Review [`ARCHITECTURE.md`](ARCHITECTURE.md) to understand the system design
 - Check the [GitHub Issues](https://github.com/colecrouter/vscode-ecu-explorer/issues) and [v1 project board](https://github.com/users/colecrouter/projects/3) for current priorities
-- Review [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) for known limitations
 
 ### 3. Make Your Changes
 
@@ -61,12 +60,8 @@ Use descriptive branch names that reflect the feature or fix (e.g., `feature/add
 - Create tests before implementing (TDD approach)
 - Aim for code coverage
 - Test edge cases, error conditions, and boundary conditions
-- Run tests locally before committing:
-  ```bash
-  npm run check
-  npm run test
-  npm run test:coverage
-  ```
+
+See [Testing Requirements](/specs/TESTING_IDEOLOGY.md) for more details.
 
 ### 5. Code Quality Checks
 
@@ -121,23 +116,10 @@ Then create a Pull Request on GitHub:
 - **Test results**: Include coverage metrics
 - **Checklist**: Verify all items completed
 
-## Testing Requirements
+## Code Quality
 
-### Unit Tests
-
-- **Location**: `packages/*/test/` directories
-- **Coverage targets**: ≥85% line coverage, ≥75% branch coverage
-- **What to test**: Normal cases, edge cases, error cases, boundary conditions
-
-### E2E Tests
-
-- **Location**: `apps/vscode/test/` directory
-- **What to test**: User workflows, command handlers, webview interactions
-
-### Integration Tests
-
-- **Location**: `packages/*/test/` directory
-- **What to test**: Component interactions, state management, event handling
+> [!WARNING]
+> All code _must_ pass the following checks. Run these locally before pushing to avoid CI failures.
 
 ### Running Tests
 
@@ -148,16 +130,6 @@ npm run test
 # Run tests with coverage
 npm run test:coverage
 ```
-
-## Documentation
-
-### Update Documentation When Implementing Features
-
-1. **JSDoc comments**: Add proportionally detailed comments to exported/reusable functions
-1. **Update specs**: Update/correct implementation notes
-1. **Update README.md**: Add user-facing features or major changes
-1. **Update linked issue/project state**: Keep the GitHub issue *and* [project item](https://github.com/users/colecrouter/projects/3) current
-1. **Add code examples**: Include usage examples when relevant
 
 ## Code Style
 
@@ -171,6 +143,28 @@ Run formatting automatically:
 ```bash
 npm run format
 ```
+
+### Linting
+
+```bash
+npm run lint
+```
+
+### Compilation
+
+```bash
+npm run check
+```
+
+## Documentation
+
+### Update Documentation When Implementing Features
+
+1. **JSDoc comments**: Add proportionally detailed comments to exported/reusable functions
+1. **Update specs**: Update/correct implementation notes
+1. **Update README.md**: Add user-facing features or major changes
+1. **Update linked issue/project state**: Keep the GitHub issue *and* [project item](https://github.com/users/colecrouter/projects/3) current
+1. **Add code examples**: Include usage examples when relevant
 
 ## Conventions
 

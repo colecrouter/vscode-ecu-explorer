@@ -14,7 +14,7 @@ type LoggingConfiguration = Pick<
 	"get" | "has" | "inspect" | "update"
 >;
 
-const OPEN_FOLDER_ACTION = "Open Folder" as unknown as vscode.MessageItem;
+const OPEN_FOLDER_ACTION = "Open Folder";
 
 function createWorkspaceFolders(): readonly vscode.WorkspaceFolder[] {
 	return [{ uri: vscode.Uri.file("/workspace"), name: "workspace", index: 0 }];
@@ -342,8 +342,9 @@ describe("LoggingManager", () => {
 		});
 
 		it("should reveal logs folder when Open Folder is clicked", async () => {
-			vi.mocked(vscode.window.showInformationMessage).mockResolvedValue(
-				OPEN_FOLDER_ACTION,
+			vi.mocked(vscode.window.showInformationMessage).mockImplementation(
+				(async () =>
+					OPEN_FOLDER_ACTION) as typeof vscode.window.showInformationMessage,
 			);
 
 			await manager.startLog(createSamplePids());

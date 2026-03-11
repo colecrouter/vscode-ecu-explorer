@@ -489,8 +489,8 @@ describe("OpenPort2Transport", () => {
 			fakeDevice.transferIn = vi.fn(async () => ({
 				data: createIso15765ResponseFrame(testData),
 			}));
-				await expect(connection.sendFrame(testData)).resolves.toEqual(testData);
-			});
+			await expect(connection.sendFrame(testData)).resolves.toEqual(testData);
+		});
 
 		it("reassembles ISO15765 responses split across multiple adapter reads", async () => {
 			const payload = new Uint8Array([0x62, 0xf1, 0x90, 0x31, 0x32, 0x33]);
@@ -521,41 +521,41 @@ describe("OpenPort2Transport", () => {
 			await expect(connection.sendFrame(payload)).resolves.toEqual(payload);
 		});
 
-			it("initialization should use EvoScan's ISO15765 PASS_FILTER setup", async () => {
-				const reads = [
-					new TextEncoder().encode("ari main code version : 1.17.4877\r\n"),
-					new TextEncoder().encode("aro\r\n"),
-					new TextEncoder().encode("arr 16 12234\r\n"),
-					new Uint8Array(0),
-					new TextEncoder().encode("aro\r\n"),
-					new TextEncoder().encode("arf6 0 0\r\n"),
-					new Uint8Array(0),
-				];
-				fakeDevice.transferIn = vi.fn(async () => ({
-					data: new DataView((reads.shift() ?? new Uint8Array(0)).buffer),
-				}));
+		it("initialization should use EvoScan's ISO15765 PASS_FILTER setup", async () => {
+			const reads = [
+				new TextEncoder().encode("ari main code version : 1.17.4877\r\n"),
+				new TextEncoder().encode("aro\r\n"),
+				new TextEncoder().encode("arr 16 12234\r\n"),
+				new Uint8Array(0),
+				new TextEncoder().encode("aro\r\n"),
+				new TextEncoder().encode("arf6 0 0\r\n"),
+				new Uint8Array(0),
+			];
+			fakeDevice.transferIn = vi.fn(async () => ({
+				data: new DataView((reads.shift() ?? new Uint8Array(0)).buffer),
+			}));
 
-				await connection.initialize();
+			await connection.initialize();
 
-				const writes = fakeDevice.getWrites() as Uint8Array[];
-				expect(decodeAsciiPrefix(writes[0] ?? new Uint8Array(0), 9)).toBe(
-					"\r\n\r\nati\r\n",
-				);
-				expect(decodeAsciiPrefix(writes[1] ?? new Uint8Array(0), 5)).toBe(
-					"ata\r\n",
-				);
-				expect(decodeAsciiPrefix(writes[2] ?? new Uint8Array(0), 10)).toBe(
-					"atr 16\r\n",
-				);
-				expect(decodeAsciiPrefix(writes[3] ?? new Uint8Array(0), 17)).toBe(
-					"ato6 0 500000 0\r\n",
-				);
-				expect(decodeAsciiPrefix(writes[4] ?? new Uint8Array(0), 12)).toBe(
-					"atf6 1 0 4\r\n",
-				);
-			});
+			const writes = fakeDevice.getWrites() as Uint8Array[];
+			expect(decodeAsciiPrefix(writes[0] ?? new Uint8Array(0), 9)).toBe(
+				"\r\n\r\nati\r\n",
+			);
+			expect(decodeAsciiPrefix(writes[1] ?? new Uint8Array(0), 5)).toBe(
+				"ata\r\n",
+			);
+			expect(decodeAsciiPrefix(writes[2] ?? new Uint8Array(0), 10)).toBe(
+				"atr 16\r\n",
+			);
+			expect(decodeAsciiPrefix(writes[3] ?? new Uint8Array(0), 17)).toBe(
+				"ato6 0 500000 0\r\n",
+			);
+			expect(decodeAsciiPrefix(writes[4] ?? new Uint8Array(0), 12)).toBe(
+				"atf6 1 0 4\r\n",
+			);
+		});
 
-			it("receiveFrame returns data from device", async () => {
+		it("receiveFrame returns data from device", async () => {
 			// The receiveFrame method exists and can be called
 			// Note: Full data return testing requires more complex mock setup
 			expect(typeof connection.receiveFrame).toBe("function");
@@ -650,67 +650,7 @@ describe("OpenPort2Transport", () => {
 		it("initializes over serial and reads wrapped responses", async () => {
 			const path = "/dev/cu.usbmodemTAgdW56p1";
 			const payload = new Uint8Array([0x01, 0x02]);
-			let openedPort: FakeSerialPort | null = null;
-			const serial = new FakeSerialRuntime(
-				[
-					{
-						path,
-						serialNumber: "TAgdW56p",
-						manufacturer: "Tactrix",
-						friendlyName: "Tactrix OpenPort 2.0",
-						vendorId: "0403",
-						productId: "cc4d",
-					},
-				],
-					new Map([
-						[
-							path,
-							() => {
-								openedPort = new FakeSerialPort(path, [
-									new TextEncoder().encode(
-										"ari main code version : 1.17.4877\r\n",
-									),
-									new TextEncoder().encode("aro\r\n"),
-									new TextEncoder().encode("arr 16 12234\r\n"),
-									new Uint8Array(0),
-									new TextEncoder().encode("aro\r\n"),
-									new TextEncoder().encode("arf6 0 0\r\n"),
-									new Uint8Array(0),
-									new Uint8Array(createIso15765ResponseFrame(payload).buffer),
-								]);
-								return openedPort;
-							},
-						],
-					]),
-				);
-
-			const transport = new OpenPort2Transport({ serial });
-			const connection = (await transport.connect(
-				`openport2-serial:${path}`,
-			)) as TestConnection;
-				await connection.initialize();
-
-				const writes = openedPort?.getWrites() ?? [];
-				expect(decodeAsciiPrefix(writes[0] ?? new Uint8Array(0), 9)).toBe(
-					"\r\n\r\nati\r\n",
-				);
-				expect(decodeAsciiPrefix(writes[1] ?? new Uint8Array(0), 5)).toBe(
-					"ata\r\n",
-				);
-				expect(decodeAsciiPrefix(writes[2] ?? new Uint8Array(0), 10)).toBe(
-					"atr 16\r\n",
-				);
-				expect(decodeAsciiPrefix(writes[3] ?? new Uint8Array(0), 17)).toBe(
-					"ato6 0 500000 0\r\n",
-				);
-
-				await expect(connection.sendFrame(payload)).resolves.toEqual(payload);
-				await connection.close();
-			});
-
-		it("initialization should use PASS_FILTER instead of the legacy flow-control filter tuple", async () => {
-			const path = "/dev/cu.usbmodemTAgdW56p1";
-			let openedPort: FakeSerialPort | null = null;
+			let getOpenedPortWrites = (): Uint8Array[] => [];
 			const serial = new FakeSerialRuntime(
 				[
 					{
@@ -726,7 +666,7 @@ describe("OpenPort2Transport", () => {
 					[
 						path,
 						() => {
-							openedPort = new FakeSerialPort(path, [
+							const port = new FakeSerialPort(path, [
 								new TextEncoder().encode(
 									"ari main code version : 1.17.4877\r\n",
 								),
@@ -735,8 +675,11 @@ describe("OpenPort2Transport", () => {
 								new Uint8Array(0),
 								new TextEncoder().encode("aro\r\n"),
 								new TextEncoder().encode("arf6 0 0\r\n"),
+								new Uint8Array(0),
+								new Uint8Array(createIso15765ResponseFrame(payload).buffer),
 							]);
-							return openedPort;
+							getOpenedPortWrites = () => port.getWrites();
+							return port;
 						},
 					],
 				]),
@@ -748,7 +691,66 @@ describe("OpenPort2Transport", () => {
 			)) as TestConnection;
 			await connection.initialize();
 
-			const writes = openedPort?.getWrites() ?? [];
+			const writes = getOpenedPortWrites();
+			expect(decodeAsciiPrefix(writes[0] ?? new Uint8Array(0), 9)).toBe(
+				"\r\n\r\nati\r\n",
+			);
+			expect(decodeAsciiPrefix(writes[1] ?? new Uint8Array(0), 5)).toBe(
+				"ata\r\n",
+			);
+			expect(decodeAsciiPrefix(writes[2] ?? new Uint8Array(0), 10)).toBe(
+				"atr 16\r\n",
+			);
+			expect(decodeAsciiPrefix(writes[3] ?? new Uint8Array(0), 17)).toBe(
+				"ato6 0 500000 0\r\n",
+			);
+
+			await expect(connection.sendFrame(payload)).resolves.toEqual(payload);
+			await connection.close();
+		});
+
+		it("initialization should use PASS_FILTER instead of the legacy flow-control filter tuple", async () => {
+			const path = "/dev/cu.usbmodemTAgdW56p1";
+			let getOpenedPortWrites = (): Uint8Array[] => [];
+			const serial = new FakeSerialRuntime(
+				[
+					{
+						path,
+						serialNumber: "TAgdW56p",
+						manufacturer: "Tactrix",
+						friendlyName: "Tactrix OpenPort 2.0",
+						vendorId: "0403",
+						productId: "cc4d",
+					},
+				],
+				new Map([
+					[
+						path,
+						() => {
+							const port = new FakeSerialPort(path, [
+								new TextEncoder().encode(
+									"ari main code version : 1.17.4877\r\n",
+								),
+								new TextEncoder().encode("aro\r\n"),
+								new TextEncoder().encode("arr 16 12234\r\n"),
+								new Uint8Array(0),
+								new TextEncoder().encode("aro\r\n"),
+								new TextEncoder().encode("arf6 0 0\r\n"),
+							]);
+							getOpenedPortWrites = () => port.getWrites();
+							return port;
+						},
+					],
+				]),
+			);
+
+			const transport = new OpenPort2Transport({ serial });
+			const connection = (await transport.connect(
+				`openport2-serial:${path}`,
+			)) as TestConnection;
+			await connection.initialize();
+
+			const writes = getOpenedPortWrites();
 			expect(decodeAsciiPrefix(writes[4] ?? new Uint8Array(0), 12)).toBe(
 				"atf6 1 0 4\r\n",
 			);

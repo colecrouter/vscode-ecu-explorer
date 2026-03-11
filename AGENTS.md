@@ -12,6 +12,8 @@ Instructions:
 
 ## Agent Workflows
 
+> [!NOTE] All changes should be followed up _immediately_ by code quality checks. See [CONTRIBUTING.md](CONTRIBUTING.md#code-quality) for commands.
+
 ### How to Find What to Work On
 
 1. **Check GitHub Issues** - Review open issues and linked project items
