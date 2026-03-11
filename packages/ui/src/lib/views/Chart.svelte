@@ -18,10 +18,11 @@
 	 */
 
 	import { onMount, onDestroy } from "svelte";
-	import type { ChartState, HoveredCell } from "./chart-state.svelte";
+	import type { ChartState, HoveredCell } from "./chart-state.svelte.js";
 	import type { ThemeColors } from "./colorMap.js";
 	import { debounce } from "./chartUtils.js";
 	import ChartTooltip from "./ChartTooltip.svelte";
+	import type { TableSnapshot } from "@ecu-explorer/core";
 
 	/**
 	 * Component props
@@ -171,7 +172,7 @@
 	 * Build Plotly data for 2D heatmap or 3D surface
 	 * For 1D data, converts to a single-row heatmap
 	 */
-	function buildHeatmapData(snap: any) {
+	function buildHeatmapData(snap: TableSnapshot) {
 		const colorscale = getColorscale();
 
 		// Handle 2D data
@@ -186,7 +187,7 @@
 						type: "surface",
 						colorscale,
 						colorbar: {
-							title: snap.zLabel || "Value",
+							title: "Value",
 							titleside: "right",
 						},
 					},
@@ -202,7 +203,7 @@
 					type: "heatmap",
 					colorscale,
 					colorbar: {
-						title: snap.zLabel || "Value",
+						title: "Value",
 						titleside: "right",
 					},
 				},
@@ -219,7 +220,7 @@
 					type: "heatmap",
 					colorscale,
 					colorbar: {
-						title: snap.zLabel || "Value",
+						title: "Value",
 						titleside: "right",
 					},
 				},
@@ -235,7 +236,7 @@
 	 * @param snap - Chart data snapshot
 	 * @param effectiveType - The effective chart type being rendered
 	 */
-	function buildLayout(snap: any, effectiveType: string) {
+	function buildLayout(snap: TableSnapshot, effectiveType: string) {
 		// Extract theme colors with fallbacks, resolving CSS variables to actual values
 		const bgColor = resolveCssColor(
 			themeColors?.ui?.background || "transparent",
@@ -244,7 +245,6 @@
 		const gridColor = resolveCssColor(themeColors?.ui?.border || "#e0e0e0");
 
 		const baseLayout = {
-			title: snap.name,
 			autosize: true,
 			margin: { l: 60, r: 60, t: 60, b: 60 },
 			hovermode: "closest",
@@ -258,7 +258,7 @@
 			return {
 				...baseLayout,
 				xaxis: {
-					title: snap.xLabel || "X",
+					title: "X",
 					showgrid: showGrid,
 					gridcolor: gridColor,
 					linecolor: gridColor,
@@ -267,7 +267,7 @@
 					zerolinecolor: gridColor,
 				},
 				yaxis: {
-					title: snap.zLabel || "Value",
+					title: "Value",
 					showgrid: showGrid,
 					gridcolor: gridColor,
 					linecolor: gridColor,
@@ -286,19 +286,19 @@
 					...baseLayout,
 					scene: {
 						xaxis: {
-							title: snap.xLabel || "X",
+							title: "X",
 							gridcolor: gridColor,
 							titlefont: { color: fgColor },
 							tickfont: { color: fgColor },
 						},
 						yaxis: {
-							title: snap.yLabel || "Y",
+							title: "Y",
 							gridcolor: gridColor,
 							titlefont: { color: fgColor },
 							tickfont: { color: fgColor },
 						},
 						zaxis: {
-							title: snap.zLabel || "Value",
+							title: "Value",
 							gridcolor: gridColor,
 							titlefont: { color: fgColor },
 							tickfont: { color: fgColor },
@@ -312,7 +312,7 @@
 			return {
 				...baseLayout,
 				xaxis: {
-					title: snap.xLabel || "X",
+					title: "X",
 					showgrid: showGrid,
 					gridcolor: gridColor,
 					linecolor: gridColor,
@@ -321,7 +321,7 @@
 					zerolinecolor: gridColor,
 				},
 				yaxis: {
-					title: snap.yLabel || (snap.kind === "table1d" ? "Row" : "Y"),
+					title: "Y",
 					showgrid: showGrid,
 					gridcolor: gridColor,
 					linecolor: gridColor,
@@ -344,7 +344,7 @@
 			displayModeBar: false,
 			displaylogo: false,
 			scrollZoom: true,
-		};
+		} satisfies Partial<Plotly.Config>;
 	}
 
 	/**
@@ -365,14 +365,14 @@
 			if (effectiveType === "line") {
 				data = buildLineData(snapshot);
 			} else if (effectiveType === "heatmap") {
-				data = buildHeatmapData(snapshot);
+				data = buildHeatmapData(snapshot as any);
 			} else {
 				console.error("[Chart] Unsupported chart type:", effectiveType);
 				error = "Unsupported chart type";
 				return;
 			}
 
-			const layout = buildLayout(snapshot, effectiveType);
+			const layout = buildLayout(snapshot as any, effectiveType);
 			const config = buildConfig();
 
 			// Use react for updates, newPlot for initial render

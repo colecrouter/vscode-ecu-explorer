@@ -51,7 +51,9 @@
 		layer?: number;
 	};
 
-	const persistedState = vscode.getState() as PersistedGraphPanelState | undefined;
+	const persistedState = vscode.getState() as
+		| PersistedGraphPanelState
+		| undefined;
 	if (persistedState) {
 		tableId = persistedState.tableId ?? "";
 		tableName = persistedState.tableName ?? "";
@@ -219,10 +221,13 @@
 <div class="chart-viewer">
 	<header class="chart-header">
 		<div class="chart-title">
-			<h1>{tableName || "Graph Viewer"}</h1>
-			{#if romPath}
-				<span class="rom-path">{romPath}</span>
-			{/if}
+			<div class="toolbar">
+				<!-- Future toolbar buttons can go here -->
+				<h2>{tableName}</h2>
+				{#if romPath}
+					<span class="rom-path">{romPath}</span>
+				{/if}
+			</div>
 		</div>
 	</header>
 
@@ -243,6 +248,21 @@
 </div>
 
 <style>
+	.toolbar {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 1rem;
+		padding-bottom: 0.5rem;
+		border-bottom: 1px solid var(--vscode-panel-border);
+	}
+
+	.toolbar h2 {
+		margin: 0;
+		font-size: 1.2rem;
+		font-weight: 600;
+	}
+
 	.chart-viewer {
 		display: flex;
 		flex-direction: column;
@@ -265,7 +285,7 @@
 		gap: 4px;
 	}
 
-	.chart-title h1 {
+	.chart-title {
 		margin: 0;
 		font-size: 16px;
 		font-weight: 600;

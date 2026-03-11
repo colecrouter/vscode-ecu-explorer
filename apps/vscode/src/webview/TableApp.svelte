@@ -477,7 +477,7 @@
 		padding: 1rem;
 		font-family: var(--vscode-font-family, system-ui, sans-serif);
 		font-size: var(--vscode-font-size, 13px);
-		color: var(--vscode-foreground);
+		color: var(--vscode-editor-foreground);
 		background-color: var(--vscode-editor-background);
 	}
 
