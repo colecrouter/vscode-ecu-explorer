@@ -57,8 +57,6 @@ describe("LiveDataPanelManager", () => {
 	>;
 
 	beforeEach(() => {
-		vi.clearAllMocks();
-
 		mockPanel = createMockWebviewPanel("Live Data");
 
 		vi.mocked(vscode.window.createWebviewPanel).mockReturnValue(

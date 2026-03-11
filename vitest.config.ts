@@ -5,6 +5,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
 	test: {
 		setupFiles: ["./apps/vscode/test/setup.ts"],
+		clearMocks: true,
 		coverage: {
 			reporter: ["text"],
 			include: ["**/*.ts", "**/*.svelte"],
@@ -17,6 +18,7 @@ export default defineConfig({
 				plugins: [svelte()],
 				test: {
 					name: "browser",
+					clearMocks: true,
 					browser: {
 						enabled: true,
 						headless: true,
@@ -32,6 +34,7 @@ export default defineConfig({
 				plugins: [],
 				test: {
 					name: "vscode",
+					clearMocks: true,
 					environment: "node",
 					// vmForks is used here because for some reason Kilo Code breaks in several ways (Windows only) when using any other pool type
 					pool: "vmForks",
@@ -45,6 +48,7 @@ export default defineConfig({
 				plugins: [],
 				test: {
 					name: "node",
+					clearMocks: true,
 					environment: "node",
 					pool: "vmForks",
 					include: ["./**/*.{test,spec}.ts"],

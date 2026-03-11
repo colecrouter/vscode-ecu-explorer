@@ -6,11 +6,13 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
 	plugins: [sveltekit()],
 	test: {
+		clearMocks: true,
 		projects: [
 			{
 				plugins: [svelte()],
 				test: {
 					name: "browser",
+					clearMocks: true,
 					browser: {
 						enabled: true,
 						headless: true,
@@ -24,6 +26,7 @@ export default defineConfig({
 				plugins: [svelte()],
 				test: {
 					name: "node",
+					clearMocks: true,
 					environment: "node",
 					pool: "vmForks",
 					include: ["./test/**/*.{test,spec}.ts"],

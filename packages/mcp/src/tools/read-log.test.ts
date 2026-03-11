@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { McpConfig } from "../config.js";
 import * as logReader from "../log-reader.js";
 import { handleReadLog } from "./read-log.js";
@@ -24,14 +24,6 @@ const baseConfig = {
 
 describe("handleReadLog", () => {
 	let config: McpConfig;
-
-	beforeEach(() => {
-		vi.clearAllMocks();
-	});
-
-	afterEach(() => {
-		vi.clearAllMocks();
-	});
 
 	it("returns schema/details when only file is provided", async () => {
 		const tempDir = await mkdtemp(

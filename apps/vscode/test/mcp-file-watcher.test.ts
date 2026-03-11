@@ -175,9 +175,7 @@ describe("ROM File Watcher – callback logic (unit)", () => {
 	 * giving precise control over state.
 	 */
 
-	beforeEach(() => {
-		vi.clearAllMocks();
-	});
+	beforeEach(() => {});
 
 	describe("happy path – document found via editorProvider lookup", () => {
 		it("calls document.updateBytes() with new bytes read from disk", async () => {
@@ -383,7 +381,6 @@ describe("ROM File Watcher – per-document watchRomDocument logic", () => {
 	const subscriptions: unknown[] = [];
 
 	beforeEach(() => {
-		vi.clearAllMocks();
 		subscriptions.length = 0;
 
 		capturedWatcher = createCapturingFileSystemWatcher();

@@ -103,7 +103,6 @@ describe("DeviceManagerImpl", () => {
 	let mockProtocol: ReturnType<typeof createMockProtocol>;
 
 	beforeEach(() => {
-		vi.clearAllMocks();
 		manager = new DeviceManagerImpl();
 		mockConnection = createMockConnection();
 		mockProtocol = createMockProtocol();
@@ -313,7 +312,6 @@ describe("DeviceStatusBarManager", () => {
 	let createdItems: ReturnType<typeof createMockStatusBarItem>[];
 
 	beforeEach(() => {
-		vi.clearAllMocks();
 		createdItems = [];
 
 		// Mock vscode.window.createStatusBarItem to return trackable items
@@ -438,7 +436,6 @@ describe("ecuExplorer.deviceConnected context key", () => {
 	let mockProtocol: ReturnType<typeof createMockProtocol>;
 
 	beforeEach(() => {
-		vi.clearAllMocks();
 		manager = new DeviceManagerImpl();
 		mockConnection = createMockConnection();
 		mockProtocol = createMockProtocol();
@@ -495,7 +492,6 @@ describe("readRomFromDevice connection reuse", () => {
 	let mockProtocol: ReturnType<typeof createMockProtocol>;
 
 	beforeEach(() => {
-		vi.clearAllMocks();
 		manager = new DeviceManagerImpl();
 		mockConnection = createMockConnection();
 		mockProtocol = createMockProtocol();

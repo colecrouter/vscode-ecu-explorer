@@ -10,7 +10,7 @@
 
 import * as path from "node:path";
 import { EcuFlashProvider } from "@ecu-explorer/definitions-ecuflash";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
 import { readConfig } from "../src/config.js";
 
@@ -431,10 +431,6 @@ describe("Workspace Settings", () => {
 	});
 
 	describe("readConfig()", () => {
-		beforeEach(() => {
-			vi.clearAllMocks();
-		});
-
 		it("returns correct defaults when no settings are configured", () => {
 			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(
 				createDefaultingConfigurationMock(),

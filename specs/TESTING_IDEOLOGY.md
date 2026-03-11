@@ -35,6 +35,12 @@ Keep unit tests for deterministic, pure logic with explicit expected outputs.
 | **Data** | Using random or "dummy" data that doesn't reflect reality. | Using real-world fixtures (e.g., sample ROM segments, actual protocol logs). |
 | **Assertions** | `expect(service.doThing).toHaveBeenCalledWith(...)` | `expect(result).toEqual(expectedOutput)` |
 
+### Mock Lifecycle
+Vitest is configured to clear mock call history between tests. Do not add suite-level `vi.clearAllMocks()` boilerplate in `beforeEach` or `afterEach` just to compensate for test isolation.
+- Re-apply the specific return values or implementations a test needs in that test or its local setup hook.
+- Use targeted `.mockClear()` inside a test only when you intentionally want to ignore calls made during an earlier phase of that same test.
+- Prefer local `mockRestore()` or `vi.restoreAllMocks()` only when a test creates temporary spies that must be explicitly reverted.
+
 ---
 
 ## Migration Policy

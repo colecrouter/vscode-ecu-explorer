@@ -91,9 +91,6 @@ describe("Graph Windows E2E", () => {
 		});
 
 	beforeEach(() => {
-		// Clear mocks
-		vi.clearAllMocks();
-
 		// Mock vscode.window.createWebviewPanel
 		vi.mocked(vscode.window.createWebviewPanel).mockImplementation(
 			(_viewType, title) => {

@@ -14,7 +14,7 @@ type LoggingConfiguration = Pick<
 	"get" | "has" | "inspect" | "update"
 >;
 
-const OPEN_FOLDER_ACTION: vscode.MessageItem = { title: "Open Folder" };
+const OPEN_FOLDER_ACTION = "Open Folder" as unknown as vscode.MessageItem;
 
 function createWorkspaceFolders(): readonly vscode.WorkspaceFolder[] {
 	return [{ uri: vscode.Uri.file("/workspace"), name: "workspace", index: 0 }];
@@ -70,8 +70,6 @@ describe("LoggingManager", () => {
 	let manager: LoggingManager;
 
 	beforeEach(() => {
-		vi.clearAllMocks();
-
 		// Mock workspace folders
 		vi.spyOn(vscode.workspace, "workspaceFolders", "get").mockReturnValue([
 			...createWorkspaceFolders(),
@@ -479,8 +477,6 @@ describe("LoggingManager", () => {
 
 describe("openLogsFolder", () => {
 	beforeEach(() => {
-		vi.clearAllMocks();
-
 		vi.spyOn(vscode.workspace, "workspaceFolders", "get").mockReturnValue([
 			...createWorkspaceFolders(),
 		]);
