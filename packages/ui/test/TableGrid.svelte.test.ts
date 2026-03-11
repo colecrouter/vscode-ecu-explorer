@@ -54,7 +54,7 @@ describe("TableGrid Component", () => {
 		z: { id: "values-2d", name: "Values", address: 0, length: 16, dtype: "u8" },
 	};
 
-	it("should render correct number of cells for 2D table", async () => {
+	it("renders correct number of cells for 2D table", async () => {
 		const view = new TableView(rom, def2d);
 		const screen = render(TableGrid, { view, definition: def2d });
 
@@ -62,7 +62,7 @@ describe("TableGrid Component", () => {
 		await expect.poll(() => cells.all().length).toBe(16);
 	});
 
-	it("should show layer selector for 3D table", async () => {
+	it("shows layer selector for 3D table", async () => {
 		const def3d: Table3DDefinition = {
 			id: "table-3d-test",
 			kind: "table3d",
@@ -85,40 +85,55 @@ describe("TableGrid Component", () => {
 		await expect.element(select).toBeVisible();
 	});
 
-	it("should handle cell click for selection", async () => {
+	it("selects a cell on click", async () => {
 		const view = new TableView(rom, def2d);
 		const screen = render(TableGrid, { view, definition: def2d });
 
-		// Wait for cells to be rendered
 		const cells = screen.getByRole("cell");
 		await expect.poll(() => cells.all().length).toBe(16);
 
-		const cell = cells.first();
-		await cell.click();
+		await cells.nth(5).click();
 
 		expect(view.getSelectionCount()).toBe(1);
+		expect(view.isSelected({ row: 1, col: 1 })).toBe(true);
 	});
 
-	it("should navigate with arrow keys", async () => {
+	it("navigates with arrow keys in navigation mode", async () => {
 		const view = new TableView(rom, def2d);
 		const screen = render(TableGrid, { view, definition: def2d });
+		const grid = screen.getByRole("grid");
 
-		// Wait for cells to be rendered
-		const cells = screen.getByRole("cell");
-		await expect.poll(() => cells.all().length).toBe(16);
-
-		// Click the input inside the first cell directly so it receives DOM focus.
-		// The document-level keydown handler requires document.activeElement to be
-		// the <input> element, not the surrounding <td>.
-		const firstInput = cells.first().getByRole("spinbutton");
-		await firstInput.click();
-
+		await grid.click();
 		await userEvent.keyboard("{ArrowRight}");
 
 		await expect.poll(() => view.isSelected({ row: 0, col: 1 })).toBe(true);
 	});
 
-	it("should render units in headers", async () => {
+	it("extends selection with Shift+Arrow", async () => {
+		const view = new TableView(rom, def2d);
+		const screen = render(TableGrid, { view, definition: def2d });
+		const grid = screen.getByRole("grid");
+
+		await grid.click();
+		await userEvent.keyboard("{Shift>}{ArrowRight}{/Shift}");
+
+		expect(view.getSelectionCount()).toBe(2);
+		expect(view.isSelected({ row: 0, col: 0 })).toBe(true);
+		expect(view.isSelected({ row: 0, col: 1 })).toBe(true);
+	});
+
+	it("jumps to the edge with Ctrl+Arrow", async () => {
+		const view = new TableView(rom, def2d);
+		const screen = render(TableGrid, { view, definition: def2d });
+		const grid = screen.getByRole("grid");
+
+		await grid.click();
+		await userEvent.keyboard("{Control>}{ArrowRight}{/Control}");
+
+		await expect.poll(() => view.isSelected({ row: 0, col: 3 })).toBe(true);
+	});
+
+	it("renders units in headers", async () => {
 		const defWithUnits: Table2DDefinition = {
 			...def2d,
 			x: createStaticAxis("X Axis", [1, 2, 3, 4], createUnit("RPM")),
@@ -131,20 +146,17 @@ describe("TableGrid Component", () => {
 		const view = new TableView(rom, defWithUnits);
 		const screen = render(TableGrid, { view, definition: defWithUnits });
 
-		// Check for X unit in corner
 		const xUnit = screen.getByText("RPM");
 		await expect.element(xUnit).toBeVisible();
 
-		// Check for Y unit in corner
 		const yUnit = screen.getByText("Load");
 		await expect.element(yUnit).toBeVisible();
 
-		// Check for Z unit above table
 		const zUnit = screen.getByText("Unit: %");
 		await expect.element(zUnit).toBeVisible();
 	});
 
-	it("should render transformed values in cells when z.transform is defined", async () => {
+	it("renders transformed values in navigation mode", async () => {
 		const romForTransform = createROM();
 
 		const def: Table1DDefinition = {
@@ -167,11 +179,11 @@ describe("TableGrid Component", () => {
 		const view = new TableView(romForTransform, def);
 		const screen = render(TableGrid, { view, definition: def });
 
-		const input = screen.getByRole("spinbutton");
-		await expect.element(input).toHaveValue(8);
+		const display = screen.getByText("8");
+		await expect.element(display).toBeVisible();
 	});
 
-	it("should encode edits using z.inverseTransform when defined", async () => {
+	it("encodes edits using z.inverseTransform when defined", async () => {
 		const romForInverse = createROM();
 
 		const def: Table1DDefinition = {
@@ -192,9 +204,12 @@ describe("TableGrid Component", () => {
 
 		const view = new TableView(romForInverse, def);
 		const screen = render(TableGrid, { view, definition: def });
+		const grid = screen.getByRole("grid");
+
+		await grid.click();
+		await userEvent.keyboard("{Enter}");
 
 		const input = screen.getByRole("spinbutton");
-		await input.click();
 		await input.fill("20");
 		await userEvent.keyboard("{Tab}");
 
@@ -202,5 +217,23 @@ describe("TableGrid Component", () => {
 		expect(tx).not.toBeNull();
 		expect(tx?.edits[0]?.after[0]).toBe(10);
 		expect(romForInverse[0]).toBe(10);
+	});
+
+	it("moves horizontally in 1D tables with arrow keys", async () => {
+		const def1d: Table1DDefinition = {
+			id: "table-1d-nav",
+			kind: "table1d",
+			name: "1D Navigation",
+			rows: 4,
+			z: { id: "values-1d", name: "Values", address: 0, length: 4, dtype: "u8" },
+		};
+		const view = new TableView(rom, def1d);
+		const screen = render(TableGrid, { view, definition: def1d });
+		const grid = screen.getByRole("grid");
+
+		await grid.click();
+		await userEvent.keyboard("{ArrowRight}{ArrowRight}");
+
+		await expect.poll(() => view.isSelected({ row: 0, col: 2 })).toBe(true);
 	});
 });

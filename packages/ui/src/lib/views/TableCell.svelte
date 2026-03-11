@@ -5,12 +5,13 @@
 		ValidationResult,
 	} from "@ecu-explorer/core";
 	import { validateValue } from "@ecu-explorer/core";
-	import { createEventDispatcher } from "svelte";
+	import { createEventDispatcher, tick } from "svelte";
 	import { getStepForDataType, getRangeForDataType } from "./table.js";
 
 	const dispatch = createEventDispatcher<{
 		commit: { bytes: Uint8Array };
-		input: { value: string };
+		cancel: void;
+		complete: { move: "next" | "prev" | null };
 	}>();
 
 	let {
@@ -24,6 +25,9 @@
 		inverseTransform = undefined,
 		min: minConstraint = undefined,
 		max: maxConstraint = undefined,
+		isActive = false,
+		isEditing = false,
+		editSeed = undefined,
 	} = $props<{
 		bytes: Uint8Array;
 		dtype: ScalarType;
@@ -36,9 +40,11 @@
 		inverseTransform?: (physical: number) => number;
 		min?: number;
 		max?: number;
+		isActive?: boolean;
+		isEditing?: boolean;
+		editSeed?: string | undefined;
 	}>();
 
-	// Calculate step, min, and max based on data type
 	const step = $derived(getStepForDataType(dtype, scale));
 	const range = $derived(getRangeForDataType(dtype));
 	const min = $derived(
@@ -52,30 +58,58 @@
 	let isDirty = $state(false);
 	let validationError = $state<ValidationResult | null>(null);
 	const formatted = $derived(format(bytes));
+	let inputElement = $state<HTMLInputElement | undefined>(undefined);
+	let wasEditing = $state(false);
+	let previousSeed = $state<string | undefined>(undefined);
+	let skipBlurOnce = $state(false);
 
 	$effect(() => {
-		if (!isDirty) {
+		if (!isEditing && !isDirty) {
 			draft = formatted;
 			validationError = null;
 		}
 	});
 
+	$effect(() => {
+		if (!isEditing) {
+			wasEditing = false;
+			previousSeed = undefined;
+			return;
+		}
+
+		const shouldResetDraft = !wasEditing || editSeed !== previousSeed;
+		if (shouldResetDraft) {
+			draft = editSeed ?? formatted;
+			isDirty = editSeed !== undefined;
+			previousSeed = editSeed;
+			validateDraft();
+		}
+
+		wasEditing = true;
+		tick().then(() => {
+			inputElement?.focus();
+			if (editSeed === undefined) {
+				inputElement?.select();
+			} else if (inputElement) {
+				const length = inputElement.value.length;
+				inputElement.setSelectionRange(length, length);
+			}
+		});
+	});
+
 	function getDecimalPlaces(scale: number, dtype: ScalarType): number {
 		if (dtype !== "f32" && scale === 1) return 0;
 
-		// If scale is a power of 10, use that precision
 		const scaleStr = scale.toString();
 		if (scaleStr.includes(".")) {
 			const decimals = scaleStr.split(".")[1]?.length || 0;
-			return Math.min(decimals, 4); // Cap at 4 decimal places for compact display
+			return Math.min(decimals, 4);
 		}
 
-		// For other scales (e.g. 0.01953125), use up to 4 decimal places
 		if (scale < 1) {
 			return 4;
 		}
 
-		// Default to 0 for integers with scale >= 1, or 2 for floats
 		return dtype === "f32" ? 2 : 0;
 	}
 
@@ -85,7 +119,6 @@
 
 		const decimals = getDecimalPlaces(scale, dtype);
 		if (decimals > 0) {
-			// Use toFixed and then Number to remove trailing zeros
 			return Number(scaled.toFixed(decimals)).toString();
 		}
 
@@ -95,7 +128,6 @@
 	function validateDraft(): void {
 		const parsed = Number(draft);
 
-		// Create validation context with scale/offset
 		const validationContext = {
 			dtype,
 			min: minConstraint,
@@ -104,7 +136,6 @@
 			offset,
 		};
 
-		// Validate the parsed value
 		const result = validateValue(parsed, validationContext, {
 			checkDataType: true,
 			checkMinMax: true,
@@ -117,17 +148,16 @@
 		const target = event.currentTarget as HTMLInputElement;
 		draft = target.value;
 		isDirty = true;
-
-		// Run real-time validation
 		validateDraft();
-
-		dispatch("input", { value: draft });
 	}
 
-	function handleCommit(): void {
-		// Only commit if the value has actually changed
+	function commitDraft(): boolean {
+		if (!isEditing) {
+			return false;
+		}
+
 		if (!isDirty) {
-			return;
+			return true;
 		}
 
 		const parsed = Number(draft);
@@ -135,15 +165,13 @@
 			isDirty = false;
 			draft = formatted;
 			validationError = null;
-			return;
+			return true;
 		}
 
-		// Check if there's a validation error - if so, don't commit
 		if (validationError && !validationError.valid) {
-			return;
+			return false;
 		}
 
-		// Round to appropriate precision before encoding
 		const decimals = getDecimalPlaces(scale, dtype);
 		const rounded =
 			decimals > 0 ? Number(parsed.toFixed(decimals)) : Math.round(parsed);
@@ -156,9 +184,60 @@
 
 		const encoded = encodeScalar(raw, dtype, endianness);
 		dispatch("commit", { bytes: encoded });
-		dispatch("input", { value: draft });
 		isDirty = false;
 		validationError = null;
+		return true;
+	}
+
+	function completeEdit(move: "next" | "prev" | null): void {
+		dispatch("complete", { move });
+	}
+
+	function cancelEdit(): void {
+		isDirty = false;
+		draft = formatted;
+		validationError = null;
+		dispatch("cancel");
+	}
+
+	function handleKeyDown(event: KeyboardEvent): void {
+		if (!isEditing) return;
+
+		if (event.key === "Enter") {
+			event.preventDefault();
+			if (commitDraft()) {
+				skipBlurOnce = true;
+				completeEdit(null);
+			}
+			return;
+		}
+
+		if (event.key === "Tab") {
+			event.preventDefault();
+			if (commitDraft()) {
+				skipBlurOnce = true;
+				completeEdit(event.shiftKey ? "prev" : "next");
+			}
+			return;
+		}
+
+		if (event.key === "Escape") {
+			event.preventDefault();
+			skipBlurOnce = true;
+			cancelEdit();
+		}
+	}
+
+	function handleBlur(): void {
+		if (!isEditing) return;
+		if (skipBlurOnce) {
+			skipBlurOnce = false;
+			return;
+		}
+
+		if (commitDraft()) {
+			completeEdit(null);
+		}
 	}
 
 	function decodeScalar(
@@ -244,24 +323,37 @@
 </script>
 
 <div class="table-cell__container">
-	<input
-		type="number"
-		class="table-cell__input"
-		class:table-cell__input--error={validationError && !validationError.valid}
-		bind:value={draft}
-		{disabled}
-		{step}
-		{min}
-		{max}
-		data-dirty={isDirty ? "true" : undefined}
-		oninput={handleInput}
-		onblur={handleCommit}
-		style="background-color: {validationError && !validationError.valid
-			? '#fee2e2'
-			: disabled
-				? 'var(--vscode-editor-inactiveSelectionBackground)'
-				: 'transparent'}"
-	/>
+	{#if isEditing}
+		<input
+			bind:this={inputElement}
+			type="number"
+			class="table-cell__input"
+			class:table-cell__input--error={validationError && !validationError.valid}
+			bind:value={draft}
+			{disabled}
+			{step}
+			{min}
+			{max}
+			data-dirty={isDirty ? "true" : undefined}
+			oninput={handleInput}
+			onkeydown={handleKeyDown}
+			onblur={handleBlur}
+			style="background-color: {validationError && !validationError.valid
+				? '#fee2e2'
+				: disabled
+					? 'var(--vscode-editor-inactiveSelectionBackground)'
+					: 'transparent'}"
+		/>
+	{:else}
+		<div
+			class="table-cell__display"
+			class:table-cell__display--active={isActive}
+			class:table-cell__display--disabled={disabled}
+		>
+			{formatted}
+		</div>
+	{/if}
+
 	{#if validationError && !validationError.valid}
 		<div class="table-cell__error">
 			<div class="table-cell__error-message">{validationError.error}</div>
@@ -283,6 +375,7 @@
 		flex-direction: column;
 	}
 
+	.table-cell__display,
 	.table-cell__input {
 		font: inherit;
 		padding: 0.375rem 0.25rem;
@@ -291,14 +384,25 @@
 		flex: 1;
 		box-sizing: border-box;
 		text-align: center;
-
-		/* CSS-based text contrast:
-		   Compute text color based on background luminance using CSS custom properties.
-		   Uses WCAG relative luminance formula: L = 0.299*R + 0.587*G + 0.114*B
-		   Applied via color-mix() to blend white/black text based on --t gradient position.
-		   Result: white text on dark backgrounds, black on light backgrounds for readability.
-		*/
 		color: var(--cell-text-color, inherit);
+		background: transparent;
+	}
+
+	.table-cell__display {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		user-select: none;
+	}
+
+	.table-cell__display--active {
+		outline: 1px solid color-mix(in srgb, var(--vscode-focusBorder) 60%, transparent);
+		outline-offset: -1px;
+	}
+
+	.table-cell__display--disabled {
+		background-color: var(--vscode-editor-inactiveSelectionBackground);
+		color: var(--vscode-disabledForeground);
 	}
 
 	.table-cell__input:focus {
@@ -316,7 +420,6 @@
 		color: var(--vscode-disabledForeground);
 	}
 
-	/* Remove number input spinners for a cleaner look */
 	.table-cell__input::-webkit-outer-spin-button,
 	.table-cell__input::-webkit-inner-spin-button {
 		-webkit-appearance: none;

@@ -482,11 +482,12 @@ export class TableView<T extends TableDefinition> {
 		coord: CellCoordinate,
 		mode: "replace" | "add" | "range",
 	): void {
-		const key = this.coordToKey(coord);
+		const normalized = this.normalizeCoord(coord);
+		const key = this.coordToKey(normalized);
 
 		if (mode === "replace") {
 			this.selectedCells = new Set([key]);
-			this.selectionAnchor = coord;
+			this.selectionAnchor = normalized;
 			this.selectionRange = null;
 		} else if (mode === "add") {
 			if (this.selectedCells.has(key)) {
@@ -507,10 +508,12 @@ export class TableView<T extends TableDefinition> {
 		const newSelection = new Set<string>();
 		const def = this.def;
 
-		for (let row = 0; row < def.rows; row++) {
-			if (def.kind === "table1d") {
-				newSelection.add(this.coordToKey({ row, col: 0 }));
-			} else {
+		if (def.kind === "table1d") {
+			for (let col = 0; col < def.rows; col++) {
+				newSelection.add(this.coordToKey({ row: 0, col }));
+			}
+		} else {
+			for (let row = 0; row < def.rows; row++) {
 				const cols = (def as Table2DDefinition | Table3DDefinition).cols;
 				for (let col = 0; col < cols; col++) {
 					newSelection.add(this.coordToKey({ row, col }));
@@ -565,10 +568,74 @@ export class TableView<T extends TableDefinition> {
 	}
 
 	/**
+	 * Normalize incoming coordinates to the rendered grid coordinate system.
+	 *
+	 * 1D tables are displayed as a single row, so callers may reference a cell as
+	 * either `{ row: index, col: 0 }` or `{ row: 0, col: index }`. Internally we
+	 * store the rendered form: `{ row: 0, col: index }`.
+	 */
+	private normalizeCoord(coord: CellCoordinate): CellCoordinate {
+		if (this.def.kind !== "table1d") {
+			return {
+				row: coord.row,
+				col: coord.col ?? 0,
+				...(coord.depth !== undefined ? { depth: coord.depth } : {}),
+			};
+		}
+
+		const explicitCol = coord.col ?? 0;
+		const index = coord.row === 0 ? explicitCol : (coord.col ?? coord.row);
+		return {
+			row: 0,
+			col: index,
+			...(coord.depth !== undefined ? { depth: coord.depth } : {}),
+		};
+	}
+
+	/**
+	 * Convert a rendered grid coordinate to a table address.
+	 */
+	private addressForCoord(coord: CellCoordinate): number {
+		const normalized = this.normalizeCoord(coord);
+		if (this.def.kind === "table1d") {
+			return this.cellOffset(normalized.col ?? 0);
+		}
+
+		return this.cellOffset(
+			normalized.row,
+			normalized.col ?? 0,
+			normalized.depth ?? 0,
+		);
+	}
+
+	/**
+	 * Convert a rendered grid coordinate to the internal stageCell shape.
+	 */
+	private stageLocation(coord: CellCoordinate): {
+		row: number;
+		col?: number;
+		depth?: number;
+	} {
+		const normalized = this.normalizeCoord(coord);
+		if (this.def.kind === "table1d") {
+			return {
+				row: 0,
+				col: normalized.col ?? 0,
+				...(normalized.depth !== undefined
+					? { depth: normalized.depth }
+					: {}),
+			};
+		}
+
+		return normalized;
+	}
+
+	/**
 	 * Convert cell coordinate to string key
 	 */
 	private coordToKey(coord: CellCoordinate): string {
-		return `${coord.row},${coord.col ?? 0},${coord.depth ?? 0}`;
+		const normalized = this.normalizeCoord(coord);
+		return `${normalized.row},${normalized.col ?? 0},${normalized.depth ?? 0}`;
 	}
 
 	/**
@@ -591,11 +658,13 @@ export class TableView<T extends TableDefinition> {
 	 */
 	private expandRange(range: SelectionRange): Set<string> {
 		const cells = new Set<string>();
-		const minRow = Math.min(range.start.row, range.end.row);
-		const maxRow = Math.max(range.start.row, range.end.row);
-		const minCol = Math.min(range.start.col ?? 0, range.end.col ?? 0);
-		const maxCol = Math.max(range.start.col ?? 0, range.end.col ?? 0);
-		const depth = range.start.depth;
+		const start = this.normalizeCoord(range.start);
+		const end = this.normalizeCoord(range.end);
+		const minRow = Math.min(start.row, end.row);
+		const maxRow = Math.max(start.row, end.row);
+		const minCol = Math.min(start.col ?? 0, end.col ?? 0);
+		const maxCol = Math.max(start.col ?? 0, end.col ?? 0);
+		const depth = start.depth;
 
 		for (let row = minRow; row <= maxRow; row++) {
 			for (let col = minCol; col <= maxCol; col++) {
@@ -636,7 +705,7 @@ export class TableView<T extends TableDefinition> {
 			const rowData: number[] = [];
 			for (let col = minCol; col <= maxCol; col++) {
 				if (this.isSelected({ row, col })) {
-					const address = this.cellOffset(row, col, 0);
+					const address = this.addressForCoord({ row, col });
 					const bytes = this.readBytes(address);
 					const value = this.decodeScalarValue(bytes);
 					rowData.push(value);
@@ -681,7 +750,7 @@ export class TableView<T extends TableDefinition> {
 		for (const coord of selected) {
 			// Set to 0 (or could use min value from definition)
 			const zeroBytes = this.encodeScalarValue(0);
-			this.stageCell(coord, zeroBytes);
+			this.stageCell(this.stageLocation(coord), zeroBytes);
 		}
 
 		return this.commit(`Clear ${selected.length} cells`);
@@ -711,7 +780,7 @@ export class TableView<T extends TableDefinition> {
 		const maxRow = def.rows - 1;
 		const maxCol =
 			def.kind === "table1d"
-				? 0
+				? def.rows - 1
 				: (def as Table2DDefinition | Table3DDefinition).cols - 1;
 
 		const tsvRows = tsv.split("\n");
@@ -742,7 +811,10 @@ export class TableView<T extends TableDefinition> {
 
 				const bytes = this.encodeScalarValue(scaledValue);
 
-				this.stageCell({ row: targetRow, col: targetCol, depth }, bytes);
+				this.stageCell(
+					this.stageLocation({ row: targetRow, col: targetCol, depth }),
+					bytes,
+				);
 
 				if (targetRow < pastedMinRow) pastedMinRow = targetRow;
 				if (targetRow > pastedMaxRow) pastedMaxRow = targetRow;
@@ -791,11 +863,7 @@ export class TableView<T extends TableDefinition> {
 		// Get current values (scaled)
 		const values: number[] = [];
 		for (const coord of selected) {
-			const address = this.cellOffset(
-				coord.row,
-				coord.col ?? 0,
-				coord.depth ?? 0,
-			);
+			const address = this.addressForCoord(coord);
 			const bytes = this.readBytes(address);
 			const raw = this.decodeScalarValue(bytes);
 			values.push(raw);
@@ -817,7 +885,7 @@ export class TableView<T extends TableDefinition> {
 			// Unscale before encoding
 			const newRaw = newScaled;
 			const bytes = this.encodeScalarValue(newRaw);
-			this.stageCell(coord, bytes);
+			this.stageCell(this.stageLocation(coord), bytes);
 		}
 
 		// Commit
@@ -855,11 +923,7 @@ export class TableView<T extends TableDefinition> {
 		// Get current values (scaled)
 		const currentValues: number[] = [];
 		for (const coord of selected) {
-			const address = this.cellOffset(
-				coord.row,
-				coord.col ?? 0,
-				coord.depth ?? 0,
-			);
+			const address = this.addressForCoord(coord);
 			const bytes = this.readBytes(address);
 			const raw = this.decodeScalarValue(bytes);
 			currentValues.push(raw);
@@ -908,7 +972,7 @@ export class TableView<T extends TableDefinition> {
 			// Unscale before encoding
 			const newRaw = constrainedValue;
 			const bytes = this.encodeScalarValue(newRaw);
-			this.stageCell(coord, bytes);
+			this.stageCell(this.stageLocation(coord), bytes);
 		}
 
 		// Commit
@@ -944,11 +1008,7 @@ export class TableView<T extends TableDefinition> {
 		// Get current values (scaled)
 		const values: number[] = [];
 		for (const coord of selected) {
-			const address = this.cellOffset(
-				coord.row,
-				coord.col ?? 0,
-				coord.depth ?? 0,
-			);
+			const address = this.addressForCoord(coord);
 			const bytes = this.readBytes(address);
 			const raw = this.decodeScalarValue(bytes);
 			values.push(raw);
@@ -971,7 +1031,7 @@ export class TableView<T extends TableDefinition> {
 			// Unscale before encoding
 			const newRaw = newScaled;
 			const bytes = this.encodeScalarValue(newRaw);
-			this.stageCell(coord, bytes);
+			this.stageCell(this.stageLocation(coord), bytes);
 		}
 
 		// Commit
@@ -1013,11 +1073,7 @@ export class TableView<T extends TableDefinition> {
 		// Get current values (scaled)
 		const values: number[] = [];
 		for (const coord of selected) {
-			const address = this.cellOffset(
-				coord.row,
-				coord.col ?? 0,
-				coord.depth ?? 0,
-			);
+			const address = this.addressForCoord(coord);
 			const bytes = this.readBytes(address);
 			const raw = this.decodeScalarValue(bytes);
 			values.push(raw);
@@ -1038,7 +1094,7 @@ export class TableView<T extends TableDefinition> {
 			// Unscale before encoding
 			const newRaw = newScaled;
 			const bytes = this.encodeScalarValue(newRaw);
-			this.stageCell(coord, bytes);
+			this.stageCell(this.stageLocation(coord), bytes);
 		}
 
 		// Commit

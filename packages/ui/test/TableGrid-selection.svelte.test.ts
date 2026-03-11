@@ -249,16 +249,16 @@ describe("TableGrid Selection Integration", () => {
 			const def = create1DTableDef(10);
 			const view = new TableView(rom, def);
 
-			// Select range in 1D table
-			view.selectCell({ row: 2, col: 0 }, "replace");
-			view.selectCell({ row: 5, col: 0 }, "range");
+			// Select range in the rendered 1D row
+			view.selectCell({ row: 0, col: 2 }, "replace");
+			view.selectCell({ row: 0, col: 5 }, "range");
 
 			// Should select 4 rows
 			expect(view.getSelectionCount()).toBe(4);
-			expect(view.isSelected({ row: 2, col: 0 })).toBe(true);
-			expect(view.isSelected({ row: 3, col: 0 })).toBe(true);
-			expect(view.isSelected({ row: 4, col: 0 })).toBe(true);
-			expect(view.isSelected({ row: 5, col: 0 })).toBe(true);
+			expect(view.isSelected({ row: 0, col: 2 })).toBe(true);
+			expect(view.isSelected({ row: 0, col: 3 })).toBe(true);
+			expect(view.isSelected({ row: 0, col: 4 })).toBe(true);
+			expect(view.isSelected({ row: 0, col: 5 })).toBe(true);
 		});
 
 		it("should handle 2D table selection", () => {

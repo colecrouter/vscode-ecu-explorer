@@ -43,8 +43,10 @@ describe("TableGrid cell editing — index correctness", () => {
 			await expect(() => cells.all().length).toBe(8);
 
 			// Edit the 4th cell (colIndex=3)
-			const targetInput = cells.nth(3).getByRole("spinbutton");
-			await targetInput.click();
+			const targetCell = cells.nth(3);
+			await targetCell.click();
+			await userEvent.keyboard("{Enter}");
+			const targetInput = targetCell.getByRole("spinbutton");
 			await targetInput.fill("99");
 			await userEvent.keyboard("{Tab}");
 
@@ -98,8 +100,10 @@ describe("TableGrid cell editing — index correctness", () => {
 			await expect(() => cells.all().length).toBe(5);
 
 			// Edit the last cell (colIndex=4)
-			const lastInput = cells.nth(4).getByRole("spinbutton");
-			await lastInput.click();
+			const lastCell = cells.nth(4);
+			await lastCell.click();
+			await userEvent.keyboard("{Enter}");
+			const lastInput = lastCell.getByRole("spinbutton");
 			await lastInput.fill("127");
 			await userEvent.keyboard("{Tab}");
 
@@ -148,8 +152,10 @@ describe("TableGrid cell editing — index correctness", () => {
 			await expect(() => cells.all().length).toBe(16);
 
 			// row=1, col=2 → linear index = 1*4+2 = 6 (7th cell)
-			const targetInput = cells.nth(6).getByRole("spinbutton");
-			await targetInput.click();
+			const targetCell = cells.nth(6);
+			await targetCell.click();
+			await userEvent.keyboard("{Enter}");
+			const targetInput = targetCell.getByRole("spinbutton");
 			await targetInput.fill("55");
 			await userEvent.keyboard("{Tab}");
 

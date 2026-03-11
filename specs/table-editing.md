@@ -6,50 +6,63 @@ Enable users to edit ROM calibration table values directly in the VS Code grid i
 
 ### Current State
 
-- Read-only grid rendering with [`TableGrid.svelte`](../packages/ui/src/lib/views/TableGrid.svelte)
-- [`TableCell.svelte`](../packages/ui/src/lib/views/TableCell.svelte) component exists but displays values only
-- No cell editing UI or edit state management
-- No undo/redo stack
+- [`TableGrid.svelte`](../packages/ui/src/lib/views/TableGrid.svelte) already renders editable numeric cells
+- Clipboard selection operations exist (`Ctrl/Cmd+A`, `C`, `X`, `V`, `Escape`)
+- Undo/redo exists at the webview and extension layers
+- Keyboard navigation is inconsistent because cells are always native `<input type="number">` elements
+- Native input behavior currently competes with intended grid navigation hotkeys
 
 ### User Value Proposition
 
 - Edit ROM values directly in VS Code without external tools
-- Keyboard-first editing (Tab, Enter, Escape)
+- Spreadsheet-style keyboard navigation that feels intentional rather than browser-driven
+- Clear separation between moving around the grid and editing a cell value
 - Real-time validation feedback
 - Full undo/redo support (Ctrl+Z / Ctrl+Y)
 - Reactive graph updates on cell changes
 
 ### Acceptance Criteria
 
-- [ ] Click cell to enter edit mode
-- [ ] Type new value and press Enter to commit
-- [ ] Press Escape to cancel edit
-- [ ] Tab/Shift+Tab navigate between cells
+- [ ] Grid has an explicit active cell independent of native browser input focus
+- [ ] Table navigation uses a dedicated navigation mode and does not rely on native `<input>` arrow-key behavior
+- [ ] Arrow keys move the active cell in navigation mode
+- [ ] Shift+Arrow extends the current selection
+- [ ] Ctrl/Cmd+Arrow jumps to the edge of the current row or column
+- [ ] Enter starts edit mode from navigation mode
+- [ ] Typing a numeric character, decimal point, or minus sign starts edit mode and seeds the draft value
+- [ ] Enter in edit mode commits the value
+- [ ] Escape in edit mode cancels the value change and returns to navigation mode
+- [ ] Tab/Shift+Tab commit and move next/previous cell with wrapping
 - [ ] Validation errors prevent commit
 - [ ] Undo/redo restores previous values
 - [ ] Graph updates reactively on cell change
 - [ ] Multiple cells can be edited in sequence
-- [ ] Edit state persists across navigation
-- [ ] Keyboard shortcuts work (Ctrl+Z, Ctrl+Y)
+- [ ] 1D and 2D tables use consistent navigation semantics
 
 ---
 
 ## Architecture
 
-### Data Flow: Edit → Validation → Commit → Broadcast
+### Data Flow: Navigation → Edit → Validation → Commit → Broadcast
 
 ```
-User clicks cell
+User clicks cell or uses navigation hotkeys
     ↓
-TableCell enters edit mode (shows input)
+TableGrid sets active cell
     ↓
-User types value and presses Enter
+User presses Enter or types a value
+    ↓
+TableCell enters edit mode for the active cell
+    ↓
+User edits draft value
+    ↓
+User presses Enter / Tab / Shift+Tab to commit
     ↓
 Webview sends "cellEdit" message to host
     ↓
 Host validates value (range, dtype, monotonic)
     ↓
-Host updates ROM bytes via TableView.set()
+Host updates ROM bytes
     ↓
 Host sends "cellCommit" or "error" message
     ↓
@@ -65,15 +78,16 @@ Undo/redo stack updated on host
 
 #### [`TableCell.svelte`](../packages/ui/src/lib/views/TableCell.svelte)
 
-**Current**: Displays value only
+**Current**: Always renders as a numeric input and commits primarily on blur
 
 **Changes**:
 
-- Add `isEditing` state (boolean)
+- Render plain cell content in navigation mode
+- Render an input only for the active editing cell
+- Accept external `isActive` / `isEditing` state from the grid
 - Add `editValue` state (string)
 - Add `error` state (string | null)
-- Render input field when `isEditing === true`
-- Handle keyboard events (Enter, Escape, Tab)
+- Handle keyboard events for edit mode only (Enter, Escape, Tab, Shift+Tab)
 - Show error message below cell if validation fails
 - Highlight cell with error color on validation failure
 
@@ -85,7 +99,10 @@ interface TableCellProps {
   row: number;
   col: number;
   onEdit: (row: number, col: number, value: number) => Promise<void>;
-  onNavigate: (direction: "up" | "down" | "left" | "right") => void;
+  onNavigate: (
+    direction: "up" | "down" | "left" | "right" | "next" | "prev"
+  ) => void;
+  isActive?: boolean;
   isEditing?: boolean;
   error?: string;
 }
@@ -97,12 +114,11 @@ interface TableCellProps {
 
 **Changes**:
 
-- Add `editingCell` state (row, col, oldValue)
-- Add `undoStack` and `redoStack` (local, for UI state only)
-- Add `applyEdit(row, col, value)` method
-- Add `undo()` and `redo()` methods
-- Add `cancelEdit()` method
-- Emit events for edit operations
+- Track `activeCell` separately from `editingCell`
+- Track navigation mode vs edit mode
+- Normalize 1D and 2D coordinates so the rendered grid owns navigation semantics
+- Add helpers for next/previous cell movement and edge jumps
+- Keep undo/redo methods and commit behavior aligned with host persistence
 
 **New Methods**:
 
@@ -111,19 +127,27 @@ export function applyEdit(row: number, col: number, value: number): void
 export function undo(): void
 export function redo(): void
 export function cancelEdit(): void
+export function setActiveCell(row: number, col: number, depth?: number): void
+export function moveActiveCell(
+  direction: "up" | "down" | "left" | "right" | "next" | "prev",
+  options?: { extendSelection?: boolean; jumpToEdge?: boolean }
+): void
 export function getEditingCell(): { row: number; col: number; oldValue: number } | null
 ```
 
 #### [`TableGrid.svelte`](../packages/ui/src/lib/views/TableGrid.svelte)
 
-**Current**: Renders grid with read-only cells
+**Current**: Renders the grid and partially intercepts keyboard shortcuts at document level
 
 **Changes**:
 
+- Own the active-cell model for the whole table
+- Own navigation mode keyboard handling at the grid level
+- Enter edit mode only for the active cell
 - Pass `onEdit` callback to TableCell
 - Pass `onNavigate` callback to TableCell
-- Handle keyboard shortcuts (Ctrl+Z, Ctrl+Y)
-- Manage cell focus and navigation
+- Handle keyboard shortcuts for navigation, selection growth, and edge jumps
+- Manage active cell, selection, and focus transitions
 - Debounce graph re-renders on rapid edits
 
 **New Event Handlers**:
@@ -132,6 +156,9 @@ export function getEditingCell(): { row: number; col: number; oldValue: number }
 function handleCellEdit(row: number, col: number, value: number): void
 function handleCellNavigate(direction: "up" | "down" | "left" | "right"): void
 function handleKeyDown(event: KeyboardEvent): void
+function handleJumpToEdge(direction: "up" | "down" | "left" | "right"): void
+function enterEditMode(seedValue?: string): void
+function exitEditMode(options?: { commit?: boolean; move?: "next" | "prev" | "down" }): void
 ```
 
 ### Webview Message Types
@@ -248,11 +275,11 @@ class UndoRedoManager {
 }
 ```
 
-**Webview-Side Stack** (for UI state only):
+**Webview-Side State**:
 
-- Track which cell is being edited
-- Maintain local edit history for keyboard navigation
-- Sync with host on commit/undo/redo
+- Track active cell and editing cell separately
+- Keep transient draft/error state local to the editing cell
+- Sync committed edits with the host on commit/undo/redo
 
 ---
 
@@ -265,19 +292,19 @@ None (all modifications to existing files)
 ### Files to Modify
 
 1. **[`packages/ui/src/lib/views/TableCell.svelte`](../packages/ui/src/lib/views/TableCell.svelte)**
-   - Add edit mode UI
-   - Handle keyboard events
+   - Split navigation-mode display from edit-mode input
+   - Handle edit-mode keyboard events
    - Show validation errors
 
 2. **[`packages/ui/src/lib/views/table.svelte.ts`](../packages/ui/src/lib/views/table.svelte.ts)**
-   - Add edit state management
-   - Add undo/redo methods
-   - Emit edit events
+   - Add active-cell and navigation state management
+   - Normalize 1D/2D navigation coordinates
+   - Add movement helpers, including edge jumps
 
 3. **[`packages/ui/src/lib/views/TableGrid.svelte`](../packages/ui/src/lib/views/TableGrid.svelte)**
-   - Pass callbacks to TableCell
-   - Handle keyboard shortcuts
-   - Manage cell focus
+   - Pass callbacks and mode state to TableCell
+   - Handle navigation-mode keyboard shortcuts
+   - Manage active cell, edit mode, and selection expansion
 
 4. **[`apps/vscode/src/extension.ts`](../apps/vscode/src/extension.ts)**
    - Add `UndoRedoManager` class
@@ -480,11 +507,15 @@ describe("validateCellValue()", () => {
 
 ```typescript
 describe("TableCell editing", () => {
-  it("enters edit mode on click", () => {
-    // Render cell, click, verify input visible
+  it("renders plain text in navigation mode", () => {
+    // Render cell, verify input is not active until editing begins
   });
 
-  it("commits value on Enter", () => {
+  it("enters edit mode on Enter", () => {
+    // Focus active cell, press Enter, verify input appears
+  });
+
+  it("commits value on Enter in edit mode", () => {
     // Type value, press Enter, verify onEdit called
   });
 
@@ -492,8 +523,8 @@ describe("TableCell editing", () => {
     // Type value, press Escape, verify onEdit not called
   });
 
-  it("navigates on Tab", () => {
-    // Press Tab, verify onNavigate called with "right"
+  it("commits and navigates on Tab", () => {
+    // Press Tab, verify onEdit called and onNavigate called with "next"
   });
 
   it("shows validation error", () => {
@@ -502,6 +533,18 @@ describe("TableCell editing", () => {
 });
 
 describe("TableGrid undo/redo", () => {
+  it("moves active cell on Arrow keys in navigation mode", () => {
+    // Focus cell, press ArrowRight, verify active cell changed
+  });
+
+  it("extends selection on Shift+Arrow", () => {
+    // Focus cell, press Shift+ArrowRight, verify range selection
+  });
+
+  it("jumps to row edge on Ctrl+ArrowRight", () => {
+    // Focus interior cell, press Ctrl+ArrowRight, verify last column selected
+  });
+
   it("undoes cell edit on Ctrl+Z", () => {
     // Edit cell, press Ctrl+Z, verify value reverted
   });
@@ -546,11 +589,14 @@ describe("Table editing flow", () => {
 
 ### Keyboard Navigation
 
-- **Tab**: Move to next cell (right, then down)
-- **Shift+Tab**: Move to previous cell (left, then up)
-- **Arrow Keys**: Navigate in edit mode
-- **Enter**: Commit edit
-- **Escape**: Cancel edit
+- **Navigation mode**: Arrow keys move the active cell
+- **Shift+Arrow**: Extend selection from the anchor cell
+- **Ctrl/Cmd+Arrow**: Jump to the edge of the row or column
+- **Enter**: Enter edit mode for the active cell
+- **Typing numeric input**: Replace current cell display with a draft and enter edit mode
+- **Tab**: Commit and move to next cell (right, then wrap)
+- **Shift+Tab**: Commit and move to previous cell (left, then wrap)
+- **Escape**: Cancel edit and return to navigation mode
 - **Ctrl+Z**: Undo
 - **Ctrl+Y**: Redo
 
@@ -707,9 +753,15 @@ view.clearSelectedCells(); // Sets all to 0
 
 | Shortcut | Operation | Description |
 |----------|-----------|-------------|
+| Arrow Keys | Move Active Cell | Move active cell in navigation mode |
+| Shift+Arrow | Extend Selection | Expand selection one cell in the pressed direction |
+| Ctrl+Arrow / Cmd+Arrow | Jump to Edge | Jump to first/last cell in row or column |
+| Enter | Enter Edit Mode | Edit the active cell |
+| Tab / Shift+Tab | Commit + Move | Commit current edit and move next/previous with wrapping |
+| Escape | Cancel Edit / Clear Selection | Cancel edit mode; in navigation mode clears selection |
 | Ctrl+C / Cmd+C | Copy | Copy selected cells to clipboard as TSV |
 | Ctrl+X / Cmd+X | Cut | Copy to clipboard and clear selected cells |
-| Ctrl+V / Cmd+V | Paste | *(Not implemented)* Paste from clipboard |
+| Ctrl+V / Cmd+V | Paste | Paste clipboard TSV into the current selection anchor |
 | Ctrl+A / Cmd+A | Select All | Select all cells in table |
 | Delete | Clear | Clear selected cells (set to 0) |
 
