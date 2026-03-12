@@ -8,6 +8,7 @@
  * - Panel persistence across VSCode reload
  */
 
+import * as path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
 import { GraphPanelManager } from "../src/graph-panel-manager.js";
@@ -656,8 +657,7 @@ describe("Graph Windows E2E", () => {
 			expect(mockOpenCustomDocument).toHaveBeenCalledWith(
 				expect.objectContaining({
 					scheme: "file",
-					path: "/test/reload.hex",
-					fsPath: "/test/reload.hex",
+					fsPath: path.normalize("/test/reload.hex"),
 				}),
 				{
 					backupId: undefined,

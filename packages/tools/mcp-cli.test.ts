@@ -36,7 +36,7 @@ afterEach(async () => {
 describe("resolveCliPath", () => {
 	it("resolves relative paths from the invocation directory", () => {
 		expect(resolveCliPath("./rom.hex", "/workspace/root")).toBe(
-			path.join("/workspace/root", "rom.hex"),
+			path.resolve("/workspace/root", "rom.hex"),
 		);
 	});
 

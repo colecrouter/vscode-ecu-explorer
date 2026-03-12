@@ -399,6 +399,45 @@ describe("OpenPort2Transport", () => {
 			await connection.close();
 		});
 
+		it("falls back to matching serial port for USB IDs when USB claim fails", async () => {
+			const path = "/dev/cu.usbmodemTAgdW56p1";
+			const fakeDevice = createFakeUSBDevice({
+				vendorId: 0x0403,
+				productId: 0xcc4d,
+				serialNumber: "OP2-005",
+				productName: "Tactrix OpenPort 2.0",
+			});
+			fakeDevice.claimInterface = vi.fn(async () => {
+				throw new Error("Failed to claim interface");
+			});
+			const fakeUsb = new FakeUSB([fakeDevice]);
+
+			const serial = new FakeSerialRuntime(
+				[
+					{
+						path,
+						serialNumber: "OP2-005",
+						manufacturer: "tactrix",
+						friendlyName: "Tactrix OpenPort 2.0",
+						vendorId: "0403",
+						productId: "cc4d",
+					},
+				],
+				new Map([[path, () => new FakeSerialPort(path, [new Uint8Array(0)])]]),
+			);
+
+			const transport = new OpenPort2Transport({
+				usb: fakeUsb,
+				serial,
+			});
+
+			const connection = (await transport.connect(
+				"openport2:OP2-005",
+			)) as TestConnection;
+			expect(connection.deviceInfo.id).toBe(`openport2-serial:${path}`);
+			await connection.close();
+		});
+
 		it("connects to a serial-backed device by its ID", async () => {
 			const path = "/dev/cu.usbmodemTAgdW56p1";
 			const serial = new FakeSerialRuntime(

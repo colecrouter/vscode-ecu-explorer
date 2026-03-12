@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import type { DefinitionProvider, ROMDefinition } from "@ecu-explorer/core";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import * as vscode from "vscode";
@@ -123,7 +124,7 @@ describe("table open definition identity", () => {
 		);
 
 		expect(openTableSpy).toHaveBeenCalledWith(
-			expect.objectContaining({ fsPath: "/test/rom.hex" }),
+			expect.objectContaining({ fsPath: path.normalize("/test/rom.hex") }),
 			"shared-label::ignition::0x2000",
 			"Shared Label",
 			expect.objectContaining({ preview: true }),
@@ -142,7 +143,7 @@ describe("table open definition identity", () => {
 		);
 
 		expect(openTableSpy).toHaveBeenCalledWith(
-			expect.objectContaining({ fsPath: "/test/rom.hex" }),
+			expect.objectContaining({ fsPath: path.normalize("/test/rom.hex") }),
 			"shared-label::ignition::0x2000",
 			"Shared Label",
 			expect.objectContaining({ preview: true }),

@@ -5,6 +5,7 @@
  * column filtering, openLogsFolder, and error cases.
  */
 
+import * as path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
 import { LoggingManager, openLogsFolder } from "../src/logging-manager.js";
@@ -123,7 +124,7 @@ describe("LoggingManager", () => {
 
 			const createDirCall = vi.mocked(vscode.workspace.fs.createDirectory).mock
 				.calls[0];
-			expect(createDirCall?.[0].fsPath).toContain("data/logs");
+			expect(createDirCall?.[0].fsPath).toContain(path.normalize("data/logs"));
 		});
 
 		it("should use absolute logsFolder setting", async () => {
@@ -135,7 +136,7 @@ describe("LoggingManager", () => {
 
 			const createDirCall = vi.mocked(vscode.workspace.fs.createDirectory).mock
 				.calls[0];
-			expect(createDirCall?.[0].fsPath).toBe("/absolute/logs");
+			expect(createDirCall?.[0].fsPath).toBe(path.normalize("/absolute/logs"));
 		});
 	});
 
@@ -508,7 +509,7 @@ describe("openLogsFolder", () => {
 
 		const createDirCall = vi.mocked(vscode.workspace.fs.createDirectory).mock
 			.calls[0];
-		expect(createDirCall?.[0].fsPath).toContain("data/logs");
+		expect(createDirCall?.[0].fsPath).toContain(path.normalize("data/logs"));
 	});
 
 	it("should use absolute logsFolder path as-is", async () => {
@@ -520,6 +521,8 @@ describe("openLogsFolder", () => {
 
 		const createDirCall = vi.mocked(vscode.workspace.fs.createDirectory).mock
 			.calls[0];
-		expect(createDirCall?.[0].fsPath).toBe("/absolute/path/logs");
+		expect(createDirCall?.[0].fsPath).toBe(
+			path.normalize("/absolute/path/logs"),
+		);
 	});
 });

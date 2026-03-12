@@ -1137,6 +1137,12 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 							index.set(normalizedShort, file);
 						}
 					}
+					const fileXmlId = await readRomXmlId(file);
+					if (!fileXmlId) continue;
+					const normalizedXmlId = normalizeLookupToken(fileXmlId);
+					if (normalizedXmlId && !index.has(normalizedXmlId)) {
+						index.set(normalizedXmlId, file);
+					}
 				}
 			}
 			this.includeAliasIndex = index;
@@ -1216,15 +1222,6 @@ export class EcuFlashProvider implements ROMDefinitionProvider {
 						searchRoots,
 					);
 				}
-			}
-
-			if (this.additionalSearchPaths.length === 0) {
-				includeXmlIdLookupCache.set(normalizedLookupToken, null);
-				throw formatIncludeResolutionError(
-					includeToken,
-					parentDefinitionPath,
-					searchRoots,
-				);
 			}
 
 			const lowerBasenames = new Set(

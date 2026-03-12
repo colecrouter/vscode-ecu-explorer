@@ -136,8 +136,12 @@ describe("ROM Save Integration Test", () => {
 
 	it("should handle save errors gracefully", async () => {
 		// Try to save to invalid path
+		const invalidPath =
+			process.platform === "win32"
+				? "Z:\\this\\path\\does\\not\\exist\\rom.hex"
+				: "/invalid/path/that/does/not/exist/rom.hex";
 		const result = await saveManager.save({
-			romPath: "/invalid/path/that/does/not/exist/rom.hex",
+			romPath: invalidPath,
 			romData: new Uint8Array([1, 2, 3]),
 		});
 

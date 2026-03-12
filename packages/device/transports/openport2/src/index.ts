@@ -1407,9 +1407,63 @@ export class OpenPort2Transport implements DeviceTransport {
 		const serialPorts = [...(await this.serial.listPorts())].sort(
 			compareSerialPortPreference,
 		);
-		const portInfo = serialPorts.find(
-			(entry) =>
-				isMatchingSerialPort(entry) && serialPortToInfo(entry).id === deviceId,
+		const matchingSerialPorts = serialPorts.filter((entry) =>
+			isMatchingSerialPort(entry),
+		);
+
+		if (deviceId.startsWith("openport2-serial:")) {
+			const portInfo = matchingSerialPorts.find(
+				(entry) => serialPortToInfo(entry).id === deviceId,
+			);
+			if (portInfo == null) {
+				return null;
+			}
+
+			const port = await this.serial.openPort(portInfo.path);
+			if (!port.isOpen) {
+				await port.open();
+			}
+			return new OpenPort2SerialConnection(port, serialPortToInfo(portInfo));
+		}
+
+		if (deviceId.startsWith("openport2:")) {
+			const serialId = deviceId.slice("openport2:".length);
+			if (serialId !== "unknown") {
+				const portInfo = matchingSerialPorts.find(
+					(entry) =>
+						entry.serialNumber != null && entry.serialNumber === serialId,
+				);
+				if (portInfo != null) {
+					const port = await this.serial.openPort(portInfo.path);
+					if (!port.isOpen) {
+						await port.open();
+					}
+					return new OpenPort2SerialConnection(
+						port,
+						serialPortToInfo(portInfo),
+					);
+				}
+			}
+
+			if (matchingSerialPorts.length === 1) {
+				const portInfo = matchingSerialPorts[0];
+				if (portInfo != null) {
+					const port = await this.serial.openPort(portInfo.path);
+					if (!port.isOpen) {
+						await port.open();
+					}
+					return new OpenPort2SerialConnection(
+						port,
+						serialPortToInfo(portInfo),
+					);
+				}
+			}
+
+			return null;
+		}
+
+		const portInfo = matchingSerialPorts.find(
+			(entry) => serialPortToInfo(entry).id === deviceId,
 		);
 		if (portInfo == null) {
 			return null;
