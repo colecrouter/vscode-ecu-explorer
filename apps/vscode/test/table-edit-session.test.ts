@@ -60,7 +60,29 @@ describe("TableEditSession", () => {
 
 		session.markSaved();
 
-		expect(session.undoRedoManager.isAtSavePoint()).toBe(true);
+		expect(session.isAtSavePoint()).toBe(true);
+	});
+
+	it("marks save point only for matching ROM documents", () => {
+		const session = makeSession();
+		const otherRomDocument = new RomDocument(
+			vscode.Uri.file("/test/other.bin"),
+			new Uint8Array([0x10]),
+		);
+
+		session.undoRedoManager.push({
+			row: 0,
+			col: 0,
+			oldValue: new Uint8Array([0x10]),
+			newValue: new Uint8Array([0xee]),
+			timestamp: Date.now(),
+		});
+
+		expect(session.markSavedIfForRom(otherRomDocument)).toBe(false);
+		expect(session.isAtSavePoint()).toBe(false);
+
+		expect(session.markSavedIfForRom(session.romDocument)).toBe(true);
+		expect(session.isAtSavePoint()).toBe(true);
 	});
 
 	it("tracks the current panel reference", () => {

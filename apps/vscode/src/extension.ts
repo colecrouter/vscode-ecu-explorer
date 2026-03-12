@@ -31,7 +31,7 @@ import {
 	setCellEditHandlerContext,
 	setTableHandlerContext,
 } from "./handlers/index.js";
-import { type TableEditSession } from "./history/table-edit-session.js";
+import type { TableEditSession } from "./history/table-edit-session.js";
 import { LiveDataPanelManager } from "./live-data-panel-manager.js";
 import { LoggingManager, openLogsFolder } from "./logging-manager.js";
 import { resolveRomDefinition } from "./rom/definition-resolver.js";
@@ -1112,9 +1112,7 @@ export async function activate(
 			// across saves, but dirty tracking should now compare against this
 			// persisted state instead of the original open state.
 			for (const session of tableSessions.values()) {
-				if (session.tableUri.toString().includes(savedDocument.uri.fsPath)) {
-					session.markSaved();
-				}
+				session.markSavedIfForRom(savedDocument);
 			}
 		},
 	);

@@ -163,7 +163,7 @@ export function handleCellEdit(
 	};
 	state.activeTableSession?.recordTransaction(transaction);
 	console.log(
-		`[DEBUG] handleCellEdit: Pushed to undo stack, canUndo=${state.undoRedoManager.canUndo()}`,
+		`[DEBUG] handleCellEdit: Pushed to undo stack, canUndo=${state.activeTableSession?.canUndo ?? state.undoRedoManager.canUndo()}`,
 	);
 
 	// Apply change to ROM

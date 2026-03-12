@@ -4,7 +4,7 @@ import {
 	type TableDefinition,
 } from "@ecu-explorer/core";
 import type { Edit, EditTransaction } from "@ecu-explorer/ui";
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
 import type { RomDocument } from "../rom/document.js";
 import {
 	type EditOperation,
@@ -63,6 +63,14 @@ export class TableEditSession {
 		return this.panel;
 	}
 
+	get canUndo(): boolean {
+		return this.undoRedoManager.canUndo();
+	}
+
+	get canRedo(): boolean {
+		return this.undoRedoManager.canRedo();
+	}
+
 	setPanel(panel: vscode.WebviewPanel | null): void {
 		this.panel = panel;
 	}
@@ -77,6 +85,10 @@ export class TableEditSession {
 		this.undoRedoManager.markSavePoint();
 	}
 
+	isAtSavePoint(): boolean {
+		return this.undoRedoManager.isAtSavePoint();
+	}
+
 	createExecutor(): VsCodeHistoryExecutor {
 		return new VsCodeHistoryExecutor(
 			this.romDocument.romBytes,
@@ -86,6 +98,15 @@ export class TableEditSession {
 
 	isForRom(romDocument: RomDocument): boolean {
 		return this.romDocument === romDocument;
+	}
+
+	markSavedIfForRom(romDocument: RomDocument): boolean {
+		if (!this.isForRom(romDocument)) {
+			return false;
+		}
+
+		this.markSaved();
+		return true;
 	}
 
 	recordTransaction(transaction: EditTransaction): void {
@@ -117,7 +138,7 @@ export class TableEditSession {
 
 		const transaction = this.toTransaction(entry, "Undo");
 		this.createExecutor().revert(transaction, {
-			atSavePoint: this.undoRedoManager.isAtSavePoint(),
+			atSavePoint: this.isAtSavePoint(),
 		});
 
 		return {
@@ -134,7 +155,7 @@ export class TableEditSession {
 
 		const transaction = this.toTransaction(entry, "Redo");
 		this.createExecutor().apply(transaction, {
-			atSavePoint: this.undoRedoManager.isAtSavePoint(),
+			atSavePoint: this.isAtSavePoint(),
 		});
 
 		return {

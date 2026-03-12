@@ -436,7 +436,7 @@ export async function handleTableOpen(
 				const newValue = new Uint8Array(value);
 
 				console.log(
-					`[DEBUG] cellEdit: Recording transaction (canUndo before=${undoRedoManager.canUndo()})`,
+					`[DEBUG] cellEdit: Recording transaction (canUndo before=${tableSession.canUndo})`,
 				);
 
 				const transaction: EditTransaction = {
@@ -459,7 +459,7 @@ export async function handleTableOpen(
 				};
 				tableSession.recordTransaction(transaction);
 				console.log(
-					`[DEBUG] cellEdit: Recorded transaction (canUndo after=${undoRedoManager.canUndo()})`,
+					`[DEBUG] cellEdit: Recorded transaction (canUndo after=${tableSession.canUndo})`,
 				);
 
 				// Apply change to ROM
@@ -503,7 +503,7 @@ export async function handleTableOpen(
 			}
 			if (type === "undo") {
 				console.log(
-					`[DEBUG] undo message received, canUndo=${undoRedoManager.canUndo()}`,
+					`[DEBUG] undo message received, canUndo=${tableSession.canUndo}`,
 				);
 				const result = tableSession.undo();
 				console.log(
@@ -518,7 +518,7 @@ export async function handleTableOpen(
 			}
 			if (type === "redo") {
 				console.log(
-					`[DEBUG] redo message received, canRedo=${undoRedoManager.canRedo()}`,
+					`[DEBUG] redo message received, canRedo=${tableSession.canRedo}`,
 				);
 				const result = tableSession.redo();
 				console.log(
