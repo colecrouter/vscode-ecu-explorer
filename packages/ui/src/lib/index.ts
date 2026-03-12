@@ -1,4 +1,12 @@
 // Chart visualization exports
+
+export type {
+	Edit,
+	EditTransaction,
+	HistoryMoveResult,
+	HistorySnapshot,
+} from "./history.js";
+export { HistoryStack } from "./history.js";
 export { default as Chart } from "./views/Chart.svelte";
 export { default as ChartTooltip } from "./views/ChartTooltip.svelte";
 export type {
