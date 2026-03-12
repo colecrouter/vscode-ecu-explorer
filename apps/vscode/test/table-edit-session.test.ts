@@ -98,6 +98,27 @@ describe("TableEditSession", () => {
 		expect(result.range).toEqual({ offset: 1, length: 1 });
 	});
 
+	it("records typed transactions into the backing undo manager", () => {
+		const session = makeSession();
+
+		session.recordTransaction({
+			label: "Edit cell",
+			timestamp: Date.now(),
+			edits: [
+				{
+					address: 1,
+					before: new Uint8Array([0x20]),
+					after: new Uint8Array([0xee]),
+					metadata: { row: 0, col: 1 },
+				},
+			],
+		});
+
+		expect(session.undoRedoManager.canUndo()).toBe(true);
+		const entry = session.undoRedoManager.undo();
+		expect(entry).not.toBeNull();
+	});
+
 	it("undoes through the session and returns an update message", () => {
 		const session = makeSession();
 

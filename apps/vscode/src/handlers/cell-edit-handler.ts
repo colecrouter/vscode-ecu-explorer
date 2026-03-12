@@ -4,7 +4,9 @@ import {
 	snapshotTable,
 	type TableDefinition,
 } from "@ecu-explorer/core";
+import type { EditTransaction } from "@ecu-explorer/ui";
 import type * as vscode from "vscode";
+import type { TableEditSession } from "../history/table-edit-session.js";
 import type { RomDocument } from "../rom/document.js";
 import type { UndoRedoManager } from "../undo-redo-manager.js";
 
@@ -14,6 +16,7 @@ import type { UndoRedoManager } from "../undo-redo-manager.js";
 let getStateRefs:
 	| (() => {
 			activeRom: RomInstance | null;
+			activeTableSession: TableEditSession | null;
 			undoRedoManager: UndoRedoManager | null;
 			getRomDocumentForPanel: (
 				panel: vscode.WebviewPanel,
@@ -142,16 +145,23 @@ export function handleCellEdit(
 			.join(", ")}]`,
 	);
 
-	// Store operation in undo stack
-	state.undoRedoManager.push({
-		row,
-		col,
-		...(msg.depth !== undefined ? { depth: msg.depth } : {}),
-		oldValue,
-		newValue,
-		timestamp: Date.now(),
+	const transaction: EditTransaction = {
 		label: label || `Edit cell (${row}, ${col})`,
-	});
+		timestamp: Date.now(),
+		edits: [
+			{
+				address,
+				before: oldValue,
+				after: newValue,
+				metadata: {
+					row,
+					col,
+					...(msg.depth !== undefined ? { depth: msg.depth } : {}),
+				},
+			},
+		],
+	};
+	state.activeTableSession?.recordTransaction(transaction);
 	console.log(
 		`[DEBUG] handleCellEdit: Pushed to undo stack, canUndo=${state.undoRedoManager.canUndo()}`,
 	);

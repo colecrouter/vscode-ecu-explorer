@@ -5,13 +5,13 @@ import {
 	snapshotTable,
 	type TableDefinition,
 } from "@ecu-explorer/core";
+import type { EditTransaction } from "@ecu-explorer/ui";
 import * as vscode from "vscode";
 import type { TableEditSession } from "../history/table-edit-session.js";
 import type { RomDocument } from "../rom/document.js";
 import { TableDocument } from "../table-document.js";
 import { getThemeColors } from "../theme-colors.js";
 import type { RomExplorerTreeProvider } from "../tree/rom-tree-provider.js";
-import type { EditOperation } from "../undo-redo-manager.js";
 
 /**
  * Cell edit message from webview
@@ -436,21 +436,30 @@ export async function handleTableOpen(
 				const newValue = new Uint8Array(value);
 
 				console.log(
-					`[DEBUG] cellEdit: Pushing to per-tab undoRedoManager (canUndo before=${undoRedoManager.canUndo()})`,
+					`[DEBUG] cellEdit: Recording transaction (canUndo before=${undoRedoManager.canUndo()})`,
 				);
 
-				// Store operation in per-tab undo stack
-				undoRedoManager.push({
-					row,
-					col,
-					...(cellMsg.depth !== undefined ? { depth: cellMsg.depth } : {}),
-					oldValue,
-					newValue,
-					timestamp: Date.now(),
+				const transaction: EditTransaction = {
 					label: label || `Edit cell (${row}, ${col})`,
-				});
+					timestamp: Date.now(),
+					edits: [
+						{
+							address,
+							before: oldValue,
+							after: newValue,
+							metadata: {
+								row,
+								col,
+								...(cellMsg.depth !== undefined
+									? { depth: cellMsg.depth }
+									: {}),
+							},
+						},
+					],
+				};
+				tableSession.recordTransaction(transaction);
 				console.log(
-					`[DEBUG] cellEdit: Pushed to per-tab undoRedoManager (canUndo after=${undoRedoManager.canUndo()})`,
+					`[DEBUG] cellEdit: Recorded transaction (canUndo after=${undoRedoManager.canUndo()})`,
 				);
 
 				// Apply change to ROM
@@ -626,8 +635,7 @@ export async function handleTableOpen(
 					let minAddress = Number.MAX_SAFE_INTEGER;
 					let maxAddress = 0;
 
-					// Build batch edit operations, capturing 'before' bytes from ROM
-					const batchOps: EditOperation[] = [];
+					const edits: EditTransaction["edits"][number][] = [];
 					for (const edit of mathMsg.edits) {
 						const newValue = new Uint8Array(edit.after);
 						// Capture old bytes before overwriting
@@ -635,13 +643,10 @@ export async function handleTableOpen(
 							edit.address,
 							edit.address + newValue.length,
 						);
-						batchOps.push({
-							row: 0,
-							col: 0,
+						edits.push({
 							address: edit.address,
-							oldValue,
-							newValue,
-							timestamp: Date.now(),
+							before: oldValue,
+							after: newValue,
 							label: `Math op: ${mathMsg.operation}`,
 						});
 						activeRom.bytes.set(newValue, edit.address);
@@ -649,12 +654,13 @@ export async function handleTableOpen(
 						maxAddress = Math.max(maxAddress, edit.address + newValue.length);
 					}
 
-					// Push all edits as a single undo unit
-					if (undoRedoManager) {
-						undoRedoManager.pushBatch(
-							batchOps,
-							`Math op: ${mathMsg.operation} (${batchOps.length} cells)`,
-						);
+					if (edits.length > 0) {
+						const transaction: EditTransaction = {
+							label: `Math op: ${mathMsg.operation} (${edits.length} cells)`,
+							timestamp: Date.now(),
+							edits,
+						};
+						tableSession.recordTransaction(transaction);
 					}
 
 					const docRef = getRomDocumentForPanel(panel);

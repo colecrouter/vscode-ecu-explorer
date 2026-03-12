@@ -7,9 +7,10 @@ import {
 	type Table2DDefinition,
 	type TableDefinition,
 } from "@ecu-explorer/core";
+import type { EditTransaction } from "@ecu-explorer/ui";
 import * as vscode from "vscode";
+import type { TableEditSession } from "../history/table-edit-session.js";
 import type { RomDocument } from "../rom/document.js";
-import type { UndoRedoManager } from "../undo-redo-manager.js";
 import { csvToSnapshot, parseCsv, type TableSnapshot } from "./parser.js";
 import {
 	generateImportPreview,
@@ -41,7 +42,7 @@ function getRomDocumentForPanel(
  * @param activeTableName - Name of the active table
  * @param activeTableDef - Definition of the active table
  * @param activePanel - Active webview panel
- * @param undoRedoManager - Undo/redo manager for this table
+ * @param tableSession - Table edit session for this table
  * @param panelToDocument - Map of panels to documents
  */
 export async function importTableFromCsvFlow(
@@ -50,7 +51,7 @@ export async function importTableFromCsvFlow(
 	activeTableName: string | null,
 	activeTableDef: TableDefinition | null,
 	activePanel: vscode.WebviewPanel | null,
-	undoRedoManager: UndoRedoManager | null,
+	tableSession: TableEditSession | null,
 	panelToDocument: Map<vscode.WebviewPanel, RomDocument>,
 ) {
 	if (!activeRom || !activeTableName || !activeTableDef || !activePanel) {
@@ -122,7 +123,7 @@ export async function importTableFromCsvFlow(
 			activeTableDef,
 			activeRom,
 			activePanel,
-			undoRedoManager,
+			tableSession,
 			panelToDocument,
 		);
 
@@ -146,7 +147,7 @@ export async function importTableFromCsvFlow(
  * @param def - Table definition
  * @param rom - ROM instance to update
  * @param panel - Webview panel for sending updates
- * @param undoRedoManager - Undo/redo manager
+ * @param tableSession - Table edit session
  * @param panelToDocument - Map of panels to documents
  */
 export async function applySnapshotToRom(
@@ -154,15 +155,14 @@ export async function applySnapshotToRom(
 	def: TableDefinition,
 	rom: RomInstance,
 	panel: vscode.WebviewPanel,
-	undoRedoManager: UndoRedoManager | null,
+	tableSession: TableEditSession | null,
 	panelToDocument: Map<vscode.WebviewPanel, RomDocument>,
 ): Promise<void> {
-	if (!undoRedoManager) {
-		throw new Error("Undo/redo manager not initialized");
+	if (!tableSession) {
+		throw new Error("Table edit session not initialized");
 	}
 
-	// Create a batch edit operation for undo
-	const batchOps = [];
+	const edits: EditTransaction["edits"][number][] = [];
 
 	if (snapshot.kind === "table1d") {
 		const t = def as Table1DDefinition;
@@ -179,13 +179,12 @@ export async function applySnapshotToRom(
 			const rawValue = (scaledValue - (t.z.offset ?? 0)) / (t.z.scale ?? 1);
 			const newValue = encodeScalar(rawValue, t.z.dtype, t.z.endianness);
 
-			batchOps.push({
-				row,
-				col: 0,
-				oldValue,
-				newValue,
-				timestamp: Date.now(),
+			edits.push({
+				address,
+				before: oldValue,
+				after: newValue,
 				label: `Import CSV row ${row}`,
+				metadata: { row, col: 0 },
 			});
 
 			rom.bytes.set(newValue, address);
@@ -210,13 +209,12 @@ export async function applySnapshotToRom(
 				const rawValue = (scaledValue - (t.z.offset ?? 0)) / (t.z.scale ?? 1);
 				const newValue = encodeScalar(rawValue, t.z.dtype, t.z.endianness);
 
-				batchOps.push({
-					row,
-					col,
-					oldValue,
-					newValue,
-					timestamp: Date.now(),
+				edits.push({
+					address,
+					before: oldValue,
+					after: newValue,
 					label: `Import CSV cell (${row}, ${col})`,
+					metadata: { row, col },
 				});
 
 				rom.bytes.set(newValue, address);
@@ -224,8 +222,14 @@ export async function applySnapshotToRom(
 		}
 	}
 
-	// Push all operations as a single atomic undo unit
-	undoRedoManager.pushBatch(batchOps, `Import CSV (${batchOps.length} cells)`);
+	if (edits.length > 0) {
+		const transaction: EditTransaction = {
+			label: `Import CSV (${edits.length} cells)`,
+			timestamp: Date.now(),
+			edits,
+		};
+		tableSession.recordTransaction(transaction);
+	}
 
 	// Mark the RomDocument as dirty
 	const document = getRomDocumentForPanel(panel, panelToDocument);

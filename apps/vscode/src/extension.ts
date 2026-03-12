@@ -442,7 +442,7 @@ export async function activate(
 				activeTableName,
 				activeTableDef,
 				activePanel,
-				undoRedoManager,
+				activeTableSession,
 				panelToDocument,
 			);
 		},
@@ -451,6 +451,7 @@ export async function activate(
 
 	setCellEditHandlerContext(() => ({
 		activeRom,
+		activeTableSession,
 		undoRedoManager,
 		getRomDocumentForPanel: (panel: vscode.WebviewPanel) =>
 			panelToDocument.get(panel),
@@ -674,7 +675,7 @@ export async function activate(
 				activeTableName,
 				activeTableDef,
 				activePanel,
-				undoRedoManager,
+				activeTableSession,
 				panelToDocument,
 			),
 		),
