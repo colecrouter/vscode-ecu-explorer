@@ -56,6 +56,7 @@ Use this order for implementation work:
 2. Cross-check `Lancer-Scan` for field-proven Mitsubishi scanner behavior and logging semantics.
 3. Use `OpenJ2534` and `python-j2534` for transport-level parity and diagnostic transport sequencing.
 4. Validate service-level UDS/diagnostic packaging against `python-uds`.
+5. Track legacy MUT-II branch behavior hints from public EvoScan reverse-engineering notes (`https://www.evoscan.com/`) before implementing any non-UDS transport tuning.
 
 ---
 

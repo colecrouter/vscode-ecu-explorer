@@ -10,6 +10,7 @@ import {
 	CMD_READ_WORD_INC,
 	CMD_SET_ADDRESS,
 	decodeRaxPid,
+	Mut2Protocol,
 	Mut3Protocol,
 	RAX_PID_BASE,
 	RAX_PID_DESCRIPTORS,
@@ -401,6 +402,51 @@ describe("Mut3Protocol", () => {
 });
 
 // ── RAX PID descriptor helpers ────────────────────────────────────────────────
+
+describe("Mut2Protocol", () => {
+	describe("canHandle()", () => {
+		it("returns true on openport2 when UDS diagnostic session probe succeeds", async () => {
+			const protocol = new Mut2Protocol();
+			const connection = makeMockConnection("openport2", async (data) => {
+				expect(Array.from(data)).toEqual([0x10, 0x03]);
+				return new Uint8Array([0x50, 0x03]);
+			});
+
+			expect(await protocol.canHandle(connection)).toBe(true);
+		});
+
+		it("returns false when probe response is not a positive session response", async () => {
+			const protocol = new Mut2Protocol();
+			const connection = makeMockConnection("openport2", async () => {
+				return new Uint8Array([0x7f, 0x10, 0x33]);
+			});
+
+			expect(await protocol.canHandle(connection)).toBe(false);
+		});
+
+		it("returns false when probing throws", async () => {
+			const protocol = new Mut2Protocol();
+			const connection = makeMockConnection("openport2", async () => {
+				throw new Error("mock failure");
+			});
+
+			expect(await protocol.canHandle(connection)).toBe(false);
+		});
+
+		it("returns false for non-openport2 transports", async () => {
+			const protocol = new Mut2Protocol();
+			const connection = makeMockConnection("kline");
+			expect(await protocol.canHandle(connection)).toBe(false);
+		});
+	});
+
+	describe("name", () => {
+		it("has the expected human-readable name", () => {
+			const protocol = new Mut2Protocol();
+			expect(protocol.name).toBe("MUT-II (Mitsubishi)");
+		});
+	});
+});
 
 describe("buildRaxPidDescriptors()", () => {
 	it("returns exactly 48 descriptors (8 blocks × 4-6 params each)", () => {

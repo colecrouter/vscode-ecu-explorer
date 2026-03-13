@@ -8,7 +8,7 @@ import {
 import { EcuFlashProvider } from "@ecu-explorer/definitions-ecuflash";
 import type { EcuEvent, RomProgress } from "@ecu-explorer/device";
 import { MitsubishiBootloaderProtocol } from "@ecu-explorer/device-protocol-mitsubishi-bootloader";
-import { Mut3Protocol } from "@ecu-explorer/device-protocol-mut3";
+import { Mut2Protocol, Mut3Protocol } from "@ecu-explorer/device-protocol-mut3";
 import { Obd2Protocol } from "@ecu-explorer/device-protocol-obd2";
 import { SubaruProtocol } from "@ecu-explorer/device-protocol-subaru";
 import { UdsProtocol } from "@ecu-explorer/device-protocol-uds";
@@ -487,6 +487,7 @@ export async function activate(
 		new OpenPort2Transport(options?.openPortRuntime),
 	);
 	deviceManager.registerProtocol(new Mut3Protocol());
+	deviceManager.registerProtocol(new Mut2Protocol());
 	deviceManager.registerProtocol(new MitsubishiBootloaderProtocol());
 	deviceManager.registerProtocol(new SubaruProtocol());
 	deviceManager.registerProtocol(new UdsProtocol());

@@ -502,6 +502,47 @@ export class Mut3Protocol implements EcuProtocol {
 	// See also: HANDSHAKE_ANALYSIS.md §7.5 and DEVELOPMENT.md for the blocker entry.
 }
 
+/**
+ * Mitsubishi MUT-II protocol adapter.
+ *
+ * MUT-II and MUT-III share transport-level framing and Mitsubishi RAX/ROM
+ * command patterns in this project. Where this project does not yet have a
+ * fully differentiated MUT-II handshake, this adapter reuses the MUT-III logic
+ * and provides Mitsubishi-specific protocol naming for discovery and reporting.
+ *
+ * References:
+ * - https://github.com/harshadura/libmut
+ * - https://github.com/harshadura/Lancer-Scan
+ * - https://www.evoscan.com/
+ */
+export class Mut2Protocol extends Mut3Protocol {
+	readonly name = "MUT-II (Mitsubishi)";
+
+	/**
+	 * Probe the connection to determine if this protocol can communicate
+	 * with the connected ECU.
+	 *
+	 * This adapter gates on OpenPort 2.0 transport and verifies that the ECU
+	 * accepts the extended-diagnostic-session UDS probe used by the MUT stack.
+	 *
+	 * @param connection - Active device connection to probe
+	 */
+	async canHandle(connection: DeviceConnection): Promise<boolean> {
+		if (connection.deviceInfo.transportName !== "openport2") {
+			return false;
+		}
+
+		try {
+			const response = await connection.sendFrame(
+				new Uint8Array([SID_DIAGNOSTIC_SESSION_CONTROL, 0x03]),
+			);
+			return response[0] === 0x50 && response[1] === 0x03;
+		} catch {
+			return false;
+		}
+	}
+}
+
 // Suppress unused-variable warnings for CAN ID constants that are defined
 // for documentation purposes and future use (e.g., filter configuration).
 void TESTER_CAN_ID;
