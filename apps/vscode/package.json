@@ -339,7 +339,7 @@
 					"type": "string",
 					"default": "auto",
 					"scope": "resource",
-					"description": "Preferred protocol to check first during ECU detection. Use 'auto' to keep default order or set to a protocol name/alias (for example mut3, mut2, obd2, subaru, bootloader, uds)."
+					"description": "Exact protocol to use during ECU detection. Use 'auto' for automatic probing, or set to a protocol name/alias (for example mut3, mut2, obd2, subaru, bootloader, uds)."
 				}
 			}
 		},

@@ -200,11 +200,7 @@ function prioritizeProtocol(
 		return protocols;
 	}
 
-	const reordered = protocols.filter(
-		(protocol) => protocol !== preferredProtocol,
-	);
-	reordered.unshift(preferredProtocol);
-	return reordered;
+	return [preferredProtocol];
 }
 
 /**

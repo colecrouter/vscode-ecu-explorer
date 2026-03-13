@@ -306,15 +306,8 @@ export class DeviceManagerImpl implements DeviceManager {
 			return [...this.protocols];
 		}
 
-		const reordered = this.protocols.filter(
-			(protocol) => protocol !== preferredProtocol,
-		);
-		reordered.unshift(preferredProtocol);
-
-		console.debug(
-			`[ECU Protocol] Probe order: ${reordered.map((protocol) => protocol.name).join(" -> ")}`,
-		);
-		return reordered;
+		console.debug(`[ECU Protocol] Probe order: ${preferredProtocol.name}`);
+		return [preferredProtocol];
 	}
 
 	/**

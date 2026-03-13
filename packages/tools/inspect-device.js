@@ -926,11 +926,13 @@ function resolveProtocols(filter) {
 	);
 	const isSingleSelection = protocols.length === 1;
 	if (!isSingleSelection) {
-		return { protocols };
+		throw new Error(
+			`Protocol "${filter}" was ambiguous. Matches: ${protocols.map((protocol) => protocol.name).join(", ")}`,
+		);
 	}
 
 	return {
-		protocols: registeredProtocols,
+		protocols: protocols,
 		preferredProtocolName: selectedMatch?.protocol.name,
 	};
 }
@@ -1846,7 +1848,7 @@ prog
 	.option("-d, --device", "Specific device ID (otherwise uses first available)")
 	.option(
 		"-p, --protocol <protocol>",
-		"Prefer this protocol during detection, then fall back to automatic order (obd2, mut2, mut3, bootloader, subaru, uds)",
+		"Use this protocol only (no fallback probing)",
 	)
 	.option("-v, --verbose", "Enable verbose output")
 	.option(
