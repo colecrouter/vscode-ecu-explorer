@@ -52,6 +52,8 @@ export interface DiagnosticOptions {
 	deviceId?: string;
 	/** Protocols to probe */
 	protocols: EcuProtocol[];
+	/** Optional preferred protocol name to check first */
+	preferredProtocolName?: string;
 	/** Optional operation to run */
 	operation?: "none" | "log" | "read-rom";
 	/** PIDs for log operations */
@@ -89,6 +91,66 @@ export interface DiagnosticResult {
  */
 interface InitializableConnection extends DeviceConnection {
 	initialize?(): Promise<void>;
+}
+
+/**
+ * Normalize a protocol selector to make matching less strict.
+ *
+ * @param value - Raw protocol token from options/settings
+ * @returns Normalized token suitable for fuzzy matching
+ */
+function normalizeProtocolValue(value: string): string {
+	return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+/**
+ * Reorder protocol probes so the preferred protocol is attempted first.
+ *
+ * @param protocols - Full protocol list
+ * @param preferredProtocolName - Optional preferred protocol selector
+ * @returns Ordered protocol list
+ */
+function prioritizeProtocol(
+	protocols: EcuProtocol[],
+	preferredProtocolName?: string,
+): EcuProtocol[] {
+	if (!preferredProtocolName) {
+		return protocols;
+	}
+
+	const normalizedPreferred = normalizeProtocolValue(preferredProtocolName);
+	const matches = protocols.filter((protocol) => {
+		const normalizedName = normalizeProtocolValue(protocol.name);
+		return (
+			normalizedName === normalizedPreferred ||
+			normalizedName.includes(normalizedPreferred) ||
+			normalizedPreferred.includes(normalizedName)
+		);
+	});
+
+	if (matches.length === 0) {
+		throw new Error(
+			`Preferred protocol "${preferredProtocolName}" was not found. ` +
+				`Available protocols: ${protocols.map((protocol) => protocol.name).join(", ")}`,
+		);
+	}
+	if (matches.length > 1) {
+		throw new Error(
+			`Protocol preference "${preferredProtocolName}" was ambiguous. ` +
+				`Matches: ${matches.map((protocol) => protocol.name).join(", ")}`,
+		);
+	}
+
+	const [preferredProtocol] = matches;
+	if (!preferredProtocol) {
+		return protocols;
+	}
+
+	const reordered = protocols.filter(
+		(protocol) => protocol !== preferredProtocol,
+	);
+	reordered.unshift(preferredProtocol);
+	return reordered;
 }
 
 /**
@@ -349,18 +411,25 @@ export async function runDiagnostic(
 	// Stage 5: Probe protocols
 	// ─────────────────────────────────────────────────────────────────────────────
 	stageStartTime = Date.now();
+	const probeProtocols = prioritizeProtocol(
+		options.protocols,
+		options.preferredProtocolName,
+	);
 	emitEvent(
 		events,
 		effectiveOptions,
 		DiagnosticStage.PROBE,
 		DiagnosticStatus.START,
 		"Probing protocols...",
-		{ protocolCount: options.protocols.length },
+		{
+			protocolCount: probeProtocols.length,
+			preferredProtocol: options.preferredProtocolName,
+		},
 	);
 
 	let matchedProtocol: EcuProtocol | null = null;
 
-	for (const protocol of options.protocols) {
+	for (const protocol of probeProtocols) {
 		try {
 			const canHandle = await protocol.canHandle(connection);
 			if (canHandle) {

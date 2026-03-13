@@ -16,6 +16,7 @@ import {
 } from "../device/dist/index.js";
 import { MitsubishiBootloaderProtocol } from "../device/protocols/mitsubishi-bootloader/dist/index.js";
 import {
+	Mut2Protocol,
 	Mut3Protocol,
 	RAX_PID_DESCRIPTORS,
 } from "../device/protocols/mut3/dist/index.js";
@@ -504,6 +505,10 @@ const protocolRegistry = [
 		],
 	},
 	{
+		protocol: new Mut2Protocol(),
+		aliases: ["mut2", "mut-ii", "mitsubishi-mut2", "mitsubishi-mut-ii"],
+	},
+	{
 		protocol: new MitsubishiBootloaderProtocol(),
 		aliases: [
 			"mitsubishi-bootloader",
@@ -885,11 +890,13 @@ function resolveMut3Pid(input) {
  * Resolve protocol list by optional user filter.
  *
  * @param {string | undefined} filter
- * @returns {EcuProtocol[]}
+ * @returns {{ protocols: EcuProtocol[]; preferredProtocolName?: string }}
  */
 function resolveProtocols(filter) {
 	if (!filter) {
-		return registeredProtocols;
+		return {
+			protocols: registeredProtocols,
+		};
 	}
 
 	const target = normalizeProtocolName(filter);
@@ -913,7 +920,19 @@ function resolveProtocols(filter) {
 		);
 	}
 
-	return /** @type {EcuProtocol[]} */ (matches.map((entry) => entry.protocol));
+	const [selectedMatch] = matches;
+	const protocols = /** @type {EcuProtocol[]} */ (
+		matches.map((entry) => entry.protocol)
+	);
+	const isSingleSelection = protocols.length === 1;
+	if (!isSingleSelection) {
+		return { protocols };
+	}
+
+	return {
+		protocols: registeredProtocols,
+		preferredProtocolName: selectedMatch?.protocol.name,
+	};
 }
 
 /**
@@ -1198,19 +1217,28 @@ function createEventHandler(verbose, onEvent) {
  * Build options for runDiagnostic without adding `undefined` to optional fields.
  *
  * @param {ListDeviceOptions | ConnectDeviceOptions | ProbeDeviceOptions | LogDeviceOptions | ReadRomDeviceOptions} opts
- * @param {EcuProtocol[]} protocols
+ * @param {{ protocols: EcuProtocol[]; preferredProtocolName?: string }} protocolSelection
  * @param {"none" | "log" | "read-rom"} operation
  * @param {Partial<DiagnosticOptions>} operationOptions
  * @returns {DiagnosticOptions}
  */
-function buildDiagnosticOptions(opts, protocols, operation, operationOptions) {
+function buildDiagnosticOptions(
+	opts,
+	protocolSelection,
+	operation,
+	operationOptions,
+) {
 	/** @type {DiagnosticOptions} */
 	const diagnosticOptions = {
-		protocols,
+		protocols: protocolSelection.protocols,
 		operation,
 		traceWriter: null,
 		...operationOptions,
 	};
+	if (protocolSelection.preferredProtocolName) {
+		diagnosticOptions.preferredProtocolName =
+			protocolSelection.preferredProtocolName;
+	}
 	if (opts.device != null) {
 		diagnosticOptions.deviceId = opts.device;
 	}
@@ -1327,10 +1355,10 @@ async function connectDevice(opts) {
 			console.error("Running diagnostic workflow...");
 		}
 
-		const protocols = resolveProtocols(opts.protocol);
+		const protocolSelection = resolveProtocols(opts.protocol);
 		const result = await runDiagnostic(
 			transport,
-			buildDiagnosticOptions(opts, protocols, "none", {
+			buildDiagnosticOptions(opts, protocolSelection, "none", {
 				onEvent: eventHandler,
 				traceWriter: traceWriter ?? null,
 			}),
@@ -1412,10 +1440,10 @@ async function probeDevice(opts) {
 			console.error("Probing for protocols...");
 		}
 
-		const protocols = resolveProtocols(opts.protocol);
+		const protocolSelection = resolveProtocols(opts.protocol);
 		const result = await runDiagnostic(
 			transport,
-			buildDiagnosticOptions(opts, protocols, "none", {
+			buildDiagnosticOptions(opts, protocolSelection, "none", {
 				onEvent: eventHandler,
 				traceWriter: traceWriter ?? null,
 			}),
@@ -1497,12 +1525,12 @@ async function logDevice(opts) {
 			console.error(`Running log probe for ${opts.duration ?? 1000}ms...`);
 		}
 
-		const protocols = resolveProtocols(opts.protocol);
+		const protocolSelection = resolveProtocols(opts.protocol);
 		const result = await runDiagnostic(
 			transport,
-			buildDiagnosticOptions(opts, protocols, "log", {
+			buildDiagnosticOptions(opts, protocolSelection, "log", {
 				logDuration: Number(opts.duration ?? 1000),
-				logPids: resolveLogPids(protocols, opts.pids),
+				logPids: resolveLogPids(protocolSelection.protocols, opts.pids),
 				onEvent: eventHandler,
 				traceWriter: traceWriter ?? null,
 			}),
@@ -1589,7 +1617,7 @@ async function readRomDevice(opts) {
 			);
 		}
 
-		const protocols = resolveProtocols(opts.protocol);
+		const protocolSelection = resolveProtocols(opts.protocol);
 		/** @type {Partial<DiagnosticOptions>} */
 		const operationOptions = {
 			readRomDryRun: opts.dryRun ?? false,
@@ -1601,7 +1629,7 @@ async function readRomDevice(opts) {
 		}
 		const result = await runDiagnostic(
 			transport,
-			buildDiagnosticOptions(opts, protocols, "read-rom", {
+			buildDiagnosticOptions(opts, protocolSelection, "read-rom", {
 				...operationOptions,
 			}),
 		);
@@ -1804,7 +1832,7 @@ prog
 	.option("-d, --device", "Specific device ID (otherwise uses first available)")
 	.option(
 		"-p, --protocol <protocol>",
-		"Force a protocol by name (obd2, mut3, bootloader, subaru, uds)",
+		"Prefer this protocol during detection, then fall back to automatic order (obd2, mut2, mut3, bootloader, subaru, uds)",
 	)
 	.option("-v, --verbose", "Enable verbose output")
 	.option(

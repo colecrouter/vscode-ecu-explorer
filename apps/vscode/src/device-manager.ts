@@ -155,7 +155,7 @@ export class DeviceManagerImpl implements DeviceManager {
 	 * @returns The connection and matched protocol
 	 * @throws If no devices found, user cancels, or no protocol matches
 	 */
-	async selectDeviceAndProtocol(): Promise<{
+	async selectDeviceAndProtocol(preferredProtocolName?: string): Promise<{
 		connection: DeviceConnection;
 		protocol: EcuProtocol;
 	}> {
@@ -207,8 +207,10 @@ export class DeviceManagerImpl implements DeviceManager {
 		// Open a connection to the device
 		const connection = await transport.connect(selectedDevice.id);
 
+		const probeOrder = this.selectProtocolOrder(preferredProtocolName);
+
 		// Auto-detect the protocol by trying each registered protocol
-		for (const protocol of this.protocols) {
+		for (const protocol of probeOrder) {
 			try {
 				if (await protocol.canHandle(connection)) {
 					vscode.window.showInformationMessage(
@@ -237,12 +239,14 @@ export class DeviceManagerImpl implements DeviceManager {
 	 * @returns The active connection
 	 * @throws If no devices found, user cancels, or no protocol matches
 	 */
-	async connect(): Promise<ActiveConnection> {
+	async connect(preferredProtocolName?: string): Promise<ActiveConnection> {
 		if (this._activeConnection) {
 			return this._activeConnection;
 		}
 
-		const { connection, protocol } = await this.selectDeviceAndProtocol();
+		const { connection, protocol } = await this.selectDeviceAndProtocol(
+			preferredProtocolName,
+		);
 		const deviceName = "ECU Device";
 
 		this._activeConnection = {
@@ -254,6 +258,65 @@ export class DeviceManagerImpl implements DeviceManager {
 		this._onDidChangeConnection.fire(this._activeConnection);
 
 		return this._activeConnection;
+	}
+
+	/**
+	 * Build a probe order where a preferred protocol is checked first.
+	 *
+	 * @param preferredProtocolName - optional protocol selector
+	 * @returns protocol list in probing order
+	 * @throws when preferred protocol name is missing or ambiguous
+	 */
+	private selectProtocolOrder(preferredProtocolName?: string): EcuProtocol[] {
+		if (!preferredProtocolName) {
+			return [...this.protocols];
+		}
+
+		const normalizedPreferred = this.normalizeProtocolValue(
+			preferredProtocolName,
+		);
+		const matches = this.protocols.filter((protocol) => {
+			const normalizedName = this.normalizeProtocolValue(protocol.name);
+			return (
+				normalizedName === normalizedPreferred ||
+				normalizedName.includes(normalizedPreferred) ||
+				normalizedPreferred.includes(normalizedName)
+			);
+		});
+
+		if (matches.length === 0) {
+			throw new Error(
+				`Preferred protocol "${preferredProtocolName}" was not found. ` +
+					`Supported protocols: ${this.protocols.map((p) => p.name).join(", ")}`,
+			);
+		}
+		if (matches.length > 1) {
+			throw new Error(
+				`Protocol preference "${preferredProtocolName}" was ambiguous. ` +
+					`Matches: ${matches.map((p) => p.name).join(", ")}`,
+			);
+		}
+
+		const [preferredProtocol] = matches;
+		if (preferredProtocol == null) {
+			return [...this.protocols];
+		}
+
+		const reordered = this.protocols.filter(
+			(protocol) => protocol !== preferredProtocol,
+		);
+		reordered.unshift(preferredProtocol);
+		return reordered;
+	}
+
+	/**
+	 * Normalize protocol tokens for consistent matching.
+	 *
+	 * @param value - Raw protocol token
+	 * @returns Normalized value
+	 */
+	private normalizeProtocolValue(value: string): string {
+		return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
 	}
 
 	/**

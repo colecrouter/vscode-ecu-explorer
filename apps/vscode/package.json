@@ -334,6 +334,12 @@
 					"default": "all",
 					"scope": "resource",
 					"description": "PID columns to include in log CSV files. Use 'all' to include every streamed PID, or an array of PID names."
+				},
+				"ecuExplorer.protocolOverride": {
+					"type": "string",
+					"default": "auto",
+					"scope": "resource",
+					"description": "Preferred protocol to check first during ECU detection. Use 'auto' to keep default order or set to a protocol name/alias (for example mut3, mut2, obd2, subaru, bootloader, uds)."
 				}
 			}
 		},

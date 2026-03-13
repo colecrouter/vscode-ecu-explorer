@@ -8,6 +8,7 @@ export type ProviderId = "ecuflash";
  * Mirrors the contributes.configuration schema in package.json.
  */
 export interface EcuExplorerConfig {
+	protocolOverride: "auto" | string;
 	definitions: {
 		/** Additional folders to search for ROM definition files (any provider) */
 		paths: string[];
@@ -35,6 +36,7 @@ export interface EcuExplorerConfig {
 export function readConfig(): EcuExplorerConfig {
 	const config = vscode.workspace.getConfiguration("ecuExplorer");
 	return {
+		protocolOverride: config.get<string>("protocolOverride", "auto"),
 		definitions: {
 			paths: config.get<string[]>("definitions.paths", []),
 			ecuflash: {

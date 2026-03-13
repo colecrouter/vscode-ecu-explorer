@@ -117,6 +117,22 @@ function getActiveRomPathForCacheClear(): string | null {
 }
 
 /**
+ * Resolve an optional protocol override from extension settings.
+ *
+ * @param config - resolved workspace config
+ * @returns preferred protocol selector, or undefined for auto-detection
+ */
+function resolvePreferredProtocolFromConfig(
+	config: ReturnType<typeof readConfig>,
+): string | undefined {
+	const override = (config.protocolOverride ?? "auto").trim();
+	if (!override || override.toLowerCase() === "auto") {
+		return undefined;
+	}
+	return override;
+}
+
+/**
  * Manages selection synchronization across different panels for the same ROM.
  */
 
@@ -971,7 +987,10 @@ export async function activate(
 				return;
 			}
 			try {
-				await deviceManager.connect();
+				const preferredProtocol = resolvePreferredProtocolFromConfig(
+					readConfig(),
+				);
+				await deviceManager.connect(preferredProtocol);
 			} catch (err) {
 				if (err instanceof vscode.CancellationError) {
 					// User cancelled — silent
