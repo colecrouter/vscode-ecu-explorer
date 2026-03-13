@@ -276,12 +276,16 @@ export class DeviceManagerImpl implements DeviceManager {
 			preferredProtocolName,
 		);
 		const matches = this.protocols.filter((protocol) => {
-			const normalizedName = this.normalizeProtocolValue(protocol.name);
-			return (
-				normalizedName === normalizedPreferred ||
-				normalizedName.includes(normalizedPreferred) ||
-				normalizedPreferred.includes(normalizedName)
-			);
+			for (const token of this.buildProtocolMatchTokens(protocol.name)) {
+				if (
+					token === normalizedPreferred ||
+					token.includes(normalizedPreferred) ||
+					normalizedPreferred.includes(token)
+				) {
+					return true;
+				}
+			}
+			return false;
 		});
 
 		if (matches.length === 0) {
@@ -306,6 +310,10 @@ export class DeviceManagerImpl implements DeviceManager {
 			(protocol) => protocol !== preferredProtocol,
 		);
 		reordered.unshift(preferredProtocol);
+
+		console.debug(
+			`[ECU Protocol] Probe order: ${reordered.map((protocol) => protocol.name).join(" -> ")}`,
+		);
 		return reordered;
 	}
 
@@ -317,6 +325,55 @@ export class DeviceManagerImpl implements DeviceManager {
 	 */
 	private normalizeProtocolValue(value: string): string {
 		return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+	}
+
+	/**
+	 * Build a small alias set for user-facing protocol overrides.
+	 *
+	 * @param protocolName - human-readable protocol name
+	 * @returns normalized aliases
+	 */
+	private buildProtocolMatchTokens(protocolName: string): Set<string> {
+		const normalizedName = this.normalizeProtocolValue(protocolName);
+		const tokens = new Set<string>([normalizedName]);
+		const addToken = (token: string) => {
+			tokens.add(this.normalizeProtocolValue(token));
+		};
+
+		if (normalizedName.includes("mutii")) {
+			addToken("mut2");
+			addToken("mitsubishimut2");
+			addToken("mitsu-mut2");
+		}
+
+		if (normalizedName.includes("mutiii")) {
+			addToken("mut3");
+			addToken("mitsubishimut3");
+			addToken("mitsu-mut3");
+		}
+
+		if (normalizedName.includes("obd")) {
+			addToken("obd2");
+			addToken("obd-ii");
+		}
+
+		if (normalizedName.includes("bootloader")) {
+			addToken("boot");
+		}
+
+		if (normalizedName.includes("subaru")) {
+			addToken("ssm");
+			addToken("ssm2");
+			addToken("kwp2000");
+			addToken("kwp");
+		}
+
+		if (normalizedName.includes("uds")) {
+			addToken("universaldiagnosticservices");
+			addToken("universal");
+		}
+
+		return tokens;
 	}
 
 	/**

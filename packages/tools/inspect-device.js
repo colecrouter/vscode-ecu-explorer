@@ -1205,7 +1205,21 @@ function createEventHandler(verbose, onEvent) {
 					: event.status === DiagnosticStatus.FAILURE
 						? "✗"
 						: "○";
-			console.error(`  ${statusIcon} [${event.stage}] ${event.summary}`);
+			let line = `  ${statusIcon} [${event.stage}] ${event.summary}`;
+			if (
+				event.stage === DiagnosticStage.PROBE &&
+				event.status === DiagnosticStatus.START
+			) {
+				const preferred = event.details?.preferredProtocol;
+				const protocolOrder = event.details?.protocolOrder;
+				if (preferred != null) {
+					line += ` | preferred: ${String(preferred)}`;
+				}
+				if (Array.isArray(protocolOrder)) {
+					line += ` | order: ${protocolOrder.join(" -> ")}`;
+				}
+			}
+			console.error(line);
 		}
 		if (onEvent) {
 			onEvent(event);

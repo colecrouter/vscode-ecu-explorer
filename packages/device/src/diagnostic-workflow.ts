@@ -104,6 +104,56 @@ function normalizeProtocolValue(value: string): string {
 }
 
 /**
+ * Build a small alias set for a protocol name so user-provided tokens
+ * like mut2/mut3 still match MUT-I* names in the runtime.
+ *
+ * @param protocolName - Human-readable protocol name from registration
+ * @returns Match tokens to compare against user input
+ */
+function buildProtocolMatchTokens(protocolName: string): Set<string> {
+	const normalizedName = normalizeProtocolValue(protocolName);
+	const tokens = new Set<string>([normalizedName]);
+	const addToken = (token: string) => {
+		tokens.add(normalizeProtocolValue(token));
+	};
+
+	if (normalizedName.includes("mutii")) {
+		addToken("mut2");
+		addToken("mitsubishimut2");
+		addToken("mitsu-mut2");
+	}
+
+	if (normalizedName.includes("mutiii")) {
+		addToken("mut3");
+		addToken("mitsubishimut3");
+		addToken("mitsu-mut3");
+	}
+
+	if (normalizedName.includes("obd")) {
+		addToken("obd2");
+		addToken("obd-ii");
+	}
+
+	if (normalizedName.includes("bootloader")) {
+		addToken("boot");
+	}
+
+	if (normalizedName.includes("subaru")) {
+		addToken("ssm");
+		addToken("ssm2");
+		addToken("kwp2000");
+		addToken("kwp");
+	}
+
+	if (normalizedName.includes("uds")) {
+		addToken("universaldiagnosticservices");
+		addToken("universal");
+	}
+
+	return tokens;
+}
+
+/**
  * Reorder protocol probes so the preferred protocol is attempted first.
  *
  * @param protocols - Full protocol list
@@ -120,12 +170,16 @@ function prioritizeProtocol(
 
 	const normalizedPreferred = normalizeProtocolValue(preferredProtocolName);
 	const matches = protocols.filter((protocol) => {
-		const normalizedName = normalizeProtocolValue(protocol.name);
-		return (
-			normalizedName === normalizedPreferred ||
-			normalizedName.includes(normalizedPreferred) ||
-			normalizedPreferred.includes(normalizedName)
-		);
+		for (const token of buildProtocolMatchTokens(protocol.name)) {
+			if (
+				token === normalizedPreferred ||
+				token.includes(normalizedPreferred) ||
+				normalizedPreferred.includes(token)
+			) {
+				return true;
+			}
+		}
+		return false;
 	});
 
 	if (matches.length === 0) {
@@ -424,6 +478,7 @@ export async function runDiagnostic(
 		{
 			protocolCount: probeProtocols.length,
 			preferredProtocol: options.preferredProtocolName,
+			protocolOrder: probeProtocols.map((protocol) => protocol.name),
 		},
 	);
 
