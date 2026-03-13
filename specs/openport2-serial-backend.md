@@ -59,3 +59,29 @@ OpenPort 2.0 on macOS desktop should prefer the CDC ACM serial endpoint exposed 
 - Add user-facing multi-device hardware selection in the VS Code extension.
 - Persist selected hardware identities in workspace state for reconnect flows.
 - Track wideband and other non-OpenPort serial integrations as a separate follow-up once OpenPort protocol validation is complete.
+
+## Immediate next diagnosis plan (March 2026)
+
+Based on recent `no ECU response` reports and decompilation-backed transport evidence, the highest-probability regression remains receive-side parser behavior rather than ECU command generation.
+
+### Current top suspicion ordering
+
+1. `readProtocolMessage()` should tolerate fragmented RX and should not depend solely on `PACKET_RX_END` to emit a completed message.
+2. Transport read loops should model poll-timeout behavior as non-fatal (`timeout` / `buffer empty` style states) instead of immediate hard failure during streaming.
+3. Multi-frame command/read sessions should prioritize accumulation and parsing breadth over strict per-command assumptions.
+4. Serial-side explicit buffer management should verify whether `clearTxBuffer()` should issue a true TX-side clear path (currently a no-op in code) and preserve existing read-side clear order.
+5. ISO15765 receive behavior should be explicitly validated for `LOOPBACK = 0` and any required CAN monitoring/filter controls after parser adjustments.
+
+### Verification-first milestones
+
+- [ ] Add short-frame logging (hex dump) around `sendFrame()` -> `readProtocolMessage()` and confirm adapter AR payloads are arriving with payload boundaries.
+- [ ] Extend parser handling to accumulate until timeout or explicit terminator if terminator is absent, and ensure this does not regress adapter command acknowledgements.
+- [ ] Treat the equivalent of `timeout` / `buffer-empty` as expected polling states in streaming contexts.
+- [ ] Re-run `inspect-device raw --transport serial` on a command that should generate a known ECU response and compare with earlier “transmit-only” logs.
+- [ ] Re-test live data/streaming only after parser changes are validated with raw framing traces.
+
+### Exit criteria for this phase
+
+- A confirmed raw ECU response is observed in logs from a serial raw/inspect flow.
+- Streaming path advances without immediate timeout abort when ECU traffic is delayed/spread across fragments.
+- No new failures are introduced in existing raw adapter handshake and command flows.
