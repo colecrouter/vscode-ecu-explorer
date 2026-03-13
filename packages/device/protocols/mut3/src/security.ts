@@ -69,6 +69,9 @@
  * ## References
  *
  * - https://github.com/harshadura/libmut (MUT-III session layer — no SecurityAccess)
+ * - https://github.com/harshadura/Lancer-Scan (Mitsubishi MUT-III scanner reference implementation)
+ * - https://github.com/jakka351/OpenJ2534 (J2534 transport and PassThru reference materials)
+ * - https://github.com/joeFischetti/python-j2534 (J2534 API invocation patterns)
  * - EcuFlash macOS binary analysis (ecuflash_138_osx.dmg, `mitsuecu` class)
  * - EcuFlash 1.44 Windows binary analysis (`mitsucan` flash method, M32186F8 CPU)
  * - Community EvoScan / EvoXForums reverse-engineering documentation

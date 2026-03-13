@@ -37,12 +37,25 @@ The following open-source projects are the primary references for protocol imple
 |---|---|---|
 | **libmut** (Donour Sizemore) | https://github.com/harshadura/libmut | MUT-III protocol implementation for OpenPort cable. Python + C. Primary reference for MUT-III session layer, frame structure, and service IDs. |
 | **NikolaKozina/j2534** | https://github.com/NikolaKozina/j2534 | Cross-platform J2534 PassThru implementation using libusb. C. Primary reference for OpenPort 2.0 AT command protocol and USB bulk transfer framing. |
+| **Lancer-Scan** (harshadura) | https://github.com/harshadura/Lancer-Scan | Mitsubishi MUT-III scanner and notes around scanner workflows, command mapping, and transport behavior. |
+| **OpenJ2534** | https://github.com/jakka351/OpenJ2534 | Open/closed-source J2534 resources, APIs, and transport samples useful for OpenPort parity and compatibility checks. |
+| **python-j2534** (joeFischetti) | https://github.com/joeFischetti/python-j2534 | Python wrapper for J2534 transport APIs with practical usage examples for PassThru workflow testing. |
+| **python-uds** (hyundai-odyssey) | https://github.com/hyundai-odyssey/python-uds | UDS service helpers and message framing examples for diagnostics on top of transport layers. |
 
 **Attribution requirement**: Any code ported or derived from these references must include a comment of the form:
 ```typescript
 // Ref: https://github.com/harshadura/libmut/blob/master/libmut/mut.py#L42
 // Implements the MUT-III SecurityAccess seed/key response
 ```
+
+### MUT-II / MUT-III Open-Source Reference Set
+
+Use this order for implementation work:
+
+1. Start with `libmut` for Mitsubishi MUT-III command/session structure.
+2. Cross-check `Lancer-Scan` for field-proven Mitsubishi scanner behavior and logging semantics.
+3. Use `OpenJ2534` and `python-j2534` for transport-level parity and diagnostic transport sequencing.
+4. Validate service-level UDS/diagnostic packaging against `python-uds`.
 
 ---
 
@@ -752,3 +765,8 @@ The `packages/definitions/ecuflash/` package uses `fs` for XML file reading. Thi
 - [libmut](https://github.com/harshadura/libmut) — MUT-III protocol reference (Donour Sizemore)
 - [NikolaKozina/j2534](https://github.com/NikolaKozina/j2534) — OpenPort 2.0 AT command protocol reference
 - [WebUSB API (MDN)](https://developer.mozilla.org/en-US/docs/Web/API/WebUSB_API) — `navigator.usb` API reference
+- [Lancer-Scan](https://github.com/harshadura/Lancer-Scan) — Mitsubishi MUT-III scanner project and notes
+- [OpenJ2534](https://github.com/jakka351/OpenJ2534) — J2534 tools and implementation references
+- [python-j2534](https://github.com/joeFischetti/python-j2534) — J2534 API and adapter workflow examples
+- [python-uds](https://github.com/hyundai-odyssey/python-uds) — UDS service and message framing patterns
+
