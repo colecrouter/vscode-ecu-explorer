@@ -12,11 +12,7 @@
 	import { TableView, TableGrid } from "@ecu-explorer/ui";
 	import type { ThemeColors } from "@ecu-explorer/ui";
 	import { onMount } from "svelte";
-	import {
-		postRedoIntent,
-		postUndoIntent,
-		rebuildTableViewFromHostUpdate,
-	} from "./table-host-sync.js";
+	import { rebuildTableViewFromHostUpdate } from "./table-host-sync.js";
 
 	type TableGridInstance = {
 		focusActiveCell: () => void;
@@ -62,29 +58,6 @@
 
 		// Handle keyboard shortcuts for undo/redo at document level
 		function handleKeyDown(event: KeyboardEvent) {
-			// Undo: Ctrl+Z or Cmd+Z (without Shift)
-			if (
-				(event.ctrlKey || event.metaKey) &&
-				event.key === "z" &&
-				!event.shiftKey
-			) {
-				event.preventDefault();
-				handleUndo();
-				return;
-			}
-
-			// Redo: Ctrl+Y or Cmd+Shift+Z
-			if (
-				((event.ctrlKey || event.metaKey) && event.key === "y") ||
-				((event.ctrlKey || event.metaKey) &&
-					event.shiftKey &&
-					event.key === "z")
-			) {
-				event.preventDefault();
-				handleRedo();
-				return;
-			}
-
 			// Math operation hotkeys: =, +, -, *, /
 			// Handle at document level to work even when input is focused
 			if (
@@ -381,17 +354,6 @@
 				message: `Math operation failed: ${error instanceof Error ? error.message : String(error)}`,
 			});
 		}
-	}
-
-	// Handle undo/redo from UI
-	function handleUndo() {
-		if (!tableView) return;
-		postUndoIntent(vscode);
-	}
-
-	function handleRedo() {
-		if (!tableView) return;
-		postRedoIntent(vscode);
 	}
 
 	// Handle cell edits - commit to host (reactive approach)

@@ -1106,6 +1106,27 @@ export async function activate(
 				session.markSavedIfForRom(savedDocument);
 			}
 		},
+		async (document, action) => {
+			const session = tableSessions.get(document.uri.toString());
+			if (!session) {
+				return;
+			}
+
+			const result = action === "undo" ? session.undo() : session.redo();
+			if (!result) {
+				return;
+			}
+
+			activeRom =
+				activeRom && activeRom.romUri === session.romDocument.uri.toString()
+					? { ...activeRom, bytes: session.romDocument.romBytes }
+					: activeRom;
+
+			const panel = session.activePanel ?? activePanel;
+			if (panel) {
+				await panel.webview.postMessage(result.message);
+			}
+		},
 	);
 	editorProvider = newEditorProvider;
 	// Create a separate delegate for table editor registration.

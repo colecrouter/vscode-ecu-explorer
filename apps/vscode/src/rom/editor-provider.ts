@@ -30,6 +30,12 @@ async function parseDefinitionByUri(
 	return undefined;
 }
 
+type CustomDocumentChangeEvent<T extends vscode.CustomDocument> =
+	| vscode.CustomDocumentEditEvent<T>
+	| vscode.CustomDocumentContentChangeEvent<T>;
+
+type TableDocumentEditAction = "undo" | "redo";
+
 /**
  * Custom editor provider for ROM files
  * Implements VSCode's CustomEditorProvider to enable native dirty marker,
@@ -48,7 +54,7 @@ export class RomEditorProvider
 	 * Fires only for RomDocument instances opened via romViewer.editor.
 	 */
 	private readonly _onDidChangeCustomDocument = new vscode.EventEmitter<
-		vscode.CustomDocumentEditEvent<RomDocument | TableDocument>
+		CustomDocumentChangeEvent<RomDocument | TableDocument>
 	>();
 	readonly onDidChangeCustomDocument = this._onDidChangeCustomDocument.event;
 
@@ -59,7 +65,7 @@ export class RomEditorProvider
 	 * preventing "No custom document found" errors.
 	 */
 	readonly _onDidChangeTableDocument = new vscode.EventEmitter<
-		vscode.CustomDocumentEditEvent<TableDocument>
+		CustomDocumentChangeEvent<TableDocument>
 	>();
 
 	private readonly _onDidOpenRomDocument =
@@ -108,6 +114,11 @@ export class RomEditorProvider
 		private readonly savingRomUris?: Set<string>,
 		/** Called after a successful save so callers can reset undo/redo history */
 		private readonly onAfterSave?: (document: RomDocument) => void,
+		/** Called when VS Code invokes native undo/redo for a table editor */
+		private readonly onTableEditAction?: (
+			document: TableDocument,
+			action: TableDocumentEditAction,
+		) => Promise<void> | void,
 	) {
 		this.stateManager = new WorkspaceState(context.workspaceState);
 		this.contextTracker = new OpenContextTracker();
@@ -266,12 +277,6 @@ export class RomEditorProvider
 			if (this.documentToPanelMap.has(document)) {
 				this._onDidChangeCustomDocument.fire({
 					document,
-					undo: () => {
-						// Undo is handled by the webview and extension
-					},
-					redo: () => {
-						// Redo is handled by the webview and extension
-					},
 				});
 			}
 		});
@@ -398,11 +403,11 @@ export class RomEditorProvider
 			}
 			this._onDidChangeTableDocument.fire({
 				document: tableDocument,
-				undo: () => {
-					// Undo is handled by the webview and extension
+				undo: async () => {
+					await this.onTableEditAction?.(tableDocument, "undo");
 				},
-				redo: () => {
-					// Redo is handled by the webview and extension
+				redo: async () => {
+					await this.onTableEditAction?.(tableDocument, "redo");
 				},
 			});
 		});
@@ -755,7 +760,7 @@ export class TableEditorDelegate
 	implements vscode.CustomEditorProvider<TableDocument>
 {
 	readonly onDidChangeCustomDocument: vscode.Event<
-		vscode.CustomDocumentEditEvent<TableDocument>
+		CustomDocumentChangeEvent<TableDocument>
 	>;
 
 	constructor(private readonly inner: RomEditorProvider) {
