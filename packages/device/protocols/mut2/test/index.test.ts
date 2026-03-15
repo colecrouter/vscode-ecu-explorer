@@ -110,7 +110,9 @@ describe("Mut2Protocol", () => {
 		session.stop();
 
 		expect(onFrame).toHaveBeenCalled();
-		const emittedNames = new Set<number>(onFrame.mock.calls.map((call) => call[0]?.pid));
+		const emittedNames = new Set<number>(
+			onFrame.mock.calls.map((call) => call[0]?.pid),
+		);
 		expect(emittedNames.has(rpmPid?.pid ?? -1)).toBe(true);
 		expect(emittedNames.has(vePid?.pid ?? -1)).toBe(true);
 	});

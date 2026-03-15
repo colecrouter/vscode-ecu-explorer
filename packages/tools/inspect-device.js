@@ -15,6 +15,7 @@ import {
 	TraceWriter,
 } from "../device/dist/index.js";
 import { MitsubishiBootloaderProtocol } from "../device/protocols/mitsubishi-bootloader/dist/index.js";
+import { Mut2Protocol } from "../device/protocols/mut2/dist/index.js";
 import {
 	Mut3Protocol,
 	RAX_PID_DESCRIPTORS,
@@ -22,7 +23,6 @@ import {
 import { Obd2Protocol } from "../device/protocols/obd2/dist/index.js";
 import { SubaruProtocol } from "../device/protocols/subaru/dist/index.js";
 import { UdsProtocol } from "../device/protocols/uds/dist/index.js";
-import { Mut2Protocol } from "../device/protocols/mut2/dist/index.js";
 import { OpenPort2Transport } from "../device/transports/openport2/dist/index.js";
 import { formatDiagnosticOutput } from "../mcp/dist/formatters/diagnostics-formatter.js";
 
