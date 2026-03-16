@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type {
 	Table1DDefinition,
 	Table2DDefinition,
+	TableDefinition,
 } from "../src/definition/table.js";
 import {
 	findClosestTableMatches,
@@ -33,7 +34,6 @@ describe("table search", () => {
 			name: "values",
 			address: 0,
 			dtype: "u8",
-			unit: "deg",
 		},
 	} satisfies Table2DDefinition;
 
@@ -61,7 +61,6 @@ describe("table search", () => {
 			name: "values",
 			address: 4,
 			dtype: "u8",
-			unit: "afr",
 		},
 	} satisfies Table2DDefinition;
 
@@ -81,11 +80,10 @@ describe("table search", () => {
 			name: "values",
 			address: 8,
 			dtype: "u8",
-			unit: "%",
 		},
 	} satisfies Table1DDefinition;
 
-	const tables = [
+	const tables: TableDefinition[] = [
 		highOctaneIgnition,
 		primaryOpenLoopFueling,
 		coolantCompensation,

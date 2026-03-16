@@ -51,7 +51,11 @@ export async function handleReadTable(
 	}
 
 	if (!tableDef) {
-		const suggestions = findClosestTableMatches(tableName, definition.tables, 3);
+		const suggestions = findClosestTableMatches(
+			tableName,
+			definition.tables,
+			3,
+		);
 		const suggestionText =
 			suggestions.length > 0
 				? `\nDid you mean: ${suggestions.map((table) => table.name).join(", ")}?`

@@ -147,8 +147,11 @@ export function rankCandidates<T>(
 		return [];
 	}
 
-	const { maxResults = candidates.length, minScore = 0, tokenizeInput = false } =
-		options;
+	const {
+		maxResults = candidates.length,
+		minScore = 0,
+		tokenizeInput = false,
+	} = options;
 	const tokens = tokenizeInput
 		? input
 				.toLowerCase()
@@ -181,7 +184,10 @@ export function rankCandidates<T>(
 
 			if (tokens.length > 1) {
 				const tokenScores = tokens.map((token) => {
-					let bestToken = { score: 0, text: best?.matchedText ?? searchTexts[0]?.text ?? "" };
+					let bestToken = {
+						score: 0,
+						text: best?.matchedText ?? searchTexts[0]?.text ?? "",
+					};
 					for (const entry of searchTexts) {
 						const weightedScore =
 							scoreCandidate(token, entry.text) * (entry.weight ?? 1);
