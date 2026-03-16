@@ -62,10 +62,58 @@ describe("handleReadLog", () => {
 		await rm(tempDir, { recursive: true, force: true });
 
 		expect(result).toContain("time_column: Timestamp (ms)");
+		expect(result).toContain(`resolved_path: ${target}`);
+		expect(result).toContain("outside_logs_dir: false");
 		expect(result).toContain("channels:");
 		expect(result).toContain("Engine RPM");
 		expect(result).toContain("Knock Sum");
 		expect(result).toContain("| Channel");
+		expect(result).toContain("| Engine RPM | rpm");
+	});
+
+	it("allows reading a log outside logsDir and emits a warning", async () => {
+		const tempDir = await mkdtemp(path.join(os.tmpdir(), "ecu-mcp-read-log-"));
+		const outsideDir = await mkdtemp(
+			path.join(os.tmpdir(), "ecu-mcp-read-log-outside-"),
+		);
+		const target = path.join(outsideDir, "external-session.csv");
+		await writeFile(target, "");
+
+		config = {
+			...baseConfig,
+			logsDir: tempDir,
+		};
+
+		vi.mocked(logReader.readLogFileMeta).mockResolvedValue(
+			createLogFileMeta({
+				filePath: target,
+				fileName: "external-session.csv",
+				channels: ["Engine RPM", "Knock Sum"],
+				units: ["rpm", "count"],
+				rowCount: 2,
+				durationMs: 100,
+				sampleRateHz: 20,
+			}),
+		);
+		vi.mocked(logReader.parseLogFileRows).mockResolvedValue(
+			createParsedLogRows({
+				headers: ["Timestamp (ms)", "Engine RPM", "Knock Sum"],
+				rows: [
+					{ "Timestamp (ms)": 0, "Engine RPM": 3000, "Knock Sum": 0 },
+					{ "Timestamp (ms)": 100, "Engine RPM": 3200, "Knock Sum": 1 },
+				],
+			}),
+		);
+
+		const result = await handleReadLog({ file: target }, config);
+
+		await rm(tempDir, { recursive: true, force: true });
+		await rm(outsideDir, { recursive: true, force: true });
+
+		expect(result).toContain(`resolved_path: ${target}`);
+		expect(result).toContain("outside_logs_dir: true");
+		expect(result).toContain("Warning:");
+		expect(result).toContain("outside the configured");
 		expect(result).toContain("| Engine RPM | rpm");
 	});
 

@@ -173,7 +173,7 @@ Pagination belongs here because discovery lists can be long.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `file` | `string` | Yes | Filename from `list_logs` |
+| `file` | `string` | Yes | Filename from `list_logs` or an explicit path to a supported log file |
 | `where` | `string` | No | Row filter expression using fields from the selected log |
 | `channels` | `string[]` | No | Restrict returned columns to the listed channels |
 | `start_s` | `number` | No | Start time in seconds |
@@ -198,6 +198,8 @@ The response SHALL include:
 - time column name if present
 
 This is the authoritative source of valid field names for `read_log.where`.
+
+If `file` resolves outside the configured `logs_dir`, `read_log` SHALL still inspect the file but SHALL include a warning in the output noting that `list_logs` only discovers files under the configured logs directory.
 
 #### Row Mode
 

@@ -38,25 +38,36 @@ interface TimeWindow {
 	endMs: number;
 }
 
-function resolveLogFilePath(logsDir: string, requestedFile: string): string {
+function resolveLogFilePath(
+	logsDir: string,
+	requestedFile: string,
+): {
+	logPath: string;
+	outsideLogsDir: boolean;
+} {
 	const candidatePath = path.isAbsolute(requestedFile)
 		? requestedFile
-		: path.resolve(logsDir, requestedFile);
+		: requestedFile.includes(path.sep) ||
+				requestedFile.startsWith(`.${path.sep}`) ||
+				requestedFile === "." ||
+				requestedFile === ".."
+			? path.resolve(process.cwd(), requestedFile)
+			: path.resolve(logsDir, requestedFile);
 
 	const normalizedBase = path.resolve(logsDir);
 	const normalizedCandidate = path.resolve(candidatePath);
 	const rel = path.relative(normalizedBase, normalizedCandidate);
-	const isInside =
+	const outsideLogsDir = !(
 		rel === "" ||
 		(!rel.startsWith("..") &&
 			!path.isAbsolute(rel) &&
-			!rel.startsWith(`..${path.sep}`));
+			!rel.startsWith(`..${path.sep}`))
+	);
 
-	if (!isInside) {
-		throw new Error(`Invalid log file path: ${requestedFile}`);
-	}
-
-	return normalizedCandidate;
+	return {
+		logPath: normalizedCandidate,
+		outsideLogsDir,
+	};
 }
 
 function formatLogValue(v: number | undefined): string {
@@ -150,7 +161,10 @@ export async function handleReadLog(
 ): Promise<string> {
 	const { file, where, channels, startS, endS, beforeMs, afterMs, stepMs } =
 		options;
-	const logPath = resolveLogFilePath(config.logsDir, file);
+	const { logPath, outsideLogsDir } = resolveLogFilePath(config.logsDir, file);
+	const warningNote = outsideLogsDir
+		? `Warning: ${logPath} is outside the configured logs directory ${config.logsDir}. Parsing may fail if the log file is not in the expected format.`
+		: null;
 
 	try {
 		await fs.stat(logPath);
@@ -170,6 +184,8 @@ export async function handleReadLog(
 	if (isSchemaOnlyRequest(options)) {
 		const frontmatter = toYamlFrontmatter({
 			file,
+			resolved_path: logPath,
+			outside_logs_dir: outsideLogsDir,
 			rows: meta.rowCount,
 			duration_s:
 				meta.durationMs !== null
@@ -182,7 +198,7 @@ export async function handleReadLog(
 		});
 
 		if (selectedChannels.length === 0) {
-			return `${frontmatter}\n(No channels available in ${file})`;
+			return `${frontmatter}\n${warningNote ? `${warningNote}\n\n` : ""}(No channels available in ${file})`;
 		}
 
 		const headers = ["Channel", "Unit"];
@@ -191,7 +207,7 @@ export async function handleReadLog(
 			return [channel, index >= 0 ? (meta.units[index] ?? "") : ""];
 		});
 
-		return `${frontmatter}\n${buildMarkdownTable(headers, rows)}`;
+		return `${frontmatter}\n${warningNote ? `${warningNote}\n\n` : ""}${buildMarkdownTable(headers, rows)}`;
 	}
 
 	const startMs = startS !== undefined ? startS * 1000 : undefined;
@@ -311,6 +327,8 @@ export async function handleReadLog(
 
 	const frontmatter = toYamlFrontmatter({
 		file,
+		resolved_path: logPath,
+		outside_logs_dir: outsideLogsDir,
 		rows_returned: selectedRows.length,
 		time_range_s:
 			selectedRows.length > 0 && timeColumnName
@@ -331,7 +349,7 @@ export async function handleReadLog(
 	});
 
 	if (selectedRows.length === 0) {
-		return `${frontmatter}\n(No rows matched the requested log slice)`;
+		return `${frontmatter}\n${warningNote ? `${warningNote}\n\n` : ""}(No rows matched the requested log slice)`;
 	}
 
 	const headers = timeColumnName
@@ -348,5 +366,5 @@ export async function handleReadLog(
 		return cells;
 	});
 
-	return `${frontmatter}\n${buildMarkdownTable(headers, markdownRows)}`;
+	return `${frontmatter}\n${warningNote ? `${warningNote}\n\n` : ""}${buildMarkdownTable(headers, markdownRows)}`;
 }
