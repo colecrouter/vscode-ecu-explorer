@@ -13,6 +13,7 @@
 		"patch-table": "node ./patch-table.js",
 		"list-logs": "node ./list-logs.js",
 		"read-log": "node ./read-log.js",
+		"normalize-log": "node ./normalize-log.js",
 		"inspect-device": "node ./inspect-device.js",
 		"check": "tsc --noEmit"
 	},

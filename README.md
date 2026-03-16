@@ -88,6 +88,7 @@ npm run tools:list-tables -- --rom ./56890009_2011_USDM_5MT.hex --query timing
 npm run tools:read-table -- --rom ./56890009_2011_USDM_5MT.hex --table "Fuel Injector Scaling"
 npm run tools:list-logs -- --logs-dir ./logs
 npm run tools:read-log -- --logs-dir ./logs --file session.csv
+npm run tools:normalize-log -- --input ./EvoScanDataLog.csv --format evoscan
 ```
 
 ---

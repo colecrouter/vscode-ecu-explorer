@@ -44,6 +44,7 @@
 		"tools:patch-table": "npm run patch-table -w @ecu-explorer/tools --",
 		"tools:list-logs": "npm run list-logs -w @ecu-explorer/tools --",
 		"tools:read-log": "npm run read-log -w @ecu-explorer/tools --",
+		"tools:normalize-log": "npm run normalize-log -w @ecu-explorer/tools --",
 		"tools:inspect-device": "npm run inspect-device -w @ecu-explorer/tools --",
 		"lint": "biome check --formatter-enabled false",
 		"format": "biome format --write && biome check --write --linter-enabled false && prettier --write . -l",
