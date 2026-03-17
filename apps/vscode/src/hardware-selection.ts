@@ -1,32 +1,51 @@
 import type { DeviceInfo } from "@ecu-explorer/device";
-import type { HardwareSelectionRecord } from "@ecu-explorer/device/hardware-runtime";
+import type {
+	HardwareLocality,
+	HardwareSelectionRecord,
+} from "@ecu-explorer/device/hardware-runtime";
 import * as vscode from "vscode";
 import type { WorkspaceState } from "./workspace-state.js";
 
 export const DEFAULT_HARDWARE_SELECTION_SLOT = "ecu-primary";
+export const DEFAULT_HARDWARE_LOCALITY =
+	"extension-host" satisfies HardwareLocality;
+
+export interface HardwareCandidate {
+	device: DeviceInfo;
+	locality: HardwareLocality;
+}
+
+export function createHardwareCandidate(
+	device: DeviceInfo,
+	locality: HardwareLocality = DEFAULT_HARDWARE_LOCALITY,
+): HardwareCandidate {
+	return { device, locality };
+}
 
 export function createHardwareSelectionRecord(
-	device: DeviceInfo,
+	candidate: HardwareCandidate,
 ): HardwareSelectionRecord {
 	return {
-		id: device.id,
-		transportName: device.transportName,
-		name: device.name,
+		id: candidate.device.id,
+		transportName: candidate.device.transportName,
+		name: candidate.device.name,
+		locality: candidate.locality,
 	};
 }
 
-export function findPreferredHardwareDevice(
-	devices: readonly DeviceInfo[],
+export function findPreferredHardwareCandidate(
+	candidates: readonly HardwareCandidate[],
 	selection: HardwareSelectionRecord | undefined,
-): DeviceInfo | undefined {
+): HardwareCandidate | undefined {
 	if (selection == null) {
 		return undefined;
 	}
 
-	return devices.find(
-		(device) =>
-			device.id === selection.id &&
-			device.transportName === selection.transportName,
+	return candidates.find(
+		(candidate) =>
+			candidate.device.id === selection.id &&
+			candidate.device.transportName === selection.transportName &&
+			(selection.locality == null || candidate.locality === selection.locality),
 	);
 }
 
@@ -40,10 +59,10 @@ export class HardwareSelectionService {
 		return this.workspaceState.getDeviceSelection(this.slot);
 	}
 
-	saveDevice(device: DeviceInfo): void {
+	saveCandidate(candidate: HardwareCandidate): void {
 		this.workspaceState.saveDeviceSelection(
 			this.slot,
-			createHardwareSelectionRecord(device),
+			createHardwareSelectionRecord(candidate),
 		);
 	}
 
@@ -51,34 +70,42 @@ export class HardwareSelectionService {
 		this.workspaceState.clearDeviceSelection(this.slot);
 	}
 
-	findPreferredDevice(devices: readonly DeviceInfo[]): DeviceInfo | undefined {
-		return findPreferredHardwareDevice(devices, this.getSelection());
+	findPreferredCandidate(
+		candidates: readonly HardwareCandidate[],
+	): HardwareCandidate | undefined {
+		return findPreferredHardwareCandidate(candidates, this.getSelection());
 	}
 }
 
 export interface HardwareDeviceSelectionStrategy {
-	selectDevice(devices: readonly DeviceInfo[]): Promise<DeviceInfo>;
-	rememberDevice(device: DeviceInfo): void;
+	selectDevice(
+		candidates: readonly HardwareCandidate[],
+	): Promise<HardwareCandidate>;
+	rememberCandidate(candidate: HardwareCandidate): void;
 }
 
-export async function promptForHardwareDevice(
-	devices: readonly DeviceInfo[],
-): Promise<DeviceInfo> {
-	if (devices.length === 0) {
+function formatLocality(locality: HardwareLocality): string {
+	return locality === "client-browser" ? "client browser" : "extension host";
+}
+
+export async function promptForHardwareCandidate(
+	candidates: readonly HardwareCandidate[],
+): Promise<HardwareCandidate> {
+	if (candidates.length === 0) {
 		throw new Error("No device selected");
 	}
 
-	if (devices.length === 1) {
-		const device = devices[0];
-		if (device == null) {
+	if (candidates.length === 1) {
+		const candidate = candidates[0];
+		if (candidate == null) {
 			throw new Error("No device selected");
 		}
-		return device;
+		return candidate;
 	}
 
-	const deviceQuickPicks = devices.map((device, index) => ({
-		label: `${device.name} (${device.transportName})`,
-		description: `ID: ${device.id}`,
+	const deviceQuickPicks = candidates.map((candidate, index) => ({
+		label: `${candidate.device.name} (${candidate.device.transportName})`,
+		description: `${formatLocality(candidate.locality)} · ID: ${candidate.device.id}`,
 		index,
 	}));
 	const selected = await vscode.window.showQuickPick(deviceQuickPicks, {
@@ -87,11 +114,11 @@ export async function promptForHardwareDevice(
 	if (!selected) {
 		throw new Error("Device selection cancelled by user");
 	}
-	const device = devices[selected.index];
-	if (!device) {
+	const candidate = candidates[selected.index];
+	if (!candidate) {
 		throw new Error("Selected device index is out of bounds for device list");
 	}
-	return device;
+	return candidate;
 }
 
 export class WorkspaceHardwareSelectionStrategy
@@ -99,16 +126,18 @@ export class WorkspaceHardwareSelectionStrategy
 {
 	constructor(private readonly selectionService: HardwareSelectionService) {}
 
-	async selectDevice(devices: readonly DeviceInfo[]): Promise<DeviceInfo> {
-		const preferred = this.selectionService.findPreferredDevice(devices);
+	async selectDevice(
+		candidates: readonly HardwareCandidate[],
+	): Promise<HardwareCandidate> {
+		const preferred = this.selectionService.findPreferredCandidate(candidates);
 		if (preferred != null) {
 			return preferred;
 		}
 
-		return promptForHardwareDevice(devices);
+		return promptForHardwareCandidate(candidates);
 	}
 
-	rememberDevice(device: DeviceInfo): void {
-		this.selectionService.saveDevice(device);
+	rememberCandidate(candidate: HardwareCandidate): void {
+		this.selectionService.saveCandidate(candidate);
 	}
 }

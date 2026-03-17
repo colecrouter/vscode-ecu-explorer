@@ -275,6 +275,20 @@ export interface HardwareSelectionRecord {
 }
 ```
 
+Selection-capable hardware candidates should also be able to report where the session is owned:
+
+```typescript
+export interface HardwareCandidate {
+  identity: HardwareIdentity;
+  locality: "extension-host" | "client-browser";
+}
+```
+
+This allows the selection layer to distinguish between the same hardware family appearing through:
+
+- Node-owned USB or serial on the extension host
+- WebUSB or WebSerial on the client/browser
+
 This is the persistence boundary.
 
 `HardwareSelectionRecord` should not depend on ECU protocol names or ECU-only terminology.

@@ -8,7 +8,10 @@
  * that state is specific to each workspace and persists across sessions.
  */
 
-import type { HardwareSelectionRecord } from "@ecu-explorer/device/hardware-runtime";
+import type {
+	HardwareLocality,
+	HardwareSelectionRecord,
+} from "@ecu-explorer/device/hardware-runtime";
 import type * as vscode from "vscode";
 
 /**
@@ -366,9 +369,21 @@ export class WorkspaceState {
 			if (typeof entry.productId === "string") {
 				selection.productId = entry.productId;
 			}
+			const locality = this.sanitizeHardwareLocality(entry.locality);
+			if (locality != null) {
+				selection.locality = locality;
+			}
 			result[key] = selection;
 		}
 		return result;
+	}
+
+	private sanitizeHardwareLocality(
+		value: unknown,
+	): HardwareLocality | undefined {
+		return value === "extension-host" || value === "client-browser"
+			? value
+			: undefined;
 	}
 
 	/**

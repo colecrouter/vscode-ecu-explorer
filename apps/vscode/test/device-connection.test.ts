@@ -345,6 +345,7 @@ describe("DeviceManagerImpl", () => {
 				id: "openport2:two",
 				transportName: "openport2",
 				name: "OpenPort 2.0 B",
+				locality: "extension-host",
 			});
 			manager.setHardwareSelectionStrategy(
 				new WorkspaceHardwareSelectionStrategy(
@@ -391,6 +392,7 @@ describe("DeviceManagerImpl", () => {
 				id: "openport2:one",
 				transportName: "openport2",
 				name: "OpenPort 2.0 A",
+				locality: "extension-host",
 			});
 		});
 	});

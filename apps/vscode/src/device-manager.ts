@@ -8,7 +8,12 @@ import type {
 	FailureCause,
 } from "@ecu-explorer/device";
 import * as vscode from "vscode";
-import type { HardwareDeviceSelectionStrategy } from "./hardware-selection.js";
+import {
+	createHardwareCandidate,
+	type HardwareCandidate,
+	type HardwareDeviceSelectionStrategy,
+	promptForHardwareCandidate,
+} from "./hardware-selection.js";
 
 /**
  * Reconnect configuration options.
@@ -177,10 +182,12 @@ export class DeviceManagerImpl implements DeviceManager {
 			);
 		}
 
-		const selectedDevice =
+		const candidates = devices.map((device) => createHardwareCandidate(device));
+		const selectedCandidate =
 			this.hardwareSelectionStrategy != null
-				? await this.hardwareSelectionStrategy.selectDevice(devices)
-				: await this.selectDeviceFromList(devices);
+				? await this.hardwareSelectionStrategy.selectDevice(candidates)
+				: await this.selectDeviceFromList(candidates);
+		const selectedDevice = selectedCandidate.device;
 
 		if (!selectedDevice) {
 			throw new Error("No device selected");
@@ -201,7 +208,7 @@ export class DeviceManagerImpl implements DeviceManager {
 		for (const protocol of this.protocols) {
 			try {
 				if (await protocol.canHandle(connection)) {
-					this.hardwareSelectionStrategy?.rememberDevice(selectedDevice);
+					this.hardwareSelectionStrategy?.rememberCandidate(selectedCandidate);
 					vscode.window.showInformationMessage(
 						`Connected using ${protocol.name}`,
 					);
@@ -248,33 +255,9 @@ export class DeviceManagerImpl implements DeviceManager {
 	}
 
 	private async selectDeviceFromList(
-		devices: readonly DeviceInfo[],
-	): Promise<DeviceInfo> {
-		if (devices.length === 0) {
-			throw new Error("No device selected");
-		}
-
-		const device = devices[0];
-		if (devices.length === 1 && device != null) {
-			return device;
-		}
-
-		const deviceQuickPicks = devices.map((entry, index) => ({
-			label: `${entry.name} (${entry.transportName})`,
-			description: `ID: ${entry.id}`,
-			index,
-		}));
-		const selected = await vscode.window.showQuickPick(deviceQuickPicks, {
-			placeHolder: "Select a device to connect",
-		});
-		if (!selected) {
-			throw new Error("Device selection cancelled by user");
-		}
-		const selectedDevice = devices[selected.index];
-		if (!selectedDevice) {
-			throw new Error("Selected device index is out of bounds for device list");
-		}
-		return selectedDevice;
+		candidates: readonly HardwareCandidate[],
+	): Promise<HardwareCandidate> {
+		return promptForHardwareCandidate(candidates);
 	}
 
 	/**

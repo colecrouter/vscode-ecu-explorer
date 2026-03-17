@@ -2,8 +2,9 @@ import type { DeviceInfo } from "@ecu-explorer/device";
 import { describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
 import {
+	createHardwareCandidate,
 	createHardwareSelectionRecord,
-	findPreferredHardwareDevice,
+	findPreferredHardwareCandidate,
 	HardwareSelectionService,
 	WorkspaceHardwareSelectionStrategy,
 } from "../src/hardware-selection.js";
@@ -35,42 +36,58 @@ describe("hardware-selection", () => {
 	it("creates a hardware selection record from a device", () => {
 		expect(
 			createHardwareSelectionRecord(
-				makeDevice({ id: "openport2:ABC", name: "OpenPort 2.0" }),
+				createHardwareCandidate(
+					makeDevice({ id: "openport2:ABC", name: "OpenPort 2.0" }),
+				),
 			),
 		).toEqual({
 			id: "openport2:ABC",
 			transportName: "openport2",
 			name: "OpenPort 2.0",
+			locality: "extension-host",
 		});
 	});
 
-	it("finds the preferred device by transport and id", () => {
-		const preferred = findPreferredHardwareDevice(
+	it("finds the preferred candidate by transport, id, and locality", () => {
+		const preferred = findPreferredHardwareCandidate(
 			[
-				makeDevice({ id: "openport2:ABC", name: "OpenPort 2.0 A" }),
-				makeDevice({ id: "openport2:DEF", name: "OpenPort 2.0 B" }),
+				createHardwareCandidate(
+					makeDevice({ id: "openport2:ABC", name: "OpenPort 2.0 A" }),
+				),
+				createHardwareCandidate(
+					makeDevice({ id: "openport2:DEF", name: "OpenPort 2.0 B" }),
+					"client-browser",
+				),
 			],
 			{
 				id: "openport2:DEF",
 				transportName: "openport2",
 				name: "OpenPort 2.0 B",
+				locality: "client-browser",
 			},
 		);
 
-		expect(preferred?.id).toBe("openport2:DEF");
+		expect(preferred?.device.id).toBe("openport2:DEF");
+		expect(preferred?.locality).toBe("client-browser");
 	});
 
-	it("returns undefined when the preferred device is not present", () => {
-		const preferred = findPreferredHardwareDevice(
-			[makeDevice({ id: "openport2:ABC", name: "OpenPort 2.0 A" })],
+	it("falls back to id and transport when older selections have no locality", () => {
+		const preferred = findPreferredHardwareCandidate(
+			[
+				createHardwareCandidate(
+					makeDevice({ id: "openport2:ABC", name: "OpenPort 2.0 A" }),
+					"client-browser",
+				),
+			],
 			{
-				id: "openport2:DEF",
+				id: "openport2:ABC",
 				transportName: "openport2",
-				name: "OpenPort 2.0 B",
+				name: "OpenPort 2.0 A",
 			},
 		);
 
-		expect(preferred).toBeUndefined();
+		expect(preferred?.device.id).toBe("openport2:ABC");
+		expect(preferred?.locality).toBe("client-browser");
 	});
 
 	it("workspace strategy prefers a saved device without prompting", async () => {
@@ -79,6 +96,7 @@ describe("hardware-selection", () => {
 			id: "openport2:DEF",
 			transportName: "openport2",
 			name: "OpenPort 2.0 B",
+			locality: "extension-host",
 		});
 		const strategy = new WorkspaceHardwareSelectionStrategy(
 			new HardwareSelectionService(workspaceState),
@@ -86,11 +104,15 @@ describe("hardware-selection", () => {
 		const quickPickSpy = vi.spyOn(vscode.window, "showQuickPick");
 
 		const selected = await strategy.selectDevice([
-			makeDevice({ id: "openport2:ABC", name: "OpenPort 2.0 A" }),
-			makeDevice({ id: "openport2:DEF", name: "OpenPort 2.0 B" }),
+			createHardwareCandidate(
+				makeDevice({ id: "openport2:ABC", name: "OpenPort 2.0 A" }),
+			),
+			createHardwareCandidate(
+				makeDevice({ id: "openport2:DEF", name: "OpenPort 2.0 B" }),
+			),
 		]);
 
-		expect(selected.id).toBe("openport2:DEF");
+		expect(selected.device.id).toBe("openport2:DEF");
 		expect(quickPickSpy).not.toHaveBeenCalled();
 	});
 });

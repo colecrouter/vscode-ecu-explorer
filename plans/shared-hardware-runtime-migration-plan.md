@@ -237,6 +237,31 @@ Verification:
 - `npm run test -- node-usb-runtime.test.ts openport2-transport.test.ts`
 - `npm run check`
 
+### Commit 4.75: Introduce locality-aware hardware candidates in selection
+
+Objective:
+
+- make the shared selection layer aware of whether a hardware session is owned by the extension host or the client/browser
+
+Expected changes:
+
+- extend persisted hardware selection records with optional locality metadata
+- wrap discovered devices in extension-side hardware candidates that currently default to `extension-host`
+- keep matching backward-compatible for older saved selections that do not include locality
+
+Likely touchpoints:
+
+- `packages/device/src/hardware-runtime.ts`
+- `apps/vscode/src/hardware-selection.ts`
+- `apps/vscode/src/workspace-state.ts`
+- selection-related tests
+
+Verification:
+
+- `npm run test -- hardware-selection.test.ts workspace-state.test.ts device-connection.test.ts hardware-runtime.test.ts`
+- `npm run build -w packages/device`
+- `npm run check`
+
 ### Commit 5: Generalize selection persistence around shared hardware identity
 
 Objective:

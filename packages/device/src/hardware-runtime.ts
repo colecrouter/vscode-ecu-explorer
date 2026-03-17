@@ -1,3 +1,5 @@
+export type HardwareLocality = "extension-host" | "client-browser";
+
 export interface SerialPortDescriptor {
 	path: string;
 	serialNumber?: string | null | undefined;
@@ -22,6 +24,7 @@ export interface HardwareSelectionRecord {
 	id: string;
 	transportName: string;
 	name: string;
+	locality?: HardwareLocality;
 	serialNumber?: string;
 	vendorId?: string;
 	productId?: string;
