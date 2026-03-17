@@ -15,13 +15,14 @@ This spec now sits beneath the broader shared-hardware architecture described in
   - `att...`
   - `AR...` packet parsing
 - Desktop entrypoints inject serial runtime support.
-- Browser/web runtimes continue to rely on WebUSB, with HID remaining provisional until validated end-to-end.
+- Browser/web runtimes should prefer WebUSB, but may fall back to WebSerial when the browser exposes the cable as a serial-class device instead.
+- HID remains provisional until validated end-to-end.
 
 ## Runtime matrix
 
 | Runtime | Preferred OpenPort backend |
 |---------|----------------------------|
-| VS Code web / browser | WebUSB |
+| VS Code web / browser | WebUSB, with WebSerial fallback when needed |
 | VS Code desktop on macOS | CDC ACM serial |
 | CLI on macOS | CDC ACM serial |
 | Other desktop runtimes | transport-specific, not guaranteed |

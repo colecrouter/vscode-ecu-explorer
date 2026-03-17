@@ -471,6 +471,8 @@ These actions should:
 - run only from direct user interaction
 - return a newly authorized hardware candidate when successful
 
+The first concrete browser-owned serial consumer is OpenPort 2.0, which may now enumerate through WebUSB or WebSerial depending on how the browser and operating system expose the cable.
+
 This preserves a simple mental model:
 
 - candidate rows represent devices the runtime can already see
