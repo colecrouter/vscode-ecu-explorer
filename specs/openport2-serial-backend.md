@@ -4,6 +4,8 @@
 
 OpenPort 2.0 on macOS desktop should prefer the CDC ACM serial endpoint exposed as `/dev/cu.usbmodem*`. The shared OpenPort transport remains responsible for adapter protocol semantics, while desktop entrypoints inject a serial backend implemented with Node-only dependencies.
 
+This spec now sits beneath the broader shared-hardware architecture described in [`specs/shared-hardware-runtime-foundation.md`](./shared-hardware-runtime-foundation.md). OpenPort serial fallback remains a concrete consumer of that shared foundation rather than the architectural center of all serial-backed hardware support.
+
 ## Design
 
 - `packages/device/transports/openport2` owns:
@@ -56,9 +58,9 @@ OpenPort 2.0 on macOS desktop should prefer the CDC ACM serial endpoint exposed 
 - Compare the project's `readProtocolMessage()` behavior against EvoScan's one-message-at-a-time accumulation model before continuing blind RX experiments.
 - Keep EvoScan's `MUTII`-branch `SET_CONFIG` tuning documented for future MUT-II work, but do not mirror it into the ISO15765 serial backend without hardware evidence.
 - Decide whether the transport should model EvoScan's likely `TIMEOUT` / `BUFFER_EMPTY` tolerance and ISO15765 `LOOPBACK = 0` behavior, or leave those for hardware-driven validation.
-- Add user-facing multi-device hardware selection in the VS Code extension.
-- Persist selected hardware identities in workspace state for reconnect flows.
-- Track wideband and other non-OpenPort serial integrations as a separate follow-up once OpenPort protocol validation is complete.
+- Reuse the shared device runtime foundation for user-facing multi-device selection and reconnect flows.
+- Keep OpenPort-specific transport semantics separate from shared endpoint discovery, persistence, and matching.
+- Track wideband and other non-ECU integrations as adapter-level follow-ups on top of the shared device runtime foundation.
 
 ## Immediate next diagnosis plan (March 2026)
 
