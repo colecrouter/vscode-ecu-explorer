@@ -272,6 +272,29 @@ export class DeviceManagerImpl implements DeviceManager {
 		return this._activeConnection;
 	}
 
+	async manageHardwareSelection(): Promise<HardwareCandidate> {
+		const devices = await this.listAllDevices();
+		const candidates = devices.map((device) =>
+			createHardwareCandidate(device, this.hardwareCandidateLocality),
+		);
+		const requestActions = this.getHardwareRequestActions();
+		const promptOptions = this.getHardwarePromptOptions();
+
+		if (candidates.length === 0 && requestActions.length === 0) {
+			throw new Error(
+				"No hardware found. Connect a device or use a browser hardware request action if available.",
+			);
+		}
+
+		const selectedCandidate = await promptForHardwareCandidate(
+			candidates,
+			requestActions,
+			promptOptions,
+		);
+		this.hardwareSelectionStrategy?.rememberCandidate(selectedCandidate);
+		return selectedCandidate;
+	}
+
 	private async selectDeviceFromList(
 		candidates: readonly HardwareCandidate[],
 		requestActions: readonly HardwareRequestAction[],

@@ -966,6 +966,32 @@ export async function activate(
 		vscode.commands.registerCommand("ecuExplorer.selectDevice", () => {
 			vscode.window.showInformationMessage("Select Device is coming soon.");
 		}),
+		vscode.commands.registerCommand("ecuExplorer.manageHardware", async () => {
+			if (!deviceManager) {
+				vscode.window.showErrorMessage("Device manager is not initialized.");
+				return;
+			}
+
+			try {
+				const candidate = await deviceManager.manageHardwareSelection();
+				vscode.window.showInformationMessage(
+					`Preferred hardware set to ${candidate.device.name}.`,
+				);
+			} catch (err) {
+				if (err instanceof vscode.CancellationError) {
+					return;
+				}
+				if (
+					err instanceof Error &&
+					err.message === "Device selection cancelled by user"
+				) {
+					return;
+				}
+				vscode.window.showErrorMessage(
+					`Failed to manage hardware: ${err instanceof Error ? err.message : String(err)}`,
+				);
+			}
+		}),
 		// Device connection commands
 		vscode.commands.registerCommand("ecuExplorer.connectDevice", async () => {
 			if (!deviceManager) {
