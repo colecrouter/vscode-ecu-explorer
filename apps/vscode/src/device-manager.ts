@@ -14,6 +14,7 @@ import {
 	DEFAULT_HARDWARE_LOCALITY,
 	type HardwareCandidate,
 	type HardwareDeviceSelectionStrategy,
+	type HardwareRequestAction,
 	promptForHardwareCandidate,
 } from "./hardware-selection.js";
 
@@ -184,7 +185,8 @@ export class DeviceManagerImpl implements DeviceManager {
 	}> {
 		// List all available devices across all transports
 		const devices = await this.listAllDevices();
-		if (devices.length === 0) {
+		const requestActions = this.getHardwareRequestActions();
+		if (devices.length === 0 && requestActions.length === 0) {
 			throw new Error(
 				"No devices found. Ensure device is connected and transport is available.",
 			);
@@ -195,8 +197,11 @@ export class DeviceManagerImpl implements DeviceManager {
 		);
 		const selectedCandidate =
 			this.hardwareSelectionStrategy != null
-				? await this.hardwareSelectionStrategy.selectDevice(candidates)
-				: await this.selectDeviceFromList(candidates);
+				? await this.hardwareSelectionStrategy.selectDevice(
+						candidates,
+						requestActions,
+					)
+				: await this.selectDeviceFromList(candidates, requestActions);
 		const selectedDevice = selectedCandidate.device;
 
 		if (!selectedDevice) {
@@ -266,8 +271,35 @@ export class DeviceManagerImpl implements DeviceManager {
 
 	private async selectDeviceFromList(
 		candidates: readonly HardwareCandidate[],
+		requestActions: readonly HardwareRequestAction[],
 	): Promise<HardwareCandidate> {
-		return promptForHardwareCandidate(candidates);
+		return promptForHardwareCandidate(candidates, requestActions);
+	}
+
+	private getHardwareRequestActions(): HardwareRequestAction[] {
+		if (this.hardwareCandidateLocality !== "client-browser") {
+			return [];
+		}
+
+		return [...this.transports.values()]
+			.filter(
+				(
+					transport,
+				): transport is DeviceTransport &
+					Required<Pick<DeviceTransport, "requestDevice">> =>
+					transport.requestDevice != null,
+			)
+			.map((transport) => ({
+				id: `${transport.name}:request-device`,
+				label: `$(add) Connect new ${transport.name} device...`,
+				description:
+					"Grant browser access to a newly connected device for this transport",
+				run: async () =>
+					createHardwareCandidate(
+						await transport.requestDevice(),
+						this.hardwareCandidateLocality,
+					),
+			}));
 	}
 
 	/**

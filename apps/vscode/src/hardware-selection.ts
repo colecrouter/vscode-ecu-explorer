@@ -15,6 +15,21 @@ export interface HardwareCandidate {
 	locality: HardwareLocality;
 }
 
+export interface HardwareRequestAction {
+	id: string;
+	label: string;
+	description?: string;
+	run(): Promise<HardwareCandidate>;
+}
+
+interface HardwareCandidateQuickPickItem extends vscode.QuickPickItem {
+	candidate: HardwareCandidate;
+}
+
+interface HardwareRequestQuickPickItem extends vscode.QuickPickItem {
+	action: HardwareRequestAction;
+}
+
 export function createHardwareCandidate(
 	device: DeviceInfo,
 	locality: HardwareLocality = DEFAULT_HARDWARE_LOCALITY,
@@ -80,6 +95,7 @@ export class HardwareSelectionService {
 export interface HardwareDeviceSelectionStrategy {
 	selectDevice(
 		candidates: readonly HardwareCandidate[],
+		requestActions?: readonly HardwareRequestAction[],
 	): Promise<HardwareCandidate>;
 	rememberCandidate(candidate: HardwareCandidate): void;
 }
@@ -90,12 +106,13 @@ function formatLocality(locality: HardwareLocality): string {
 
 export async function promptForHardwareCandidate(
 	candidates: readonly HardwareCandidate[],
+	requestActions: readonly HardwareRequestAction[] = [],
 ): Promise<HardwareCandidate> {
-	if (candidates.length === 0) {
+	if (candidates.length === 0 && requestActions.length === 0) {
 		throw new Error("No device selected");
 	}
 
-	if (candidates.length === 1) {
+	if (candidates.length === 1 && requestActions.length === 0) {
 		const candidate = candidates[0];
 		if (candidate == null) {
 			throw new Error("No device selected");
@@ -103,22 +120,36 @@ export async function promptForHardwareCandidate(
 		return candidate;
 	}
 
-	const deviceQuickPicks = candidates.map((candidate, index) => ({
-		label: `${candidate.device.name} (${candidate.device.transportName})`,
-		description: `${formatLocality(candidate.locality)} · ID: ${candidate.device.id}`,
-		index,
-	}));
-	const selected = await vscode.window.showQuickPick(deviceQuickPicks, {
+	const deviceQuickPicks: HardwareCandidateQuickPickItem[] = candidates.map(
+		(candidate) => ({
+			label: `${candidate.device.name} (${candidate.device.transportName})`,
+			description: `${formatLocality(candidate.locality)} · ID: ${candidate.device.id}`,
+			candidate,
+		}),
+	);
+	const actionQuickPicks: HardwareRequestQuickPickItem[] = requestActions.map(
+		(action) => ({
+			label: action.label,
+			...(action.description != null
+				? { description: action.description }
+				: {}),
+			action,
+		}),
+	);
+	const selected = await vscode.window.showQuickPick<
+		HardwareCandidateQuickPickItem | HardwareRequestQuickPickItem
+	>([...deviceQuickPicks, ...actionQuickPicks], {
 		placeHolder: "Select a device to connect",
 	});
 	if (!selected) {
 		throw new Error("Device selection cancelled by user");
 	}
-	const candidate = candidates[selected.index];
-	if (!candidate) {
-		throw new Error("Selected device index is out of bounds for device list");
+
+	if ("action" in selected) {
+		return selected.action.run();
 	}
-	return candidate;
+
+	return selected.candidate;
 }
 
 export class WorkspaceHardwareSelectionStrategy
@@ -128,13 +159,14 @@ export class WorkspaceHardwareSelectionStrategy
 
 	async selectDevice(
 		candidates: readonly HardwareCandidate[],
+		requestActions: readonly HardwareRequestAction[] = [],
 	): Promise<HardwareCandidate> {
 		const preferred = this.selectionService.findPreferredCandidate(candidates);
 		if (preferred != null) {
 			return preferred;
 		}
 
-		return promptForHardwareCandidate(candidates);
+		return promptForHardwareCandidate(candidates, requestActions);
 	}
 
 	rememberCandidate(candidate: HardwareCandidate): void {

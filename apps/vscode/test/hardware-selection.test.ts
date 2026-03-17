@@ -6,6 +6,7 @@ import {
 	createHardwareSelectionRecord,
 	findPreferredHardwareCandidate,
 	HardwareSelectionService,
+	promptForHardwareCandidate,
 	WorkspaceHardwareSelectionStrategy,
 } from "../src/hardware-selection.js";
 import { WorkspaceState } from "../src/workspace-state.js";
@@ -114,5 +115,46 @@ describe("hardware-selection", () => {
 
 		expect(selected.device.id).toBe("openport2:DEF");
 		expect(quickPickSpy).not.toHaveBeenCalled();
+	});
+
+	it("runs a request action from the quick pick when selected", async () => {
+		const requestedCandidate = createHardwareCandidate(
+			makeDevice({ id: "openport2:web", name: "OpenPort 2.0 WebUSB" }),
+			"client-browser",
+		);
+		const run = vi.fn().mockResolvedValue(requestedCandidate);
+		vi.spyOn(vscode.window, "showQuickPick").mockImplementationOnce(
+			async (items) => {
+				const entries = Array.isArray(items) ? items : await items;
+				const requestEntry = entries.find(
+					(entry) =>
+						"action" in entry &&
+						entry.label === "$(add) Connect new USB device...",
+				);
+				if (requestEntry == null) {
+					throw new Error("Missing request quick pick entry");
+				}
+				return requestEntry;
+			},
+		);
+
+		const selected = await promptForHardwareCandidate(
+			[
+				createHardwareCandidate(
+					makeDevice({ id: "openport2:ABC", name: "OpenPort 2.0 A" }),
+				),
+			],
+			[
+				{
+					id: "request-usb",
+					label: "$(add) Connect new USB device...",
+					description: "Grant browser access to a newly connected device",
+					run,
+				},
+			],
+		);
+
+		expect(run).toHaveBeenCalledTimes(1);
+		expect(selected).toEqual(requestedCandidate);
 	});
 });

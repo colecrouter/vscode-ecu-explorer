@@ -23,11 +23,21 @@ export interface DeviceTransport {
 	readonly name: string;
 
 	/**
-	 * Enumerate connected devices of this type.
-	 * On first call, triggers the browser USB device picker via
-	 * `workbench.experimental.requestUsbDevice`.
+	 * Enumerate devices of this type that are already available to the runtime.
+	 *
+	 * In browser-owned runtimes, this should return only devices that have
+	 * already been granted to the current origin/extension context.
 	 */
 	listDevices(): Promise<DeviceInfo[]>;
+
+	/**
+	 * Request access to a new device of this type, if supported by the runtime.
+	 *
+	 * This is primarily used by browser-owned runtimes such as WebUSB or
+	 * WebSerial, where first-time device access must be granted through an
+	 * explicit user-initiated picker flow.
+	 */
+	requestDevice?(): Promise<DeviceInfo>;
 
 	/** Open a connection to a specific device by ID */
 	connect(deviceId: string): Promise<DeviceConnection>;

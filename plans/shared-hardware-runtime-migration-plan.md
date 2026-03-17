@@ -262,6 +262,37 @@ Verification:
 - `npm run build -w packages/device`
 - `npm run check`
 
+### Commit 4.8: Add browser-owned request actions to hardware selection
+
+Objective:
+
+- support first-time browser-owned hardware authorization without forcing selection flows to depend on prior grants
+
+Expected changes:
+
+- extend the shared selection picker to show both:
+  - already-discovered hardware candidates
+  - explicit request actions for browser-owned runtimes
+- expose transport-level request hooks where a transport can authorize and return a newly visible device
+- keep persistence and reconnect behavior unchanged for temporarily disconnected devices
+- document explicit forget/removal as a later browser-owned follow-up instead of coupling it into the first request-flow implementation
+
+Likely touchpoints:
+
+- `packages/device/src/index.ts`
+- `apps/vscode/src/hardware-selection.ts`
+- `apps/vscode/src/device-manager.ts`
+- `apps/vscode/test/hardware-selection.test.ts`
+- `apps/vscode/test/device-connection.test.ts`
+
+Verification:
+
+- `npm run lint`
+- `npm run test -- hardware-selection.test.ts device-connection.test.ts workspace-state.test.ts`
+- `npm run build -w packages/device`
+- `npm run build -w apps/vscode`
+- `npm run check`
+
 ### Commit 5: Generalize selection persistence around shared hardware identity
 
 Objective:

@@ -416,6 +416,88 @@ VS Code should own:
 - status bar integration
 - composition of shared runtime backends with registered adapters
 
+## Device Selection UX
+
+The shared hardware foundation should support a single selection surface that combines:
+
+- currently available hardware candidates
+- previously preferred candidate matching
+- explicit browser-owned permission/request actions
+
+The key UX rule is:
+
+- already-authorized devices come from normal runtime enumeration
+- new browser-owned devices come from explicit user-triggered request actions
+
+For browser-owned runtimes, the relevant APIs are split between:
+
+- `getDevices()` / `getPorts()` for already-granted devices
+- `requestDevice()` / `requestPort()` for granting access to a new device
+
+This means the picker should not rely on enumeration alone when client-browser hardware is supported.
+
+### Candidate Presentation
+
+The picker should present a single unified list of choices with human-friendly locality labels.
+
+Example shape:
+
+- `Tactrix OpenPort 2.0`
+  `USB • This machine`
+- `Tactrix OpenPort 2.0`
+  `USB • Browser`
+- `Tactrix OpenPort 2.0`
+  `Serial • This machine`
+
+User-facing copy should avoid implementation terms such as `extension-host` or `client-browser` in the main label path.
+
+Preferred wording:
+
+- `This machine`
+- `Browser`
+- `Remote host` if the extension later exposes that distinction more directly
+
+### Request Actions
+
+When a browser-owned runtime is available, the picker should also include explicit actions such as:
+
+- `Connect new USB device...`
+- `Connect new serial device...`
+
+These actions should:
+
+- be available even when other authorized devices are already listed
+- be triggered from the same Quick Pick rather than a separate setup dialog
+- run only from direct user interaction
+- return a newly authorized hardware candidate when successful
+
+This preserves a simple mental model:
+
+- candidate rows represent devices the runtime can already see
+- request rows represent permission-granting flows for devices the runtime cannot yet enumerate
+
+### Temporary Disconnect vs Forget
+
+The selection layer should distinguish between:
+
+- remembered hardware identity
+- currently available hardware
+- currently active connections
+
+If a device is temporarily disconnected:
+
+- active connections should fail or close cleanly
+- the device should stop appearing as currently available
+- the persisted preference should remain so the device can be preferred again when it returns
+
+If a browser-owned device is explicitly forgotten:
+
+- the runtime permission should be revoked
+- the device should no longer appear in browser-owned enumeration
+- any saved preference for that specific browser-owned candidate should be cleared or downgraded
+
+Forget/remove actions are meaningful primarily for browser-owned devices and should not be conflated with ordinary unplug/reconnect behavior.
+
 ## Runtime Matrix
 
 | Concern | Desktop Node | Web |
@@ -498,6 +580,8 @@ not "multiple USB implementations everywhere."
 - Persisted device selection is modeled in terms of adapter/device identity, not ECU protocol detection.
 - The design explicitly supports a future wideband adapter without requiring it to implement `EcuProtocol`.
 - VS Code device selection UX can be reused by ECU and non-ECU device integrations while allowing different post-connect workflows.
+- VS Code device selection UX can surface both already-available candidates and explicit browser-owned request actions in the same selection flow.
+- The design distinguishes temporary device disconnect from explicit browser-owned forget/removal flows.
 
 ## Open Questions
 
