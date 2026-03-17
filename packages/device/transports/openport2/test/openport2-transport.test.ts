@@ -352,6 +352,37 @@ describe("OpenPort2Transport", () => {
 			const devices = await transport.listDevices();
 			expect(devices).toEqual([]);
 		});
+
+		it("continues to serial discovery when USB enumeration fails", async () => {
+			const path = "/dev/cu.usbmodemTAgdW56p1";
+			const usb = new FakeUSB([]);
+			vi.spyOn(usb, "getDevices").mockRejectedValue(
+				new Error("USB unavailable"),
+			);
+			const serial = new FakeSerialRuntime(
+				[
+					{
+						path,
+						serialNumber: "TAgdW56p",
+						manufacturer: "Tactrix",
+						friendlyName: "Tactrix OpenPort 2.0",
+						vendorId: "0403",
+						productId: "cc4d",
+					},
+				],
+				new Map(),
+			);
+
+			const transport = new OpenPort2Transport({
+				usb,
+				serial,
+			});
+
+			const devices = await transport.listDevices();
+
+			expect(devices).toHaveLength(1);
+			expect(devices[0]?.id).toBe(`openport2-serial:${path}`);
+		});
 	});
 
 	describe("connect", () => {
@@ -724,6 +755,31 @@ describe("OpenPort2Transport", () => {
 			});
 
 			const transport = new OpenPort2Transport({ serial });
+			const deviceInfo = await transport.requestDevice();
+
+			expect(deviceInfo.id).toBe(`openport2-serial:${path}`);
+			expect(deviceInfo.name).toContain("(Serial)");
+		});
+
+		it("continues to serial request when USB selection fails", async () => {
+			const path = "webserial:0403:cc4d:0";
+			const usb = new FakeUSB([]);
+			vi.spyOn(usb, "requestDevice").mockRejectedValue(
+				new Error("USB request failed"),
+			);
+			const serial = new FakeSerialRuntime([], new Map(), {
+				requestedPort: {
+					path,
+					vendorId: "0403",
+					productId: "cc4d",
+					friendlyName: "Tactrix OpenPort 2.0",
+				},
+			});
+
+			const transport = new OpenPort2Transport({
+				usb,
+				serial,
+			});
 			const deviceInfo = await transport.requestDevice();
 
 			expect(deviceInfo.id).toBe(`openport2-serial:${path}`);

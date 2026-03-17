@@ -1441,44 +1441,62 @@ export class OpenPort2Transport implements DeviceTransport {
 		const devices: DeviceInfoWithSource[] = [];
 
 		if (this.usb?.getDevices != null) {
-			const usbDevices = await this.usb.getDevices();
-			for (const device of usbDevices) {
-				if (device.vendorId === VENDOR_ID && device.productId === PRODUCT_ID) {
-					const info = usbDeviceToInfo(device);
-					if (!seen.has(info.id)) {
-						seen.add(info.id);
-						devices.push(info);
+			try {
+				const usbDevices = await this.usb.getDevices();
+				for (const device of usbDevices) {
+					if (
+						device.vendorId === VENDOR_ID &&
+						device.productId === PRODUCT_ID
+					) {
+						const info = usbDeviceToInfo(device);
+						if (!seen.has(info.id)) {
+							seen.add(info.id);
+							devices.push(info);
+						}
 					}
 				}
+			} catch {
+				// Continue with other backends if USB enumeration is unavailable.
 			}
 		}
 
 		if (this.hid?.getDevices != null) {
-			const hidDevices = await this.hid.getDevices();
-			for (const device of hidDevices) {
-				if (device.vendorId === VENDOR_ID && device.productId === PRODUCT_ID) {
-					const info = hidDeviceToInfo(device);
+			try {
+				const hidDevices = await this.hid.getDevices();
+				for (const device of hidDevices) {
+					if (
+						device.vendorId === VENDOR_ID &&
+						device.productId === PRODUCT_ID
+					) {
+						const info = hidDeviceToInfo(device);
+						if (!seen.has(info.id)) {
+							seen.add(info.id);
+							devices.push(info);
+						}
+					}
+				}
+			} catch {
+				// Continue with other backends if HID enumeration is unavailable.
+			}
+		}
+
+		if (this.serial != null) {
+			try {
+				const serialPorts = [...(await this.serial.listPorts())].sort(
+					compareSerialPortPreference,
+				);
+				for (const port of serialPorts) {
+					if (!isMatchingSerialPort(port)) {
+						continue;
+					}
+					const info = serialPortToInfo(port);
 					if (!seen.has(info.id)) {
 						seen.add(info.id);
 						devices.push(info);
 					}
 				}
-			}
-		}
-
-		if (this.serial != null) {
-			const serialPorts = [...(await this.serial.listPorts())].sort(
-				compareSerialPortPreference,
-			);
-			for (const port of serialPorts) {
-				if (!isMatchingSerialPort(port)) {
-					continue;
-				}
-				const info = serialPortToInfo(port);
-				if (!seen.has(info.id)) {
-					seen.add(info.id);
-					devices.push(info);
-				}
+			} catch {
+				// Continue if serial enumeration is unavailable for this refresh.
 			}
 		}
 
@@ -1500,19 +1518,23 @@ export class OpenPort2Transport implements DeviceTransport {
 				});
 				return usbDeviceToInfo(device);
 			} catch {
-				// Fall back to WebHID selector
+				// Fall back to other backends when USB selection is unavailable.
 			}
 		}
 
 		if (this.hid?.requestDevice != null) {
-			const devices = await this.hid.requestDevice({
-				filters: [{ vendorId: VENDOR_ID, productId: PRODUCT_ID }],
-			});
-			const device = devices.at(0);
-			if (device == null) {
-				throw new Error("No OpenPort 2.0 HID device selected");
+			try {
+				const devices = await this.hid.requestDevice({
+					filters: [{ vendorId: VENDOR_ID, productId: PRODUCT_ID }],
+				});
+				const device = devices.at(0);
+				if (device == null) {
+					throw new Error("No OpenPort 2.0 HID device selected");
+				}
+				return hidDeviceToInfo(device);
+			} catch {
+				// Fall through to serial selection.
 			}
-			return hidDeviceToInfo(device);
 		}
 
 		if (this.serial != null) {
