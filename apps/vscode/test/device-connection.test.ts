@@ -242,6 +242,16 @@ describe("DeviceManagerImpl", () => {
 			expect(first).toBe(second);
 		});
 
+		it("should retry selection when the active connection has failed", async () => {
+			await manager.connect();
+			await manager.reconnectActiveConnection("write");
+
+			const retried = await manager.connect();
+
+			expect(manager.selectDeviceAndProtocol).toHaveBeenCalledTimes(2);
+			expect(retried.state).toBe("connected");
+		});
+
 		it("should fire onDidChangeConnection event when connecting", async () => {
 			const listener = vi.fn();
 			manager.onDidChangeConnection(listener);
@@ -779,6 +789,21 @@ describe("DeviceStatusBarManager", () => {
 		const hardwareItem = getRequiredStatusBarItem(createdItems, 0);
 		expect(hardwareItem.text).toContain("OpenPort 2.0 WebUSB");
 		expect(hardwareItem.tooltip).toContain("Browser");
+	});
+
+	it("shows reconnect affordances when the connection has failed", async () => {
+		await manager.connect();
+		await manager.reconnectActiveConnection("write");
+
+		const hardwareItem = getRequiredStatusBarItem(createdItems, 0);
+		const connectItem = getRequiredStatusBarItem(createdItems, 1);
+		const disconnectItem = getRequiredStatusBarItem(createdItems, 2);
+
+		expect(hardwareItem.text).toContain("warning");
+		expect(hardwareItem.tooltip).toContain("currently unavailable");
+		expect(connectItem.show).toHaveBeenCalled();
+		expect(connectItem.text).toContain("Reconnect");
+		expect(disconnectItem.hide).toHaveBeenCalled();
 	});
 
 	it("should dispose all status bar items on dispose()", () => {

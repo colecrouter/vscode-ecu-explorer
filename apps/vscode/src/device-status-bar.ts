@@ -81,6 +81,9 @@ export class DeviceStatusBarManager implements vscode.Disposable {
 			deviceManager.onDidChangeConnection((conn) => {
 				this.update(conn);
 			}),
+			deviceManager.onDidChangeState(({ connection }) => {
+				this.update(connection);
+			}),
 		);
 
 		// Initial render
@@ -94,8 +97,16 @@ export class DeviceStatusBarManager implements vscode.Disposable {
 	 */
 	private update(connection: ActiveConnection | undefined): void {
 		this.updateHardwareItem(connection);
-		if (!connection) {
+		if (!connection || connection.state === "failed") {
 			// Disconnected state: show Connect, hide everything else
+			this.connectItem.text =
+				connection?.state === "failed"
+					? "$(plug) Reconnect"
+					: "$(plug) Connect";
+			this.connectItem.tooltip =
+				connection?.state === "failed"
+					? `Retry connection to ${connection.deviceName}`
+					: "Connect to ECU device";
 			this.connectItem.show();
 			this.disconnectItem.hide();
 			this.startLogItem.hide();
@@ -123,6 +134,21 @@ export class DeviceStatusBarManager implements vscode.Disposable {
 					connection.locality,
 				),
 			);
+			if (connection.state === "reconnecting") {
+				this.hardwareItem.text = `$(sync~spin) ${runtime}`;
+				this.hardwareItem.tooltip = `${connection.deviceName}\n${runtime}\nAttempting to reconnect`;
+				return;
+			}
+			if (connection.state === "failed") {
+				this.hardwareItem.text = `$(warning) ${runtime}`;
+				this.hardwareItem.tooltip = `${connection.deviceName}\n${runtime}\nHardware is currently unavailable. Connect to retry or manage hardware devices.`;
+				return;
+			}
+			if (connection.state === "degraded") {
+				this.hardwareItem.text = `$(warning) ${runtime}`;
+				this.hardwareItem.tooltip = `${connection.deviceName}\n${runtime}\nConnection is degraded but still active`;
+				return;
+			}
 			this.hardwareItem.text = `$(chip) ${runtime}`;
 			this.hardwareItem.tooltip = `${connection.deviceName}\n${runtime}\nManage remembered hardware devices`;
 			return;

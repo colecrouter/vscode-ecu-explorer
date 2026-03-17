@@ -256,8 +256,17 @@ export class DeviceManagerImpl implements DeviceManager {
 	 * @throws If no devices found, user cancels, or no protocol matches
 	 */
 	async connect(): Promise<ActiveConnection> {
-		if (this._activeConnection) {
+		if (this._activeConnection?.state === "connected") {
 			return this._activeConnection;
+		}
+		if (this._activeConnection) {
+			try {
+				await this._activeConnection.connection.close();
+			} catch {
+				// Ignore close failures when replacing a stale connection.
+			}
+			this._activeConnection = undefined;
+			this._onDidChangeConnection.fire(undefined);
 		}
 
 		const { connection, protocol, candidate } =
