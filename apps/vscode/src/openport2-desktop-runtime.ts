@@ -1,5 +1,8 @@
 import type { OpenPort2TransportOptions } from "@ecu-explorer/device-transport-openport2";
-import { createNodeSerialRuntime } from "@ecu-explorer/hardware-runtime-node";
+import {
+	createNodeSerialRuntime,
+	createNodeUsbRuntime,
+} from "@ecu-explorer/hardware-runtime-node";
 import {
 	listDesktopSerialDevices,
 	matchDesktopSerialDevice,
@@ -7,8 +10,12 @@ import {
 
 export async function createOpenPortDesktopRuntime(): Promise<OpenPort2TransportOptions> {
 	const serialRuntime = await createNodeSerialRuntime();
+	const usbRuntime = (await createNodeUsbRuntime().catch(() => undefined)) as
+		| OpenPort2TransportOptions["usb"]
+		| undefined;
 
 	return {
+		usb: usbRuntime,
 		serial: {
 			async listPorts() {
 				const devices = await listDesktopSerialDevices();

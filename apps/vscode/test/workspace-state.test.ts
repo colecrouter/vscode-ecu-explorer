@@ -121,6 +121,7 @@ describe("workspace-state", () => {
 				id: "openport2:ABC123",
 				transportName: "openport2",
 				name: "OpenPort 2.0",
+				locality: "extension-host",
 			};
 
 			workspaceState.saveDeviceSelection("ecu-primary", selection);
@@ -135,6 +136,7 @@ describe("workspace-state", () => {
 				id: "openport2:ABC123",
 				transportName: "openport2",
 				name: "OpenPort 2.0",
+				locality: "extension-host",
 			});
 
 			workspaceState.clearDeviceSelection("ecu-primary");
@@ -621,6 +623,7 @@ describe("workspace-state", () => {
 						id: "openport2:ABC123",
 						transportName: "openport2",
 						name: "OpenPort 2.0",
+						locality: "extension-host",
 					},
 					invalid: {
 						id: 123,
@@ -635,8 +638,46 @@ describe("workspace-state", () => {
 				id: "openport2:ABC123",
 				transportName: "openport2",
 				name: "OpenPort 2.0",
+				locality: "extension-host",
 			});
 			expect(newInstance.getDeviceSelection("invalid")).toBeUndefined();
+		});
+
+		it("drops invalid hardware locality values from device selections", () => {
+			storage.set("ecuExplorer.workspaceState", {
+				romDefinitions: {},
+				lastOpenedTables: {},
+				tableStates: {},
+				dirtyTables: {},
+				deviceSelections: {
+					valid: {
+						id: "openport2:ABC123",
+						transportName: "openport2",
+						name: "OpenPort 2.0",
+						locality: "client-browser",
+					},
+					legacy: {
+						id: "openport2:DEF456",
+						transportName: "openport2",
+						name: "OpenPort 2.0 Other",
+						locality: "somewhere-else",
+					},
+				},
+			});
+
+			const newInstance = new WorkspaceState(memento);
+
+			expect(newInstance.getDeviceSelection("valid")).toEqual({
+				id: "openport2:ABC123",
+				transportName: "openport2",
+				name: "OpenPort 2.0",
+				locality: "client-browser",
+			});
+			expect(newInstance.getDeviceSelection("legacy")).toEqual({
+				id: "openport2:DEF456",
+				transportName: "openport2",
+				name: "OpenPort 2.0 Other",
+			});
 		});
 
 		it("sanitizes invalid table states", () => {

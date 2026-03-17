@@ -8,6 +8,7 @@ import { createOpenPortDesktopRuntime } from "./openport2-desktop-runtime.js";
 
 export async function activate(ctx: vscode.ExtensionContext) {
 	await activateShared(ctx, {
+		hardwareLocality: "extension-host",
 		openPortRuntime: await createOpenPortDesktopRuntime(),
 	});
 	registerMcpProvider(ctx);

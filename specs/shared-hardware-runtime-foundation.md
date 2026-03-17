@@ -43,6 +43,13 @@ The model should answer two separate questions:
 
 Those are different abstraction boundaries and should remain separate.
 
+There is also an important runtime-locality consideration for USB support:
+
+- a Node-owned USB runtime talks to hardware attached to the extension host machine
+- a WebUSB runtime talks to hardware attached to the browser/client machine
+
+Supporting both gives the project meaningful flexibility for remote workflows such as SSH, tunnels, and dev containers, where "where the cable is plugged in" matters as much as the transport itself.
+
 There is also an important host-model constraint for this repository:
 
 - the project primarily targets web-compatible TypeScript builds
@@ -102,6 +109,7 @@ Runtime backends provide access to physical host APIs.
 Examples:
 
 - Node desktop serial via `serialport`
+- Node desktop USB via a WebUSB-compatible adapter over `usb`
 - Web Serial
 - WebUSB
 - WebHID
@@ -114,6 +122,11 @@ For this repository, runtime backend design should follow a simple rule:
 - use one USB backend shape per host family
 - keep serial as a separate runtime family
 - avoid duplicating host backends unless hardware evidence shows a real reliability or capability advantage
+
+Today, the strongest justification for carrying both Node USB and WebUSB is host locality rather than protocol differences:
+
+- Node USB covers extension-host-attached hardware
+- WebUSB covers client/browser-attached hardware
 
 ### Layer 2: Shared Hardware Foundation
 
@@ -199,6 +212,8 @@ If the Node USB layer can satisfy the same contract, higher layers should not ne
 
 This keeps USB support aligned with the repository's web-first build strategy and minimizes host-specific branching above the runtime layer.
 
+It also keeps USB-aware adapters agnostic to whether the hardware session is owned by the extension host or the client/browser.
+
 ### Serial Runtime Contract
 
 Serial should not assume the same level of cross-host API compatibility.
@@ -259,6 +274,20 @@ export interface HardwareSelectionRecord {
   identity: HardwareIdentity;
 }
 ```
+
+Selection-capable hardware candidates should also be able to report where the session is owned:
+
+```typescript
+export interface HardwareCandidate {
+  identity: HardwareIdentity;
+  locality: "extension-host" | "client-browser";
+}
+```
+
+This allows the selection layer to distinguish between the same hardware family appearing through:
+
+- Node-owned USB or serial on the extension host
+- WebUSB or WebSerial on the client/browser
 
 This is the persistence boundary.
 
@@ -387,6 +416,88 @@ VS Code should own:
 - status bar integration
 - composition of shared runtime backends with registered adapters
 
+## Device Selection UX
+
+The shared hardware foundation should support a single selection surface that combines:
+
+- currently available hardware candidates
+- previously preferred candidate matching
+- explicit browser-owned permission/request actions
+
+The key UX rule is:
+
+- already-authorized devices come from normal runtime enumeration
+- new browser-owned devices come from explicit user-triggered request actions
+
+For browser-owned runtimes, the relevant APIs are split between:
+
+- `getDevices()` / `getPorts()` for already-granted devices
+- `requestDevice()` / `requestPort()` for granting access to a new device
+
+This means the picker should not rely on enumeration alone when client-browser hardware is supported.
+
+### Candidate Presentation
+
+The picker should present a single unified list of choices with human-friendly locality labels.
+
+Example shape:
+
+- `Tactrix OpenPort 2.0`
+  `USB • This machine`
+- `Tactrix OpenPort 2.0`
+  `USB • Browser`
+- `Tactrix OpenPort 2.0`
+  `Serial • This machine`
+
+User-facing copy should avoid implementation terms such as `extension-host` or `client-browser` in the main label path.
+
+Preferred wording:
+
+- `This machine`
+- `Browser`
+- `Remote host` if the extension later exposes that distinction more directly
+
+### Request Actions
+
+When a browser-owned runtime is available, the picker should also include explicit actions such as:
+
+- `Connect new USB device...`
+- `Connect new serial device...`
+
+These actions should:
+
+- be available even when other authorized devices are already listed
+- be triggered from the same Quick Pick rather than a separate setup dialog
+- run only from direct user interaction
+- return a newly authorized hardware candidate when successful
+
+This preserves a simple mental model:
+
+- candidate rows represent devices the runtime can already see
+- request rows represent permission-granting flows for devices the runtime cannot yet enumerate
+
+### Temporary Disconnect vs Forget
+
+The selection layer should distinguish between:
+
+- remembered hardware identity
+- currently available hardware
+- currently active connections
+
+If a device is temporarily disconnected:
+
+- active connections should fail or close cleanly
+- the device should stop appearing as currently available
+- the persisted preference should remain so the device can be preferred again when it returns
+
+If a browser-owned device is explicitly forgotten:
+
+- the runtime permission should be revoked
+- the device should no longer appear in browser-owned enumeration
+- any saved preference for that specific browser-owned candidate should be cleared or downgraded
+
+Forget/remove actions are meaningful primarily for browser-owned devices and should not be conflated with ordinary unplug/reconnect behavior.
+
 ## Runtime Matrix
 
 | Concern | Desktop Node | Web |
@@ -469,6 +580,8 @@ not "multiple USB implementations everywhere."
 - Persisted device selection is modeled in terms of adapter/device identity, not ECU protocol detection.
 - The design explicitly supports a future wideband adapter without requiring it to implement `EcuProtocol`.
 - VS Code device selection UX can be reused by ECU and non-ECU device integrations while allowing different post-connect workflows.
+- VS Code device selection UX can surface both already-available candidates and explicit browser-owned request actions in the same selection flow.
+- The design distinguishes temporary device disconnect from explicit browser-owned forget/removal flows.
 
 ## Open Questions
 

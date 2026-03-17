@@ -7,8 +7,17 @@ import type {
 	EcuProtocol,
 	FailureCause,
 } from "@ecu-explorer/device";
+import type { HardwareLocality } from "@ecu-explorer/device/hardware-runtime";
 import * as vscode from "vscode";
-import type { HardwareDeviceSelectionStrategy } from "./hardware-selection.js";
+import {
+	createHardwareCandidate,
+	DEFAULT_HARDWARE_LOCALITY,
+	type HardwareCandidate,
+	type HardwareDeviceSelectionStrategy,
+	type HardwarePromptOptions,
+	type HardwareRequestAction,
+	promptForHardwareCandidate,
+} from "./hardware-selection.js";
 
 /**
  * Reconnect configuration options.
@@ -55,6 +64,8 @@ export class DeviceManagerImpl implements DeviceManager {
 	private hardwareSelectionStrategy:
 		| HardwareDeviceSelectionStrategy
 		| undefined;
+	private hardwareCandidateLocality: HardwareLocality =
+		DEFAULT_HARDWARE_LOCALITY;
 
 	/** The currently active connection, or undefined if not connected. */
 	private _activeConnection: ActiveConnection | undefined;
@@ -96,6 +107,10 @@ export class DeviceManagerImpl implements DeviceManager {
 		strategy: HardwareDeviceSelectionStrategy | undefined,
 	): void {
 		this.hardwareSelectionStrategy = strategy;
+	}
+
+	setHardwareCandidateLocality(locality: HardwareLocality): void {
+		this.hardwareCandidateLocality = locality;
 	}
 
 	/**
@@ -171,20 +186,30 @@ export class DeviceManagerImpl implements DeviceManager {
 	}> {
 		// List all available devices across all transports
 		const devices = await this.listAllDevices();
-		if (devices.length === 0) {
+		const candidates = devices.map((device) =>
+			createHardwareCandidate(device, this.hardwareCandidateLocality),
+		);
+		const requestActions = this.getHardwareRequestActions();
+		const promptOptions = this.getHardwarePromptOptions();
+		if (devices.length === 0 && requestActions.length === 0) {
 			throw new Error(
 				"No devices found. Ensure device is connected and transport is available.",
 			);
 		}
 
-		const selectedDevice =
+		const selectedCandidate =
 			this.hardwareSelectionStrategy != null
-				? await this.hardwareSelectionStrategy.selectDevice(devices)
-				: await this.selectDeviceFromList(devices);
-
-		if (!selectedDevice) {
-			throw new Error("No device selected");
-		}
+				? await this.hardwareSelectionStrategy.selectDevice(
+						candidates,
+						requestActions,
+						promptOptions,
+					)
+				: await this.selectDeviceFromList(
+						candidates,
+						requestActions,
+						promptOptions,
+					);
+		const selectedDevice = selectedCandidate.device;
 
 		// Get the transport for this device
 		const transport = this.getTransport(selectedDevice.transportName);
@@ -201,7 +226,7 @@ export class DeviceManagerImpl implements DeviceManager {
 		for (const protocol of this.protocols) {
 			try {
 				if (await protocol.canHandle(connection)) {
-					this.hardwareSelectionStrategy?.rememberDevice(selectedDevice);
+					this.hardwareSelectionStrategy?.rememberCandidate(selectedCandidate);
 					vscode.window.showInformationMessage(
 						`Connected using ${protocol.name}`,
 					);
@@ -247,34 +272,87 @@ export class DeviceManagerImpl implements DeviceManager {
 		return this._activeConnection;
 	}
 
+	async manageHardwareSelection(): Promise<HardwareCandidate> {
+		const devices = await this.listAllDevices();
+		const candidates = devices.map((device) =>
+			createHardwareCandidate(device, this.hardwareCandidateLocality),
+		);
+		const requestActions = this.getHardwareRequestActions();
+		const promptOptions = this.getHardwarePromptOptions();
+
+		if (candidates.length === 0 && requestActions.length === 0) {
+			throw new Error(
+				"No hardware found. Connect a device or use a browser hardware request action if available.",
+			);
+		}
+
+		const selectedCandidate = await promptForHardwareCandidate(
+			candidates,
+			requestActions,
+			promptOptions,
+		);
+		this.hardwareSelectionStrategy?.rememberCandidate(selectedCandidate);
+		return selectedCandidate;
+	}
+
 	private async selectDeviceFromList(
-		devices: readonly DeviceInfo[],
-	): Promise<DeviceInfo> {
-		if (devices.length === 0) {
-			throw new Error("No device selected");
+		candidates: readonly HardwareCandidate[],
+		requestActions: readonly HardwareRequestAction[],
+		promptOptions: HardwarePromptOptions,
+	): Promise<HardwareCandidate> {
+		return promptForHardwareCandidate(
+			candidates,
+			requestActions,
+			promptOptions,
+		);
+	}
+
+	private getHardwareRequestActions(): HardwareRequestAction[] {
+		if (this.hardwareCandidateLocality !== "client-browser") {
+			return [];
 		}
 
-		const device = devices[0];
-		if (devices.length === 1 && device != null) {
-			return device;
+		return [...this.transports.values()]
+			.filter(
+				(
+					transport,
+				): transport is DeviceTransport &
+					Required<Pick<DeviceTransport, "requestDevice">> =>
+					transport.requestDevice != null,
+			)
+			.map((transport) => ({
+				id: `${transport.name}:request-device`,
+				label: `$(add) Connect New ${transport.name} Device...`,
+				description: "Grant browser access to a newly connected device",
+				run: async () =>
+					createHardwareCandidate(
+						await transport.requestDevice(),
+						this.hardwareCandidateLocality,
+					),
+			}));
+	}
+
+	private getHardwarePromptOptions(): HardwarePromptOptions {
+		if (this.hardwareCandidateLocality !== "client-browser") {
+			return {};
 		}
 
-		const deviceQuickPicks = devices.map((entry, index) => ({
-			label: `${entry.name} (${entry.transportName})`,
-			description: `ID: ${entry.id}`,
-			index,
-		}));
-		const selected = await vscode.window.showQuickPick(deviceQuickPicks, {
-			placeHolder: "Select a device to connect",
-		});
-		if (!selected) {
-			throw new Error("Device selection cancelled by user");
-		}
-		const selectedDevice = devices[selected.index];
-		if (!selectedDevice) {
-			throw new Error("Selected device index is out of bounds for device list");
-		}
-		return selectedDevice;
+		return {
+			canForgetCandidate: (candidate) =>
+				this.getTransport(candidate.device.transportName)?.forgetDevice != null,
+			forgetCandidate: async (candidate) => {
+				const transport = this.getTransport(candidate.device.transportName);
+				const forgetDevice = transport?.forgetDevice;
+				if (forgetDevice == null) {
+					throw new Error(
+						`Transport "${candidate.device.transportName}" cannot forget devices`,
+					);
+				}
+
+				await forgetDevice(candidate.device.id);
+				this.hardwareSelectionStrategy?.forgetCandidate?.(candidate);
+			},
+		};
 	}
 
 	/**

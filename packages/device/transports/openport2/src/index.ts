@@ -66,6 +66,7 @@ interface HidDeviceLike {
 	collections?: readonly HidCollection[];
 	open(): Promise<void>;
 	close(): Promise<void>;
+	forget?(): Promise<void>;
 	sendReport(reportId: number, data: Uint8Array<ArrayBuffer>): Promise<void>;
 	addEventListener(
 		type: "inputreport",
@@ -1307,6 +1308,38 @@ export class OpenPort2Transport implements DeviceTransport {
 		}
 
 		throw new Error("No USB or HID transport APIs available");
+	}
+
+	async forgetDevice(deviceId: string): Promise<void> {
+		if (this.usb?.getDevices != null) {
+			const usbDevices = await this.usb.getDevices();
+			const device = usbDevices.find(
+				(entry) =>
+					entry.vendorId === VENDOR_ID &&
+					entry.productId === PRODUCT_ID &&
+					usbDeviceToInfo(entry).id === deviceId,
+			);
+			if (device?.forget != null) {
+				await device.forget();
+				return;
+			}
+		}
+
+		if (this.hid?.getDevices != null) {
+			const hidDevices = await this.hid.getDevices();
+			const device = hidDevices.find(
+				(entry) =>
+					entry.vendorId === VENDOR_ID &&
+					entry.productId === PRODUCT_ID &&
+					hidDeviceToInfo(entry).id === deviceId,
+			);
+			if (device?.forget != null) {
+				await device.forget();
+				return;
+			}
+		}
+
+		throw new Error(`OpenPort 2.0 device cannot be forgotten: ${deviceId}`);
 	}
 
 	/**

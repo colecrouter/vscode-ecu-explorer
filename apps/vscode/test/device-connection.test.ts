@@ -17,7 +17,9 @@ import * as vscode from "vscode";
 import { DeviceManagerImpl } from "../src/device-manager.js";
 import { DeviceStatusBarManager } from "../src/device-status-bar.js";
 import {
+	FORGET_HARDWARE_BUTTON,
 	HardwareSelectionService,
+	promptForHardwareCandidate,
 	WorkspaceHardwareSelectionStrategy,
 } from "../src/hardware-selection.js";
 import { WorkspaceState } from "../src/workspace-state.js";
@@ -109,6 +111,75 @@ function getRequiredStatusBarItem(
 		throw new Error(`Missing status bar item at index ${index}`);
 	}
 	return item;
+}
+
+function createQuickPickHarness() {
+	let acceptHandler: (() => void) | undefined;
+	let hideHandler: (() => void) | undefined;
+	let itemButtonHandler:
+		| ((event: {
+				item: vscode.QuickPickItem;
+				button: vscode.QuickInputButton;
+		  }) => void)
+		| undefined;
+	const quickPick: vscode.QuickPick<vscode.QuickPickItem> = {
+		value: "",
+		items: [] as vscode.QuickPickItem[],
+		selectedItems: [] as vscode.QuickPickItem[],
+		activeItems: [] as vscode.QuickPickItem[],
+		title: "",
+		step: undefined,
+		totalSteps: undefined,
+		placeholder: "",
+		enabled: true,
+		busy: false,
+		ignoreFocusOut: false,
+		buttons: [],
+		canSelectMany: false,
+		matchOnDescription: false,
+		matchOnDetail: false,
+		keepScrollPosition: false,
+		show: vi.fn(),
+		hide: vi.fn(() => {
+			hideHandler?.();
+		}),
+		dispose: vi.fn(),
+		onDidChangeValue: () => ({ dispose: vi.fn() }),
+		onDidAccept: (handler: () => void) => {
+			acceptHandler = handler;
+			return { dispose: vi.fn() };
+		},
+		onDidTriggerButton: () => ({ dispose: vi.fn() }),
+		onDidHide: (handler: () => void) => {
+			hideHandler = handler;
+			return { dispose: vi.fn() };
+		},
+		onDidChangeActive: () => ({ dispose: vi.fn() }),
+		onDidChangeSelection: () => ({ dispose: vi.fn() }),
+		onDidTriggerItemButton: (
+			handler: (event: {
+				item: vscode.QuickPickItem;
+				button: vscode.QuickInputButton;
+			}) => void,
+		) => {
+			itemButtonHandler = handler;
+			return { dispose: vi.fn() };
+		},
+	};
+
+	return {
+		quickPick,
+		accept(item: vscode.QuickPickItem) {
+			quickPick.selectedItems = [item];
+			acceptHandler?.();
+		},
+		triggerButton(
+			item: vscode.QuickPickItem,
+			button: vscode.QuickInputButton = FORGET_HARDWARE_BUTTON,
+		) {
+			itemButtonHandler?.({ item, button });
+		},
+	};
 }
 
 // ─── DeviceManagerImpl Tests ─────────────────────────────────────────────────
@@ -345,6 +416,7 @@ describe("DeviceManagerImpl", () => {
 				id: "openport2:two",
 				transportName: "openport2",
 				name: "OpenPort 2.0 B",
+				locality: "extension-host",
 			});
 			manager.setHardwareSelectionStrategy(
 				new WorkspaceHardwareSelectionStrategy(
@@ -352,7 +424,7 @@ describe("DeviceManagerImpl", () => {
 				),
 			);
 
-			const quickPickSpy = vi.spyOn(vscode.window, "showQuickPick");
+			const quickPickSpy = vi.spyOn(vscode.window, "createQuickPick");
 
 			await manager.selectDeviceAndProtocol();
 
@@ -391,6 +463,209 @@ describe("DeviceManagerImpl", () => {
 				id: "openport2:one",
 				transportName: "openport2",
 				name: "OpenPort 2.0 A",
+				locality: "extension-host",
+			});
+		});
+
+		it("saves client-browser locality when the manager is configured for web-owned hardware", async () => {
+			const connection = createMockConnection();
+			const transport = {
+				name: "openport2",
+				listDevices: vi.fn().mockResolvedValue([
+					{
+						id: "openport2:web",
+						name: "OpenPort 2.0 WebUSB",
+						transportName: "openport2",
+						connected: false,
+					},
+				]),
+				connect: vi.fn().mockResolvedValue(connection),
+			} satisfies DeviceTransport;
+			const manager = new DeviceManagerImpl();
+			manager.setHardwareCandidateLocality("client-browser");
+			manager.registerTransport("openport2", transport);
+			manager.registerProtocol(createMockProtocol());
+
+			const workspaceState = createWorkspaceState();
+			manager.setHardwareSelectionStrategy(
+				new WorkspaceHardwareSelectionStrategy(
+					new HardwareSelectionService(workspaceState),
+				),
+			);
+
+			await manager.selectDeviceAndProtocol();
+
+			expect(workspaceState.getDeviceSelection("ecu-primary")).toEqual({
+				id: "openport2:web",
+				transportName: "openport2",
+				name: "OpenPort 2.0 WebUSB",
+				locality: "client-browser",
+			});
+		});
+
+		it("can request a new browser-owned device from the picker", async () => {
+			const connection = createMockConnection();
+			const transport = {
+				name: "OpenPort 2.0",
+				listDevices: vi.fn().mockResolvedValue([]),
+				requestDevice: vi.fn().mockResolvedValue({
+					id: "openport2:web",
+					name: "OpenPort 2.0 WebUSB",
+					transportName: "openport2",
+					connected: false,
+				}),
+				connect: vi.fn().mockResolvedValue(connection),
+			} satisfies DeviceTransport;
+			const manager = new DeviceManagerImpl();
+			manager.setHardwareCandidateLocality("client-browser");
+			manager.registerTransport("openport2", transport);
+			manager.registerProtocol(createMockProtocol());
+
+			const workspaceState = createWorkspaceState();
+			manager.setHardwareSelectionStrategy(
+				new WorkspaceHardwareSelectionStrategy(
+					new HardwareSelectionService(workspaceState),
+				),
+			);
+
+			const harness = createQuickPickHarness();
+			vi.spyOn(vscode.window, "createQuickPick").mockReturnValueOnce(
+				harness.quickPick,
+			);
+
+			const connectPromise = manager.selectDeviceAndProtocol();
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			const requestEntry = harness.quickPick.items.find(
+				(entry) =>
+					"action" in entry &&
+					entry.label === "$(add) Connect New OpenPort 2.0 Device...",
+			);
+			if (requestEntry == null) {
+				throw new Error("Missing request quick pick entry");
+			}
+			harness.accept(requestEntry);
+
+			await connectPromise;
+
+			expect(transport.requestDevice).toHaveBeenCalledTimes(1);
+			expect(transport.connect).toHaveBeenCalledWith("openport2:web");
+			expect(workspaceState.getDeviceSelection("ecu-primary")).toEqual({
+				id: "openport2:web",
+				transportName: "openport2",
+				name: "OpenPort 2.0 WebUSB",
+				locality: "client-browser",
+			});
+		});
+
+		it("forgets a browser-owned device and clears the saved selection", async () => {
+			const transport = {
+				name: "OpenPort 2.0",
+				listDevices: vi.fn().mockResolvedValue([
+					{
+						id: "openport2:web",
+						name: "OpenPort 2.0 WebUSB",
+						transportName: "openport2",
+						connected: false,
+					},
+				]),
+				forgetDevice: vi.fn().mockResolvedValue(undefined),
+				connect: vi.fn(),
+			} satisfies DeviceTransport;
+			const manager = new DeviceManagerImpl();
+			manager.setHardwareCandidateLocality("client-browser");
+			manager.registerTransport("openport2", transport);
+			manager.registerProtocol(createMockProtocol());
+
+			const workspaceState = createWorkspaceState();
+			workspaceState.saveDeviceSelection("ecu-primary", {
+				id: "openport2:web",
+				transportName: "openport2",
+				name: "OpenPort 2.0 WebUSB",
+				locality: "client-browser",
+			});
+			const selectionService = new HardwareSelectionService(workspaceState);
+			manager.setHardwareSelectionStrategy({
+				selectDevice: async (candidates, requestActions = [], promptOptions) =>
+					promptForHardwareCandidate(candidates, requestActions, promptOptions),
+				rememberCandidate: () => {},
+				forgetCandidate: (candidate) =>
+					selectionService.forgetCandidate(candidate),
+			});
+
+			const harness = createQuickPickHarness();
+			vi.spyOn(vscode.window, "createQuickPick").mockReturnValueOnce(
+				harness.quickPick,
+			);
+
+			const connectPromise = manager.selectDeviceAndProtocol();
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			const candidateEntry = harness.quickPick.items.find(
+				(entry) =>
+					"candidate" in entry && entry.label === "OpenPort 2.0 WebUSB",
+			);
+			if (candidateEntry == null) {
+				throw new Error("Missing forgettable quick pick entry");
+			}
+			harness.triggerButton(candidateEntry);
+
+			await expect(connectPromise).rejects.toThrow(
+				"Device selection cancelled by user",
+			);
+
+			expect(transport.forgetDevice).toHaveBeenCalledWith("openport2:web");
+			expect(workspaceState.getDeviceSelection("ecu-primary")).toBeUndefined();
+		});
+
+		it("manages browser hardware without opening a connection", async () => {
+			const transport = {
+				name: "OpenPort 2.0",
+				listDevices: vi.fn().mockResolvedValue([]),
+				requestDevice: vi.fn().mockResolvedValue({
+					id: "openport2:web",
+					name: "OpenPort 2.0 WebUSB",
+					transportName: "openport2",
+					connected: false,
+				}),
+				connect: vi.fn(),
+			} satisfies DeviceTransport;
+			const manager = new DeviceManagerImpl();
+			manager.setHardwareCandidateLocality("client-browser");
+			manager.registerTransport("openport2", transport);
+
+			const workspaceState = createWorkspaceState();
+			manager.setHardwareSelectionStrategy(
+				new WorkspaceHardwareSelectionStrategy(
+					new HardwareSelectionService(workspaceState),
+				),
+			);
+
+			const harness = createQuickPickHarness();
+			vi.spyOn(vscode.window, "createQuickPick").mockReturnValueOnce(
+				harness.quickPick,
+			);
+
+			const managePromise = manager.manageHardwareSelection();
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			const requestEntry = harness.quickPick.items.find(
+				(entry) =>
+					"action" in entry &&
+					entry.label === "$(add) Connect New OpenPort 2.0 Device...",
+			);
+			if (requestEntry == null) {
+				throw new Error("Missing request quick pick entry");
+			}
+			harness.accept(requestEntry);
+
+			const selected = await managePromise;
+
+			expect(transport.requestDevice).toHaveBeenCalledTimes(1);
+			expect(transport.connect).not.toHaveBeenCalled();
+			expect(selected.device.id).toBe("openport2:web");
+			expect(workspaceState.getDeviceSelection("ecu-primary")).toEqual({
+				id: "openport2:web",
+				transportName: "openport2",
+				name: "OpenPort 2.0 WebUSB",
+				locality: "client-browser",
 			});
 		});
 	});

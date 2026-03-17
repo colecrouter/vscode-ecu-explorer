@@ -130,6 +130,11 @@
 				"category": "ECU Explorer"
 			},
 			{
+				"command": "ecuExplorer.manageHardware",
+				"title": "Manage Hardware Devices",
+				"category": "ECU Explorer"
+			},
+			{
 				"command": "ecuExplorer.startLiveData",
 				"title": "Start Live Data",
 				"category": "ECU Explorer"

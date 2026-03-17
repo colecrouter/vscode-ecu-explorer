@@ -39,12 +39,18 @@ For the near term, the most important practical rule is:
 
 - shared host/runtime logic should be authored once and consumed by both the extension and the diagnostic/help tools
 
+For USB specifically, the runtime split should preserve a shared WebUSB-compatible contract while making ownership locality explicit:
+
+- Node USB for extension-host-attached hardware
+- WebUSB for client/browser-attached hardware
+
 ## Scope
 
 In scope:
 
 - extracting shared runtime contracts for serial and hardware identity
 - moving desktop serial endpoint logic into a reusable shared location
+- extracting a shared Node USB runtime that preserves the existing WebUSB-compatible transport contract
 - updating the extension to consume the shared runtime foundation
 - updating the help tools to consume the same shared runtime logic
 - keeping OpenPort runtime behavior stable while the structure changes
@@ -54,7 +60,7 @@ Out of scope:
 
 - implementing wideband device support
 - rewriting all device selection UI in a single pass
-- introducing Node USB support unless a concrete follow-up commit justifies it
+- implementing WebSerial parity before a concrete consumer needs it
 - changing OpenPort protocol semantics beyond the minimum required for runtime extraction
 
 ## Constraints
@@ -206,6 +212,86 @@ Verification:
 - `npm run check`
 - `npm run tools:inspect-device -- connect --verbose`
   - use a safe dry diagnostic command or equivalent local tool probe where hardware is available
+
+### Commit 4.5: Add Node USB parity for host-owned USB sessions
+
+Objective:
+
+- support host-owned USB sessions through the shared Node runtime package without changing the higher-level transport contract
+
+Expected changes:
+
+- extract the existing `packages/tools/inspect-device.js` Node USB wrapper into `packages/hardware-runtime-node`
+- compose both USB and serial in `apps/vscode/src/openport2-desktop-runtime.ts`
+- keep the diagnostic/help tools consuming the same Node USB runtime
+
+Likely touchpoints:
+
+- `packages/hardware-runtime-node`
+- `apps/vscode/src/openport2-desktop-runtime.ts`
+- `packages/tools/inspect-device.js`
+
+Verification:
+
+- `npm run build -w packages/hardware-runtime-node`
+- `npm run test -- node-usb-runtime.test.ts openport2-transport.test.ts`
+- `npm run check`
+
+### Commit 4.75: Introduce locality-aware hardware candidates in selection
+
+Objective:
+
+- make the shared selection layer aware of whether a hardware session is owned by the extension host or the client/browser
+
+Expected changes:
+
+- extend persisted hardware selection records with optional locality metadata
+- wrap discovered devices in extension-side hardware candidates that currently default to `extension-host`
+- keep matching backward-compatible for older saved selections that do not include locality
+
+Likely touchpoints:
+
+- `packages/device/src/hardware-runtime.ts`
+- `apps/vscode/src/hardware-selection.ts`
+- `apps/vscode/src/workspace-state.ts`
+- selection-related tests
+
+Verification:
+
+- `npm run test -- hardware-selection.test.ts workspace-state.test.ts device-connection.test.ts hardware-runtime.test.ts`
+- `npm run build -w packages/device`
+- `npm run check`
+
+### Commit 4.8: Add browser-owned request actions to hardware selection
+
+Objective:
+
+- support first-time browser-owned hardware authorization without forcing selection flows to depend on prior grants
+
+Expected changes:
+
+- extend the shared selection picker to show both:
+  - already-discovered hardware candidates
+  - explicit request actions for browser-owned runtimes
+- expose transport-level request hooks where a transport can authorize and return a newly visible device
+- keep persistence and reconnect behavior unchanged for temporarily disconnected devices
+- document explicit forget/removal as a later browser-owned follow-up instead of coupling it into the first request-flow implementation
+
+Likely touchpoints:
+
+- `packages/device/src/index.ts`
+- `apps/vscode/src/hardware-selection.ts`
+- `apps/vscode/src/device-manager.ts`
+- `apps/vscode/test/hardware-selection.test.ts`
+- `apps/vscode/test/device-connection.test.ts`
+
+Verification:
+
+- `npm run lint`
+- `npm run test -- hardware-selection.test.ts device-connection.test.ts workspace-state.test.ts`
+- `npm run build -w packages/device`
+- `npm run build -w apps/vscode`
+- `npm run check`
 
 ### Commit 5: Generalize selection persistence around shared hardware identity
 

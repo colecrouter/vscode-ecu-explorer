@@ -65,6 +65,7 @@ const createFakeUSBDevice = (options: {
 }): any => {
 	let _dataBuffer: ArrayBuffer = new ArrayBuffer(0);
 	const writes: Uint8Array[] = [];
+	let forgotten = false;
 	return {
 		// Required USBDevice properties (minimal implementation)
 		usbVersionMajor: 2,
@@ -90,6 +91,9 @@ const createFakeUSBDevice = (options: {
 		},
 		async close(): Promise<void> {
 			this.opened = false;
+		},
+		async forget(): Promise<void> {
+			forgotten = true;
 		},
 		async claimInterface(_interfaceNumber: number): Promise<void> {
 			// No-op for fake
@@ -118,6 +122,9 @@ const createFakeUSBDevice = (options: {
 		},
 		getWrites(): Uint8Array[] {
 			return writes.map((entry) => new Uint8Array(entry));
+		},
+		wasForgotten(): boolean {
+			return forgotten;
 		},
 	};
 };
@@ -682,6 +689,24 @@ describe("OpenPort2Transport", () => {
 
 			expect(deviceInfo.id).toBe(`openport2-serial:${path}`);
 			expect(deviceInfo.name).toContain("(Serial)");
+		});
+	});
+
+	describe("forgetDevice", () => {
+		it("forgets a matching WebUSB device", async () => {
+			const device = createFakeUSBDevice({
+				vendorId: 0x0403,
+				productId: 0xcc4d,
+				serialNumber: "OP2-001",
+				productName: "Tactrix OpenPort 2.0",
+			});
+			const transport = new OpenPort2Transport({
+				usb: new FakeUSB([device]) as USB,
+			});
+
+			await transport.forgetDevice("openport2:OP2-001");
+
+			expect(device.wasForgotten()).toBe(true);
 		});
 	});
 
