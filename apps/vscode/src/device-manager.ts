@@ -7,9 +7,11 @@ import type {
 	EcuProtocol,
 	FailureCause,
 } from "@ecu-explorer/device";
+import type { HardwareLocality } from "@ecu-explorer/device/hardware-runtime";
 import * as vscode from "vscode";
 import {
 	createHardwareCandidate,
+	DEFAULT_HARDWARE_LOCALITY,
 	type HardwareCandidate,
 	type HardwareDeviceSelectionStrategy,
 	promptForHardwareCandidate,
@@ -60,6 +62,8 @@ export class DeviceManagerImpl implements DeviceManager {
 	private hardwareSelectionStrategy:
 		| HardwareDeviceSelectionStrategy
 		| undefined;
+	private hardwareCandidateLocality: HardwareLocality =
+		DEFAULT_HARDWARE_LOCALITY;
 
 	/** The currently active connection, or undefined if not connected. */
 	private _activeConnection: ActiveConnection | undefined;
@@ -101,6 +105,10 @@ export class DeviceManagerImpl implements DeviceManager {
 		strategy: HardwareDeviceSelectionStrategy | undefined,
 	): void {
 		this.hardwareSelectionStrategy = strategy;
+	}
+
+	setHardwareCandidateLocality(locality: HardwareLocality): void {
+		this.hardwareCandidateLocality = locality;
 	}
 
 	/**
@@ -182,7 +190,9 @@ export class DeviceManagerImpl implements DeviceManager {
 			);
 		}
 
-		const candidates = devices.map((device) => createHardwareCandidate(device));
+		const candidates = devices.map((device) =>
+			createHardwareCandidate(device, this.hardwareCandidateLocality),
+		);
 		const selectedCandidate =
 			this.hardwareSelectionStrategy != null
 				? await this.hardwareSelectionStrategy.selectDevice(candidates)

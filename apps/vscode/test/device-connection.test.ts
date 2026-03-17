@@ -395,6 +395,42 @@ describe("DeviceManagerImpl", () => {
 				locality: "extension-host",
 			});
 		});
+
+		it("saves client-browser locality when the manager is configured for web-owned hardware", async () => {
+			const connection = createMockConnection();
+			const transport = {
+				name: "openport2",
+				listDevices: vi.fn().mockResolvedValue([
+					{
+						id: "openport2:web",
+						name: "OpenPort 2.0 WebUSB",
+						transportName: "openport2",
+						connected: false,
+					},
+				]),
+				connect: vi.fn().mockResolvedValue(connection),
+			} satisfies DeviceTransport;
+			const manager = new DeviceManagerImpl();
+			manager.setHardwareCandidateLocality("client-browser");
+			manager.registerTransport("openport2", transport);
+			manager.registerProtocol(createMockProtocol());
+
+			const workspaceState = createWorkspaceState();
+			manager.setHardwareSelectionStrategy(
+				new WorkspaceHardwareSelectionStrategy(
+					new HardwareSelectionService(workspaceState),
+				),
+			);
+
+			await manager.selectDeviceAndProtocol();
+
+			expect(workspaceState.getDeviceSelection("ecu-primary")).toEqual({
+				id: "openport2:web",
+				transportName: "openport2",
+				name: "OpenPort 2.0 WebUSB",
+				locality: "client-browser",
+			});
+		});
 	});
 });
 

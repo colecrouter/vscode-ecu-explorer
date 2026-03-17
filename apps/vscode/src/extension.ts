@@ -7,6 +7,7 @@ import {
 } from "@ecu-explorer/core";
 import { EcuFlashProvider } from "@ecu-explorer/definitions-ecuflash";
 import type { EcuEvent, RomProgress } from "@ecu-explorer/device";
+import type { HardwareLocality } from "@ecu-explorer/device/hardware-runtime";
 import { MitsubishiBootloaderProtocol } from "@ecu-explorer/device-protocol-mitsubishi-bootloader";
 import { Mut3Protocol } from "@ecu-explorer/device-protocol-mut3";
 import { Obd2Protocol } from "@ecu-explorer/device-protocol-obd2";
@@ -54,6 +55,7 @@ import { WorkspaceState } from "./workspace-state.js";
 
 type ActivationOptions = {
 	openPortRuntime?: ConstructorParameters<typeof OpenPort2Transport>[0];
+	hardwareLocality?: HardwareLocality;
 };
 
 class ProviderRegistry {
@@ -486,6 +488,9 @@ export async function activate(
 
 	// Initialize DeviceManager and register transport/protocol
 	deviceManager = new DeviceManagerImpl();
+	deviceManager.setHardwareCandidateLocality(
+		options?.hardwareLocality ?? "extension-host",
+	);
 	deviceManager.registerTransport(
 		"openport2",
 		new OpenPort2Transport(options?.openPortRuntime),
