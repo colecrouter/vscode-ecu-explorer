@@ -91,6 +91,7 @@ export function doesSelectionMatchCandidate(
 
 function isSerialHardwareCandidate(candidate: HardwareCandidate): boolean {
 	return (
+		candidate.device.id.startsWith("wideband-serial:") ||
 		candidate.device.id.startsWith("openport2-serial:") ||
 		candidate.device.name.includes("(Serial)")
 	);

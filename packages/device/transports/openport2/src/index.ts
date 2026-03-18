@@ -3,6 +3,10 @@ import type {
 	DeviceInfo,
 	DeviceTransport,
 } from "@ecu-explorer/device";
+import {
+	type BrowserSerialLike,
+	createBrowserSerialRuntime,
+} from "@ecu-explorer/device/browser-serial-runtime";
 
 // USBDevice and USBDeviceRequestOptions are available globally from @types/w3c-web-usb
 // HID types are available via DOM lib.
@@ -92,11 +96,11 @@ interface HidLike {
 
 interface SerialPortInfoLike {
 	path: string;
-	serialNumber?: string | null;
-	manufacturer?: string | null;
-	friendlyName?: string | null;
-	vendorId?: number | string | null;
-	productId?: number | string | null;
+	serialNumber?: string | null | undefined;
+	manufacturer?: string | null | undefined;
+	friendlyName?: string | null | undefined;
+	vendorId?: number | string | null | undefined;
+	productId?: number | string | null | undefined;
 }
 
 interface SerialPortLike {
@@ -113,54 +117,6 @@ interface SerialLike {
 	openPort(path: string): Promise<SerialPortLike>;
 	requestPort?(): Promise<SerialPortInfoLike>;
 	forgetPort?(path: string): Promise<void>;
-}
-
-interface BrowserSerialPortInfoLike {
-	usbVendorId?: number;
-	usbProductId?: number;
-}
-
-interface BrowserSerialReadableStreamReader {
-	read(): Promise<{ value?: Uint8Array; done: boolean }>;
-	releaseLock(): void;
-	cancel(): Promise<void>;
-}
-
-interface BrowserSerialReadableStreamLike {
-	getReader(): BrowserSerialReadableStreamReader;
-}
-
-interface BrowserSerialWritableStreamWriter {
-	write(data: Uint8Array): Promise<void>;
-	releaseLock(): void;
-}
-
-interface BrowserSerialWritableStreamLike {
-	getWriter(): BrowserSerialWritableStreamWriter;
-}
-
-interface BrowserSerialPortLike {
-	readable?: BrowserSerialReadableStreamLike | null;
-	writable?: BrowserSerialWritableStreamLike | null;
-	open(options: {
-		baudRate: number;
-		dataBits?: number;
-		stopBits?: 1 | 2;
-		parity?: "none" | "even" | "odd";
-	}): Promise<void>;
-	close(): Promise<void>;
-	getInfo(): BrowserSerialPortInfoLike;
-	forget?(): Promise<void>;
-}
-
-interface BrowserSerialLike {
-	getPorts(): Promise<readonly BrowserSerialPortLike[]>;
-	requestPort(options?: {
-		filters?: readonly {
-			usbVendorId?: number;
-			usbProductId?: number;
-		}[];
-	}): Promise<BrowserSerialPortLike>;
 }
 
 interface NodeLikeUsbEndpoint {
@@ -331,173 +287,6 @@ function compareSerialPortPreference(
 		return leftIsCallout ? -1 : 1;
 	}
 	return left.path.localeCompare(right.path);
-}
-
-function toSerialHexIdentifier(value: number | undefined): string {
-	return value == null ? "unknown" : value.toString(16).padStart(4, "0");
-}
-
-function createBrowserSerialRuntime(
-	browserSerial: BrowserSerialLike | undefined,
-): SerialLike | undefined {
-	if (browserSerial == null) {
-		return undefined;
-	}
-
-	const knownPorts = new Map<string, BrowserSerialPortLike>();
-
-	const buildPortPath = (
-		port: BrowserSerialPortLike,
-		index: number,
-	): string => {
-		const info = port.getInfo();
-		const vendorId = toSerialHexIdentifier(info.usbVendorId);
-		const productId = toSerialHexIdentifier(info.usbProductId);
-		return `webserial:${vendorId}:${productId}:${index}`;
-	};
-
-	const toPortInfo = (
-		port: BrowserSerialPortLike,
-		index: number,
-	): SerialPortInfoLike => {
-		const info = port.getInfo();
-		const path = buildPortPath(port, index);
-		knownPorts.set(path, port);
-		return {
-			path,
-			friendlyName: "Tactrix OpenPort 2.0",
-			vendorId: info.usbVendorId?.toString(16) ?? null,
-			productId: info.usbProductId?.toString(16) ?? null,
-		};
-	};
-
-	const getKnownPort = async (
-		path: string,
-	): Promise<BrowserSerialPortLike | undefined> => {
-		const known = knownPorts.get(path);
-		if (known != null) {
-			return known;
-		}
-		const ports = await browserSerial.getPorts();
-		for (const [index, port] of ports.entries()) {
-			const info = toPortInfo(port, index);
-			if (info.path === path) {
-				return port;
-			}
-		}
-		return undefined;
-	};
-
-	return {
-		async listPorts() {
-			const ports = await browserSerial.getPorts();
-			return ports.map((port, index) => toPortInfo(port, index));
-		},
-		async requestPort() {
-			const port = await browserSerial.requestPort({
-				filters: [{ usbVendorId: VENDOR_ID, usbProductId: PRODUCT_ID }],
-			});
-			const ports = await browserSerial.getPorts();
-			const index = ports.indexOf(port);
-			return toPortInfo(port, index >= 0 ? index : ports.length);
-		},
-		async forgetPort(path: string) {
-			const port = await getKnownPort(path);
-			if (port?.forget == null) {
-				throw new Error(`Serial port cannot be forgotten: ${path}`);
-			}
-			await port.forget();
-			knownPorts.delete(path);
-		},
-		async openPort(path: string) {
-			const port = await getKnownPort(path);
-			if (port == null) {
-				throw new Error(`Serial port not found: ${path}`);
-			}
-
-			let isOpen = false;
-			let buffered = new Uint8Array(0);
-			let reader: BrowserSerialReadableStreamReader | null = null;
-
-			const readChunk = async (): Promise<Uint8Array> => {
-				if (reader == null) {
-					const readable = port.readable;
-					if (readable == null) {
-						throw new Error("Serial port is not readable");
-					}
-					reader = readable.getReader();
-				}
-				const result = await reader.read();
-				if (result.done) {
-					throw new Error("Serial port closed");
-				}
-				return result.value ?? new Uint8Array(0);
-			};
-
-			return {
-				path,
-				get isOpen() {
-					return isOpen;
-				},
-				async open() {
-					if (isOpen) {
-						return;
-					}
-					await port.open({
-						baudRate: 115200,
-						dataBits: 8,
-						stopBits: 1,
-						parity: "none",
-					});
-					isOpen = true;
-				},
-				async close() {
-					if (!isOpen) {
-						return;
-					}
-					await reader?.cancel().catch(() => undefined);
-					reader?.releaseLock();
-					reader = null;
-					buffered = new Uint8Array(0);
-					await port.close();
-					isOpen = false;
-				},
-				async write(data: Uint8Array) {
-					const writable = port.writable;
-					if (writable == null) {
-						throw new Error("Serial port is not writable");
-					}
-					const writer = writable.getWriter();
-					try {
-						await writer.write(data);
-					} finally {
-						writer.releaseLock();
-					}
-				},
-				async read(maxLength: number, timeoutMs: number) {
-					if (buffered.length === 0) {
-						const timeoutPromise = new Promise<Uint8Array>((_, reject) => {
-							setTimeout(
-								() =>
-									reject(
-										new Error(`Serial read timed out after ${timeoutMs}ms`),
-									),
-								timeoutMs,
-							);
-						});
-						buffered = copyBytes(
-							await Promise.race([readChunk(), timeoutPromise]),
-						);
-					}
-
-					const size = Math.min(maxLength, buffered.length);
-					const chunk = buffered.slice(0, size);
-					buffered = buffered.slice(size);
-					return chunk;
-				},
-			};
-		},
-	};
 }
 
 function encodeCanId(canId: number): Uint8Array {
@@ -1429,7 +1218,18 @@ export class OpenPort2Transport implements DeviceTransport {
 		this.usb = options?.usb ?? navigatorRef?.usb;
 		this.hid = options?.hid ?? navigatorRef?.hid;
 		this.serial =
-			options?.serial ?? createBrowserSerialRuntime(navigatorRef?.serial);
+			options?.serial ??
+			createBrowserSerialRuntime(navigatorRef?.serial, {
+				idPrefix: "webserial",
+				friendlyName: "Tactrix OpenPort 2.0",
+				requestFilters: [{ usbVendorId: VENDOR_ID, usbProductId: PRODUCT_ID }],
+				defaultOpenOptions: {
+					baudRate: 115200,
+					dataBits: 8,
+					stopBits: 1,
+					parity: "none",
+				},
+			});
 	}
 
 	/**

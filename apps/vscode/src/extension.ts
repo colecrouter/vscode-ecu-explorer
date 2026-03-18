@@ -7,13 +7,17 @@ import {
 } from "@ecu-explorer/core";
 import { EcuFlashProvider } from "@ecu-explorer/definitions-ecuflash";
 import type { EcuEvent, RomProgress } from "@ecu-explorer/device";
-import type { HardwareLocality } from "@ecu-explorer/device/hardware-runtime";
+import type {
+	HardwareLocality,
+	SerialRuntime,
+} from "@ecu-explorer/device/hardware-runtime";
 import { MitsubishiBootloaderProtocol } from "@ecu-explorer/device-protocol-mitsubishi-bootloader";
 import { Mut3Protocol } from "@ecu-explorer/device-protocol-mut3";
 import { Obd2Protocol } from "@ecu-explorer/device-protocol-obd2";
 import { SubaruProtocol } from "@ecu-explorer/device-protocol-subaru";
 import { UdsProtocol } from "@ecu-explorer/device-protocol-uds";
 import { OpenPort2Transport } from "@ecu-explorer/device-transport-openport2";
+import { AemSerialWidebandAdapter } from "@ecu-explorer/wideband";
 import * as vscode from "vscode";
 import {
 	setEditCommandsContext,
@@ -36,6 +40,7 @@ import {
 	HardwareSelectionService,
 	WorkspaceHardwareSelectionStrategy,
 } from "./hardware-selection.js";
+import { selectHardwareCandidateFromSource } from "./hardware-source.js";
 import type { TableEditSession } from "./history/table-edit-session.js";
 import { LiveDataPanelManager } from "./live-data-panel-manager.js";
 import { LoggingManager, openLogsFolder } from "./logging-manager.js";
@@ -51,11 +56,18 @@ import { createTableUri, parseTableUri } from "./table-fs-uri.js";
 import { getThemeColors } from "./theme-colors.js";
 import type { RomTreeItem } from "./tree/rom-tree-item.js";
 import { RomExplorerTreeProvider } from "./tree/rom-tree-provider.js";
+import { WidebandManager } from "./wideband-manager.js";
+import {
+	DEFAULT_WIDEBAND_SELECTION_SLOT,
+	promptForWidebandMode,
+	WidebandSerialHardwareSource,
+} from "./wideband-serial-source.js";
 import { WorkspaceState } from "./workspace-state.js";
 
 type ActivationOptions = {
 	openPortRuntime?: ConstructorParameters<typeof OpenPort2Transport>[0];
 	hardwareLocality?: HardwareLocality;
+	widebandSerialRuntime?: SerialRuntime;
 };
 
 class ProviderRegistry {
@@ -84,8 +96,10 @@ let graphPanelManager: GraphPanelManager | null = null;
 let liveDataPanelManager: LiveDataPanelManager | null = null;
 let loggingManager: LoggingManager | null = null;
 let deviceManager: DeviceManagerImpl | null = null;
+let widebandManager: WidebandManager | null = null;
 let editorProvider: RomEditorProvider | null = null; // Will be set during activation
 let workspaceState: WorkspaceState | null = null; // Workspace state manager
+let activeWidebandMode: "afr" | "lambda" | undefined;
 
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
 	if (a.length !== b.length) {
@@ -544,6 +558,21 @@ export async function activate(
 	if (workspaceState == null) {
 		throw new Error("Workspace state not initialized");
 	}
+	const hardwareLocality = options?.hardwareLocality ?? "extension-host";
+	const widebandSelectionService = new HardwareSelectionService(
+		workspaceState,
+		DEFAULT_WIDEBAND_SELECTION_SLOT,
+	);
+	const widebandSelectionStrategy = new WorkspaceHardwareSelectionStrategy(
+		widebandSelectionService,
+	);
+	const widebandSerialSource =
+		options?.widebandSerialRuntime != null
+			? new WidebandSerialHardwareSource(
+					options.widebandSerialRuntime,
+					hardwareLocality,
+				)
+			: undefined;
 	const deviceStatusBarManager = new DeviceStatusBarManager(
 		deviceManager,
 		new HardwareSelectionService(workspaceState),
@@ -556,6 +585,39 @@ export async function activate(
 	// Initialize LoggingManager
 	loggingManager = new LoggingManager();
 	ctx.subscriptions.push(loggingManager);
+
+	if (widebandSerialSource != null) {
+		widebandManager = new WidebandManager(() =>
+			widebandSerialSource.listCandidates(),
+		);
+		ctx.subscriptions.push(widebandManager);
+		ctx.subscriptions.push(
+			widebandManager.onDidChangeSession((session) => {
+				vscode.commands.executeCommand(
+					"setContext",
+					"ecuExplorer.widebandConnected",
+					session != null,
+				);
+				if (session == null) {
+					activeWidebandMode = undefined;
+				}
+			}),
+			widebandManager.onDidRead((reading) => {
+				loggingManager?.onChannelSample(
+					"wideband-primary",
+					reading.timestamp,
+					reading.value,
+				);
+			}),
+		);
+	} else {
+		widebandManager = null;
+		void vscode.commands.executeCommand(
+			"setContext",
+			"ecuExplorer.widebandConnected",
+			false,
+		);
+	}
 
 	// Wire LoggingManager state changes to DeviceStatusBarManager
 	ctx.subscriptions.push(
@@ -1038,21 +1100,101 @@ export async function activate(
 				);
 			},
 		),
+		vscode.commands.registerCommand("ecuExplorer.connectWideband", async () => {
+			if (widebandManager == null || widebandSerialSource == null) {
+				vscode.window.showErrorMessage(
+					"Wideband serial runtime is not available in this host.",
+				);
+				return;
+			}
+			if (widebandManager.activeSession) {
+				vscode.window.showInformationMessage(
+					`Already connected to ${widebandManager.activeSession.candidate.device.name}. Disconnect first.`,
+				);
+				return;
+			}
+
+			try {
+				const mode = await promptForWidebandMode();
+				const widebandRuntime = options?.widebandSerialRuntime;
+				if (widebandRuntime == null) {
+					throw new Error("Wideband serial runtime is not available.");
+				}
+				widebandManager.setAdapters([
+					new AemSerialWidebandAdapter(widebandRuntime, mode),
+				]);
+				const candidate = await selectHardwareCandidateFromSource({
+					source: widebandSerialSource,
+					strategy: widebandSelectionStrategy,
+					emptyMessage:
+						"No wideband serial devices found. Connect a device or request a browser serial port.",
+				});
+				await widebandManager.openCandidate(candidate);
+				widebandSelectionStrategy.rememberCandidate(candidate);
+				activeWidebandMode = mode;
+				vscode.window.showInformationMessage(
+					`Connected to ${candidate.device.name}.`,
+				);
+			} catch (err) {
+				if (err instanceof vscode.CancellationError) {
+					return;
+				}
+				if (
+					err instanceof Error &&
+					err.message === "Device selection cancelled by user"
+				) {
+					return;
+				}
+				activeWidebandMode = undefined;
+				vscode.window.showErrorMessage(
+					`Failed to connect wideband: ${err instanceof Error ? err.message : String(err)}`,
+				);
+			}
+		}),
+		vscode.commands.registerCommand(
+			"ecuExplorer.disconnectWideband",
+			async () => {
+				if (widebandManager?.activeSession == null) {
+					return;
+				}
+				const deviceName = widebandManager.activeSession.candidate.device.name;
+				await widebandManager.disconnect();
+				activeWidebandMode = undefined;
+				vscode.window.showInformationMessage(
+					`Disconnected from ${deviceName}.`,
+				);
+			},
+		),
 		vscode.commands.registerCommand("ecuExplorer.startLog", async () => {
 			if (!loggingManager) {
 				return;
 			}
 			const active = deviceManager?.activeConnection;
-			if (!active) {
+			const activeWideband = widebandManager?.activeSession;
+			if (!active && !activeWideband) {
 				vscode.window.showErrorMessage(
-					"No device connected. Connect to a device first.",
+					"No live data source connected. Connect an ECU or wideband first.",
 				);
 				return;
 			}
-			const pids = active.protocol.getSupportedPids
-				? await active.protocol.getSupportedPids(active.connection)
-				: [];
-			await loggingManager.startLog(pids);
+			const pids =
+				active?.protocol.getSupportedPids != null
+					? await active.protocol.getSupportedPids(active.connection)
+					: [];
+			const channels =
+				activeWidebandMode == null
+					? []
+					: [
+							{
+								key: "wideband-primary",
+								name:
+									activeWidebandMode === "afr"
+										? "Wideband AFR"
+										: "Wideband Lambda",
+								unit: activeWidebandMode === "afr" ? "AFR" : "lambda",
+							},
+						];
+			await loggingManager.startLog({ pids, channels });
 		}),
 		vscode.commands.registerCommand("ecuExplorer.pauseLog", () => {
 			loggingManager?.pauseLog();

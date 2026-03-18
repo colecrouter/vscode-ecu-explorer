@@ -1,34 +1,21 @@
-import { groupSerialPorts } from "@ecu-explorer/device/hardware-runtime";
+import {
+	groupSerialPorts,
+	type SerialOpenOptions,
+	type SerialPortDescriptor,
+	type SerialPortSession,
+	type SerialRuntime,
+} from "@ecu-explorer/device/hardware-runtime";
 import { SerialPort } from "serialport";
 
 const NODE_USB_TRANSFER_TIMEOUT_MS = 500;
 
-export interface NodeSerialPortInfo {
-	path: string;
-	serialNumber?: string | null;
-	manufacturer?: string | null;
-	vendorId?: string | null;
-	productId?: string | null;
-	friendlyName?: string | null;
-}
+export interface NodeSerialPortInfo extends SerialPortDescriptor {}
 
-export interface NodeSerialPortSession {
-	readonly path: string;
-	readonly isOpen: boolean;
-	open(): Promise<void>;
-	close(): Promise<void>;
-	write(data: Uint8Array): Promise<void>;
-	read(maxLength: number, timeoutMs: number): Promise<Uint8Array>;
-}
+export interface NodeSerialPortSession extends SerialPortSession {}
 
-export interface NodeSerialOpenOptions {
-	baudRate?: number;
-	dataBits?: 5 | 6 | 7 | 8;
-	stopBits?: 1 | 2;
-	parity?: "none" | "even" | "mark" | "odd" | "space";
-}
+export interface NodeSerialOpenOptions extends SerialOpenOptions {}
 
-export interface NodeSerialRuntime {
+export interface NodeSerialRuntime extends SerialRuntime {
 	listPorts(): Promise<readonly NodeSerialPortInfo[]>;
 	openPort(
 		path: string,

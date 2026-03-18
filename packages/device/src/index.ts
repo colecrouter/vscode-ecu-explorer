@@ -186,6 +186,7 @@ export interface DeviceManager {
 	dispose(): void;
 }
 
+export * from "./browser-serial-runtime.js";
 export * from "./diagnostic-workflow.js";
 export * from "./diff.js";
 export * from "./hardware-runtime.js";

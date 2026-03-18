@@ -138,6 +138,28 @@ describe("LoggingManager", () => {
 				.calls[0];
 			expect(createDirCall?.[0].fsPath).toBe(path.normalize("/absolute/logs"));
 		});
+
+		it("should include generic log channels in the CSV header", async () => {
+			await manager.startLog({
+				pids: [...createSamplePids()],
+				channels: [
+					{
+						key: "wideband-primary",
+						name: "Wideband AFR",
+						unit: "AFR",
+					},
+				],
+			});
+
+			await manager.stopLog();
+
+			const writeCall = vi.mocked(vscode.workspace.fs.writeFile).mock.calls[0];
+			const content = new TextDecoder().decode(writeCall?.[1]);
+			expect(content).toContain(
+				"Timestamp (ms),Engine RPM,Coolant Temp,Throttle Position,Wideband AFR",
+			);
+			expect(content).toContain("Unit,rpm,°C,%,AFR");
+		});
 	});
 
 	describe("onFrame", () => {
@@ -214,6 +236,26 @@ describe("LoggingManager", () => {
 			// Only header and units row
 			const lines = content.trim().split("\n");
 			expect(lines).toHaveLength(2);
+		});
+
+		it("should append generic channel samples when recording", async () => {
+			await manager.startLog({
+				channels: [
+					{
+						key: "wideband-primary",
+						name: "Wideband AFR",
+						unit: "AFR",
+					},
+				],
+			});
+
+			manager.onChannelSample("wideband-primary", 1000, 14.7);
+
+			await manager.stopLog();
+
+			const writeCall = vi.mocked(vscode.workspace.fs.writeFile).mock.calls[0];
+			const content = new TextDecoder().decode(writeCall?.[1]);
+			expect(content).toContain("14.7");
 		});
 	});
 

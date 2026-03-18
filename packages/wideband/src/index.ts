@@ -1,4 +1,9 @@
-import type { HardwareLocality } from "@ecu-explorer/device/hardware-runtime";
+import type {
+	HardwareLocality,
+	SerialOpenOptions,
+	SerialPortSession,
+	SerialRuntime,
+} from "@ecu-explorer/device/hardware-runtime";
 
 export type WidebandReading =
 	| {
@@ -37,24 +42,12 @@ export interface WidebandAdapter {
 	open(candidate: WidebandHardwareCandidate): Promise<WidebandSession>;
 }
 
-export interface WidebandSerialPortSession {
-	readonly path: string;
-	readonly isOpen: boolean;
-	open(): Promise<void>;
-	close(): Promise<void>;
-	write(data: Uint8Array): Promise<void>;
-	read(maxLength: number, timeoutMs: number): Promise<Uint8Array>;
-}
+export interface WidebandSerialPortSession extends SerialPortSession {}
 
-export interface WidebandSerialRuntime {
+export interface WidebandSerialRuntime extends SerialRuntime {
 	openPort(
 		path: string,
-		options?: {
-			baudRate?: number;
-			dataBits?: 5 | 6 | 7 | 8;
-			stopBits?: 1 | 2;
-			parity?: "none" | "even" | "mark" | "odd" | "space";
-		},
+		options?: SerialOpenOptions,
 	): Promise<WidebandSerialPortSession>;
 }
 

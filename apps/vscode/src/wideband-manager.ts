@@ -1,6 +1,7 @@
 import type {
 	WidebandAdapter,
 	WidebandHardwareCandidate,
+	WidebandReading,
 	WidebandSession,
 } from "@ecu-explorer/wideband";
 import * as vscode from "vscode";
@@ -15,8 +16,14 @@ export interface ActiveWidebandSession {
 export class WidebandManager implements vscode.Disposable {
 	private adapters: WidebandAdapter[] = [];
 	private _activeSession: ActiveWidebandSession | undefined;
+	private _latestReading: WidebandReading | undefined;
 	private readonly onDidChangeSessionEmitter = new vscode.EventEmitter<
 		ActiveWidebandSession | undefined
+	>();
+	private readonly onDidReadEmitter =
+		new vscode.EventEmitter<WidebandReading>();
+	private readonly onDidChangeReadingEmitter = new vscode.EventEmitter<
+		WidebandReading | undefined
 	>();
 
 	constructor(
@@ -26,13 +33,23 @@ export class WidebandManager implements vscode.Disposable {
 	) {}
 
 	readonly onDidChangeSession = this.onDidChangeSessionEmitter.event;
+	readonly onDidRead = this.onDidReadEmitter.event;
+	readonly onDidChangeReading = this.onDidChangeReadingEmitter.event;
 
 	get activeSession(): ActiveWidebandSession | undefined {
 		return this._activeSession;
 	}
 
+	get latestReading(): WidebandReading | undefined {
+		return this._latestReading;
+	}
+
 	registerAdapter(adapter: WidebandAdapter): void {
 		this.adapters.push(adapter);
+	}
+
+	setAdapters(adapters: readonly WidebandAdapter[]): void {
+		this.adapters = [...adapters];
 	}
 
 	getAdapters(): readonly WidebandAdapter[] {
@@ -65,6 +82,11 @@ export class WidebandManager implements vscode.Disposable {
 		}
 
 		const session = await adapter.open(toWidebandHardwareCandidate(candidate));
+		await session.startStream((reading) => {
+			this._latestReading = reading;
+			this.onDidReadEmitter.fire(reading);
+			this.onDidChangeReadingEmitter.fire(reading);
+		});
 		this._activeSession = {
 			adapter,
 			candidate,
@@ -81,11 +103,15 @@ export class WidebandManager implements vscode.Disposable {
 
 		await this._activeSession.session.close();
 		this._activeSession = undefined;
+		this._latestReading = undefined;
 		this.onDidChangeSessionEmitter.fire(undefined);
+		this.onDidChangeReadingEmitter.fire(undefined);
 	}
 
 	dispose(): void {
 		void this.disconnect();
+		this.onDidReadEmitter.dispose();
+		this.onDidChangeReadingEmitter.dispose();
 		this.onDidChangeSessionEmitter.dispose();
 	}
 

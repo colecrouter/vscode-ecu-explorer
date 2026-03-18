@@ -146,34 +146,46 @@
 				"enablement": "!ecuExplorer.deviceConnected"
 			},
 			{
+				"command": "ecuExplorer.connectWideband",
+				"title": "Connect Wideband",
+				"category": "ECU Explorer",
+				"enablement": "!ecuExplorer.widebandConnected"
+			},
+			{
 				"command": "ecuExplorer.disconnectDevice",
 				"title": "Disconnect from Device",
 				"category": "ECU Explorer",
 				"enablement": "ecuExplorer.deviceConnected"
 			},
 			{
+				"command": "ecuExplorer.disconnectWideband",
+				"title": "Disconnect Wideband",
+				"category": "ECU Explorer",
+				"enablement": "ecuExplorer.widebandConnected"
+			},
+			{
 				"command": "ecuExplorer.startLog",
 				"title": "Start Live Data Log",
 				"category": "ECU Explorer",
-				"enablement": "ecuExplorer.deviceConnected"
+				"enablement": "ecuExplorer.deviceConnected || ecuExplorer.widebandConnected"
 			},
 			{
 				"command": "ecuExplorer.pauseLog",
 				"title": "Pause Live Data Log",
 				"category": "ECU Explorer",
-				"enablement": "ecuExplorer.deviceConnected && ecuExplorer.loggingActive"
+				"enablement": "ecuExplorer.loggingActive"
 			},
 			{
 				"command": "ecuExplorer.resumeLog",
 				"title": "Resume Live Data Log",
 				"category": "ECU Explorer",
-				"enablement": "ecuExplorer.deviceConnected && ecuExplorer.loggingPaused"
+				"enablement": "ecuExplorer.loggingPaused"
 			},
 			{
 				"command": "ecuExplorer.stopLog",
 				"title": "Stop Live Data Log",
 				"category": "ECU Explorer",
-				"enablement": "ecuExplorer.deviceConnected && ecuExplorer.loggingActive"
+				"enablement": "ecuExplorer.loggingActive"
 			},
 			{
 				"command": "ecuExplorer.openLogsFolder",

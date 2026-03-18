@@ -173,7 +173,21 @@ const DEFAULT_MUT3_PID_NAMES = ["RPM", "Boost Pressure", "Timing Advance"];
  * @returns {Promise<import("../device/transports/openport2/dist/index.js").OpenPort2TransportOptions["serial"]>}
  */
 async function createNodeSerialInterface() {
-	return createNodeSerialRuntime();
+	const runtime = await createNodeSerialRuntime();
+	return {
+		async listPorts() {
+			const ports = await runtime.listPorts();
+			return ports.map((port) => ({
+				path: port.path,
+				serialNumber: port.serialNumber ?? null,
+				manufacturer: port.manufacturer ?? null,
+				friendlyName: port.friendlyName ?? null,
+				vendorId: port.vendorId ?? null,
+				productId: port.productId ?? null,
+			}));
+		},
+		openPort: runtime.openPort,
+	};
 }
 
 /**

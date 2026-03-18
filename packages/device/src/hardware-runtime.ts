@@ -9,6 +9,32 @@ export interface SerialPortDescriptor {
 	friendlyName?: string | null | undefined;
 }
 
+export interface SerialOpenOptions {
+	baudRate?: number;
+	dataBits?: 5 | 6 | 7 | 8;
+	stopBits?: 1 | 2;
+	parity?: "none" | "even" | "mark" | "odd" | "space";
+}
+
+export interface SerialPortSession {
+	readonly path: string;
+	readonly isOpen: boolean;
+	open(): Promise<void>;
+	close(): Promise<void>;
+	write(data: Uint8Array): Promise<void>;
+	read(maxLength: number, timeoutMs: number): Promise<Uint8Array>;
+}
+
+export interface SerialRuntime {
+	listPorts(): Promise<readonly SerialPortDescriptor[]>;
+	openPort(
+		path: string,
+		options?: SerialOpenOptions,
+	): Promise<SerialPortSession>;
+	requestPort?(): Promise<SerialPortDescriptor>;
+	forgetPort?(path: string): Promise<void>;
+}
+
 export interface SerialPortGroup {
 	id: string;
 	preferredPath: string;

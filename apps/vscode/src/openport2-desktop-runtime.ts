@@ -2,14 +2,18 @@ import type { OpenPort2TransportOptions } from "@ecu-explorer/device-transport-o
 import {
 	createNodeSerialRuntime,
 	createNodeUsbRuntime,
+	type NodeSerialRuntime,
 } from "@ecu-explorer/hardware-runtime-node";
 import {
 	listDesktopSerialDevices,
 	matchDesktopSerialDevice,
 } from "./desktop-serial.js";
 
-export async function createOpenPortDesktopRuntime(): Promise<OpenPort2TransportOptions> {
-	const serialRuntime = await createNodeSerialRuntime();
+export async function createOpenPortDesktopRuntime(
+	serialRuntime?: NodeSerialRuntime,
+): Promise<OpenPort2TransportOptions> {
+	const resolvedSerialRuntime =
+		serialRuntime ?? (await createNodeSerialRuntime());
 	const usbRuntime = (await createNodeUsbRuntime().catch(() => undefined)) as
 		| OpenPort2TransportOptions["usb"]
 		| undefined;
@@ -36,7 +40,7 @@ export async function createOpenPortDesktopRuntime(): Promise<OpenPort2Transport
 						productId: device.productId ?? null,
 					}));
 			},
-			openPort: serialRuntime.openPort,
+			openPort: resolvedSerialRuntime.openPort,
 		},
 	};
 }

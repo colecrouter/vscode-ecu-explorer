@@ -7,6 +7,10 @@
 			"import": "./dist/index.js",
 			"types": "./dist/index.d.ts"
 		},
+		"./browser-serial-runtime": {
+			"import": "./dist/browser-serial-runtime.js",
+			"types": "./dist/browser-serial-runtime.d.ts"
+		},
 		"./hardware-runtime": {
 			"import": "./dist/hardware-runtime.js",
 			"types": "./dist/hardware-runtime.d.ts"

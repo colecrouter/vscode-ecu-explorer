@@ -4,6 +4,23 @@ import { readConfig } from "./config.js";
 
 export type LoggingState = "idle" | "recording" | "paused";
 
+export interface LogChannelDescriptor {
+	key: string;
+	name: string;
+	unit: string;
+}
+
+export interface LoggingStartOptions {
+	pids?: readonly PidDescriptor[];
+	channels?: readonly LogChannelDescriptor[];
+}
+
+function isLoggingStartOptions(
+	value: readonly PidDescriptor[] | LoggingStartOptions,
+): value is LoggingStartOptions {
+	return !Array.isArray(value);
+}
+
 /**
  * Manages independent CSV logging of live data frames.
  *
@@ -20,12 +37,14 @@ export class LoggingManager implements vscode.Disposable {
 	private recordingUri: vscode.Uri | undefined;
 	private sessionStartMs = 0;
 	private columns: string[] | "all" = "all";
-	/** pid -> name */
-	private pidNames: Map<number, string> = new Map();
-	/** pid -> unit */
-	private pidUnits: Map<number, string> = new Map();
-	/** Ordered list of pid numbers for column positions */
-	private pidOrder: number[] = [];
+	/** pid -> log column key */
+	private pidColumnKeys: Map<number, string> = new Map();
+	/** channel key -> log column key */
+	private channelColumnKeys: Map<string, string> = new Map();
+	/** Ordered list of all log column keys for CSV positions */
+	private columnOrder: string[] = [];
+	private columnNames: Map<string, string> = new Map();
+	private columnUnits: Map<string, string> = new Map();
 
 	private _onDidChangeState = new vscode.EventEmitter<LoggingState>();
 	readonly onDidChangeState: vscode.Event<LoggingState> =
@@ -37,7 +56,9 @@ export class LoggingManager implements vscode.Disposable {
 	 * @param pids - The PID descriptors for all active PIDs being streamed
 	 * @throws If no workspace folder is open
 	 */
-	async startLog(pids: PidDescriptor[]): Promise<void> {
+	async startLog(
+		pidsOrOptions: readonly PidDescriptor[] | LoggingStartOptions,
+	): Promise<void> {
 		if (this.state !== "idle") {
 			// Already recording or paused — idempotent
 			return;
@@ -77,6 +98,21 @@ export class LoggingManager implements vscode.Disposable {
 		// Read column filter setting
 		this.columns = cfg.logging.columns;
 
+		let options: LoggingStartOptions;
+		if (!isLoggingStartOptions(pidsOrOptions)) {
+			options = { pids: [...pidsOrOptions] };
+		} else {
+			options = {};
+			if (pidsOrOptions.pids != null) {
+				options.pids = pidsOrOptions.pids;
+			}
+			if (pidsOrOptions.channels != null) {
+				options.channels = pidsOrOptions.channels;
+			}
+		}
+		const pids = [...(options.pids ?? [])];
+		const channels = [...(options.channels ?? [])];
+
 		// Filter PIDs based on column setting
 		let filteredPids: PidDescriptor[];
 		if (this.columns === "all") {
@@ -87,22 +123,37 @@ export class LoggingManager implements vscode.Disposable {
 			);
 		}
 
-		// Build PID maps and order
-		this.pidNames.clear();
-		this.pidUnits.clear();
-		this.pidOrder = [];
+		// Build column maps and order
+		this.pidColumnKeys.clear();
+		this.channelColumnKeys.clear();
+		this.columnNames.clear();
+		this.columnUnits.clear();
+		this.columnOrder = [];
 		for (const pid of filteredPids) {
-			this.pidNames.set(pid.pid, pid.name);
-			this.pidUnits.set(pid.pid, pid.unit);
-			this.pidOrder.push(pid.pid);
+			const columnKey = `pid:${pid.pid}`;
+			this.pidColumnKeys.set(pid.pid, columnKey);
+			this.columnNames.set(columnKey, pid.name);
+			this.columnUnits.set(columnKey, pid.unit);
+			this.columnOrder.push(columnKey);
+		}
+		for (const channel of channels) {
+			const columnKey = `channel:${channel.key}`;
+			this.channelColumnKeys.set(channel.key, columnKey);
+			this.columnNames.set(columnKey, channel.name);
+			this.columnUnits.set(columnKey, channel.unit);
+			this.columnOrder.push(columnKey);
 		}
 
 		// Build CSV header row: Timestamp (ms),<PID Name 1>,<PID Name 2>,...
-		const headerCols = filteredPids.map((p) => p.name).join(",");
+		const headerCols = this.columnOrder
+			.map((columnKey) => this.columnNames.get(columnKey) ?? columnKey)
+			.join(",");
 		const headerRow = `Timestamp (ms),${headerCols}`;
 
 		// Build units row: Unit,<unit1>,<unit2>,...
-		const unitCols = filteredPids.map((p) => p.unit).join(",");
+		const unitCols = this.columnOrder
+			.map((columnKey) => this.columnUnits.get(columnKey) ?? "")
+			.join(",");
 		const unitsRow = `Unit,${unitCols}`;
 
 		this.csvBuffer = `${headerRow}\n${unitsRow}\n`;
@@ -230,9 +281,11 @@ export class LoggingManager implements vscode.Disposable {
 		// Clear state
 		this.csvBuffer = "";
 		this.recordingUri = undefined;
-		this.pidNames.clear();
-		this.pidUnits.clear();
-		this.pidOrder = [];
+		this.pidColumnKeys.clear();
+		this.channelColumnKeys.clear();
+		this.columnNames.clear();
+		this.columnUnits.clear();
+		this.columnOrder = [];
 
 		return savedUri;
 	}
@@ -250,25 +303,25 @@ export class LoggingManager implements vscode.Disposable {
 			return;
 		}
 
-		// Check if this PID is in the enabled columns
-		if (!this.pidNames.has(frame.pid)) {
+		const columnKey = this.pidColumnKeys.get(frame.pid);
+		if (columnKey == null) {
 			return;
 		}
 
-		// Compute relative timestamp
-		const relativeTs = frame.timestamp - this.sessionStartMs;
+		this.appendValue(frame.timestamp, columnKey, frame.value);
+	}
 
-		// Build a sparse row: timestamp + values for each PID column
-		// For PIDs not in this frame, use empty string
-		const values = this.pidOrder.map((pid) => {
-			if (pid === frame.pid) {
-				return String(frame.value);
-			}
-			return "";
-		});
+	onChannelSample(channelKey: string, timestamp: number, value: number): void {
+		if (this.state !== "recording") {
+			return;
+		}
 
-		const row = `${relativeTs},${values.join(",")}\n`;
-		this.csvBuffer += row;
+		const columnKey = this.channelColumnKeys.get(channelKey);
+		if (columnKey == null) {
+			return;
+		}
+
+		this.appendValue(timestamp, columnKey, value);
 	}
 
 	/**
@@ -280,6 +333,18 @@ export class LoggingManager implements vscode.Disposable {
 
 	dispose(): void {
 		this._onDidChangeState.dispose();
+	}
+
+	private appendValue(
+		timestamp: number,
+		columnKey: string,
+		value: number,
+	): void {
+		const relativeTs = timestamp - this.sessionStartMs;
+		const values = this.columnOrder.map((currentKey) =>
+			currentKey === columnKey ? String(value) : "",
+		);
+		this.csvBuffer += `${relativeTs},${values.join(",")}\n`;
 	}
 }
 

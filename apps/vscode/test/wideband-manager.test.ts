@@ -113,6 +113,7 @@ describe("WidebandManager", () => {
 		});
 		expect(activeSession.session).toBe(session);
 		expect(manager.activeSession).toBe(activeSession);
+		expect(session.startStream).toHaveBeenCalledTimes(1);
 	});
 
 	it("closes the previous session when replacing the active wideband", async () => {
@@ -148,5 +149,42 @@ describe("WidebandManager", () => {
 
 		expect(firstSession.close).toHaveBeenCalledTimes(1);
 		expect(manager.activeSession?.session).toBe(secondSession);
+	});
+
+	it("emits readings from the active wideband session", async () => {
+		const candidate = createCandidate({
+			id: "wideband-1",
+			name: "Wideband Serial",
+			transportName: "serial",
+		});
+		const session = createSession();
+		vi.mocked(session.startStream).mockImplementation(async (onReading) => {
+			onReading({
+				kind: "afr",
+				value: 14.7,
+				timestamp: 1234,
+			});
+		});
+		const adapter: WidebandAdapter = {
+			id: "test-wideband",
+			name: "Test Wideband",
+			canOpen: vi.fn<WidebandAdapter["canOpen"]>().mockResolvedValue(true),
+			open: vi.fn<WidebandAdapter["open"]>().mockResolvedValue(session),
+		};
+		const manager = new WidebandManager(async () => [candidate]);
+		manager.registerAdapter(adapter);
+		const readings: WidebandReading[] = [];
+		manager.onDidRead((reading) => readings.push(reading));
+
+		await manager.openCandidate(candidate);
+
+		expect(readings).toEqual([
+			{
+				kind: "afr",
+				value: 14.7,
+				timestamp: 1234,
+			},
+		]);
+		expect(manager.latestReading).toEqual(readings[0]);
 	});
 });

@@ -78,6 +78,7 @@ describe("@ecu-explorer/wideband", () => {
 			read: async () => new Uint8Array(0),
 		};
 		const runtime = {
+			listPorts: vi.fn().mockResolvedValue([]),
 			openPort: vi.fn().mockResolvedValue(port),
 		};
 		const adapter = new AemSerialWidebandAdapter(runtime, "afr");

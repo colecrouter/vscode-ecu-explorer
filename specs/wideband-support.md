@@ -233,6 +233,23 @@ The first AEM adapter should assume:
 - the output stream is line-based ASCII text ending in `\r\n`
 - the unit mode is configured by the user as either `afr` or `lambda`
 
+The first implementation should support both host-local serial paths built on the shared serial runtime:
+
+- extension-host serial via the shared Node serial runtime
+- client-browser serial via WebSerial through the same shared serial contract
+
+## Logging Integration
+
+Wideband support should integrate with the existing CSV logging flow rather than introducing a separate logger.
+
+The first logging slice should:
+
+- keep existing ECU PID logging intact
+- allow named sensor channels alongside ECU PID columns
+- log the active wideband reading as a dedicated channel such as `Wideband AFR` or `Wideband Lambda`
+
+This keeps logging unified while still allowing ECU-only, wideband-only, or mixed sessions.
+
 ## Initial Implementation Plan
 
 ### Commit 1: Add wideband support specification
