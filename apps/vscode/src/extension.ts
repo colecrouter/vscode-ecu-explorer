@@ -695,7 +695,10 @@ export async function activate(
 
 	ctx.subscriptions.push(
 		vscode.commands.registerCommand("ecuExplorer.connectDevice", async () => {
-			ecuAutoReconnectController.resume(false);
+			// Keep reconnect suppressed while the user is explicitly choosing a
+			// replacement interface so the previous preferred device cannot
+			// reclaim the connection in the background during the picker flow.
+			ecuAutoReconnectController.suppress();
 			if (!deviceManager) {
 				vscode.window.showErrorMessage("Device manager is not initialized.");
 				return;
@@ -708,6 +711,7 @@ export async function activate(
 			}
 			try {
 				await deviceManager.connect({ forcePrompt: true });
+				ecuAutoReconnectController.resume(false);
 			} catch (err) {
 				if (err instanceof vscode.CancellationError) {
 					return;
