@@ -38,6 +38,7 @@ export interface TableEditorState {
 }
 
 export interface DeviceSelectionState extends HardwareSelectionRecord {}
+export type WidebandModeState = "afr" | "lambda";
 
 /**
  * Workspace state structure
@@ -53,6 +54,8 @@ interface WorkspaceStateData {
 	dirtyTables: Record<string, string[]>;
 	/** Map of logical device slot → selected device identity */
 	deviceSelections: Record<string, DeviceSelectionState>;
+	/** Map of logical wideband slot → saved display mode */
+	widebandModes: Record<string, WidebandModeState>;
 }
 
 /**
@@ -202,6 +205,7 @@ export class WorkspaceState {
 			tableStates: {},
 			dirtyTables: {},
 			deviceSelections: {},
+			widebandModes: {},
 		});
 	}
 
@@ -218,6 +222,22 @@ export class WorkspaceState {
 	clearDeviceSelection(slot: string): void {
 		const state = this.getState();
 		delete state.deviceSelections[slot];
+		this.setState(state);
+	}
+
+	saveWidebandMode(slot: string, mode: WidebandModeState): void {
+		const state = this.getState();
+		state.widebandModes[slot] = mode;
+		this.setState(state);
+	}
+
+	getWidebandMode(slot: string): WidebandModeState | undefined {
+		return this.getState().widebandModes[slot];
+	}
+
+	clearWidebandMode(slot: string): void {
+		const state = this.getState();
+		delete state.widebandModes[slot];
 		this.setState(state);
 	}
 
@@ -281,6 +301,7 @@ export class WorkspaceState {
 				tableStates: {},
 				dirtyTables: {},
 				deviceSelections: {},
+				widebandModes: {},
 			};
 			return this.currentState;
 		}
@@ -317,6 +338,7 @@ export class WorkspaceState {
 				tableStates: {},
 				dirtyTables: {},
 				deviceSelections: {},
+				widebandModes: {},
 			};
 		}
 
@@ -327,7 +349,25 @@ export class WorkspaceState {
 			tableStates: this.sanitizeTableStates(obj.tableStates),
 			dirtyTables: this.sanitizeDirtyTables(obj.dirtyTables),
 			deviceSelections: this.sanitizeDeviceSelections(obj.deviceSelections),
+			widebandModes: this.sanitizeWidebandModes(obj.widebandModes),
 		};
+	}
+
+	private sanitizeWidebandModes(
+		widebandModes: unknown,
+	): Record<string, WidebandModeState> {
+		if (typeof widebandModes !== "object" || widebandModes === null) {
+			return {};
+		}
+
+		const obj = widebandModes as Record<string, unknown>;
+		const result: Record<string, WidebandModeState> = {};
+		for (const [key, value] of Object.entries(obj)) {
+			if (typeof key === "string" && (value === "afr" || value === "lambda")) {
+				result[key] = value;
+			}
+		}
+		return result;
 	}
 
 	private sanitizeDeviceSelections(

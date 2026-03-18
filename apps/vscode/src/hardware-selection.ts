@@ -355,7 +355,9 @@ export class WorkspaceHardwareSelectionStrategy
 		promptOptions: HardwarePromptOptions = {},
 	): Promise<HardwareCandidate> {
 		const preferred = this.selectionService.findPreferredCandidate(candidates);
-		if (preferred != null && requestActions.length === 0) {
+		if (preferred != null) {
+			// Background reconnect should keep honoring the remembered device even
+			// when browser-owned request actions are available alongside it.
 			return preferred;
 		}
 

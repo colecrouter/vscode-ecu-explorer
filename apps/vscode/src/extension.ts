@@ -20,6 +20,12 @@ import { OpenPort2Transport } from "@ecu-explorer/device-transport-openport2";
 import { AemSerialWidebandAdapter } from "@ecu-explorer/wideband";
 import * as vscode from "vscode";
 import {
+	AutoReconnectController,
+	canReconnectToPreferredWideband,
+	hasRememberedHardwareSelection,
+	reconnectPreferredWideband,
+} from "./auto-reconnect.js";
+import {
 	setEditCommandsContext,
 	setGraphCommandsContext,
 } from "./commands/index.js";
@@ -560,12 +566,16 @@ export async function activate(
 	if (workspaceState == null) {
 		throw new Error("Workspace state not initialized");
 	}
+	const persistedWorkspaceState = workspaceState;
+	const ecuSelectionService = new HardwareSelectionService(
+		persistedWorkspaceState,
+	);
 	const ecuSelectionStrategy = new WorkspaceHardwareSelectionStrategy(
-		new HardwareSelectionService(workspaceState),
+		ecuSelectionService,
 	);
 	deviceManager.setHardwareSelectionStrategy(ecuSelectionStrategy);
 	const widebandSelectionService = new HardwareSelectionService(
-		workspaceState,
+		persistedWorkspaceState,
 		DEFAULT_WIDEBAND_SELECTION_SLOT,
 	);
 	const widebandSelectionStrategy = new WorkspaceHardwareSelectionStrategy(
@@ -613,10 +623,185 @@ export async function activate(
 
 	const deviceStatusBarManager = new DeviceStatusBarManager(
 		deviceManager,
-		new HardwareSelectionService(workspaceState),
+		ecuSelectionService,
 		widebandManager ?? undefined,
 	);
 	ctx.subscriptions.push(deviceStatusBarManager);
+
+	const ecuAutoReconnectController = new AutoReconnectController(
+		() =>
+			deviceManager != null &&
+			deviceManager.activeConnection == null &&
+			hasRememberedHardwareSelection(ecuSelectionService),
+		async () => {
+			if (deviceManager == null) {
+				return false;
+			}
+			try {
+				await deviceManager.connect({ silent: true });
+				return true;
+			} catch {
+				return false;
+			}
+		},
+	);
+	ctx.subscriptions.push(ecuAutoReconnectController);
+
+	let widebandAutoReconnectController: AutoReconnectController | undefined;
+	if (
+		widebandManager != null &&
+		widebandSerialSource != null &&
+		options?.widebandSerialRuntime != null
+	) {
+		const reconnectWidebandManager = widebandManager;
+		const reconnectWidebandRuntime = options.widebandSerialRuntime;
+		widebandAutoReconnectController = new AutoReconnectController(
+			() =>
+				canReconnectToPreferredWideband({
+					manager: reconnectWidebandManager,
+					selectionService: widebandSelectionService,
+					mode: persistedWorkspaceState.getWidebandMode(
+						DEFAULT_WIDEBAND_SELECTION_SLOT,
+					),
+				}),
+			async () => {
+				const mode = persistedWorkspaceState.getWidebandMode(
+					DEFAULT_WIDEBAND_SELECTION_SLOT,
+				);
+				if (mode == null) {
+					return false;
+				}
+				try {
+					const reconnected = await reconnectPreferredWideband({
+						manager: reconnectWidebandManager,
+						selectionService: widebandSelectionService,
+						runtime: reconnectWidebandRuntime,
+						mode,
+					});
+					if (reconnected) {
+						activeWidebandMode = mode;
+					}
+					return reconnected;
+				} catch {
+					activeWidebandMode = undefined;
+					return false;
+				}
+			},
+		);
+		ctx.subscriptions.push(widebandAutoReconnectController);
+	}
+
+	ctx.subscriptions.push(
+		vscode.commands.registerCommand("ecuExplorer.connectDevice", async () => {
+			ecuAutoReconnectController.resume(false);
+			if (!deviceManager) {
+				vscode.window.showErrorMessage("Device manager is not initialized.");
+				return;
+			}
+			if (deviceManager.activeConnection) {
+				vscode.window.showInformationMessage(
+					`Already connected to ${deviceManager.activeConnection.deviceName}. Disconnect first.`,
+				);
+				return;
+			}
+			try {
+				await deviceManager.connect({ forcePrompt: true });
+			} catch (err) {
+				if (err instanceof vscode.CancellationError) {
+					return;
+				}
+				vscode.window.showErrorMessage(
+					`Failed to connect: ${err instanceof Error ? err.message : String(err)}`,
+				);
+			}
+		}),
+		vscode.commands.registerCommand(
+			"ecuExplorer.disconnectDevice",
+			async () => {
+				ecuAutoReconnectController.suppress();
+				if (!deviceManager?.activeConnection) {
+					return;
+				}
+				const deviceName = deviceManager.activeConnection.deviceName;
+				await deviceManager.disconnect();
+				vscode.window.showInformationMessage(
+					`Disconnected from ${deviceName}.`,
+				);
+			},
+		),
+		vscode.commands.registerCommand("ecuExplorer.connectWideband", async () => {
+			widebandAutoReconnectController?.resume(false);
+			if (widebandManager == null || widebandSerialSource == null) {
+				vscode.window.showErrorMessage(
+					"Wideband serial runtime is not available in this host.",
+				);
+				return;
+			}
+			if (widebandManager.activeSession) {
+				vscode.window.showInformationMessage(
+					`Already connected to ${widebandManager.activeSession.candidate.device.name}. Disconnect first.`,
+				);
+				return;
+			}
+
+			try {
+				const mode = await promptForWidebandMode();
+				const widebandRuntime = options?.widebandSerialRuntime;
+				if (widebandRuntime == null) {
+					throw new Error("Wideband serial runtime is not available.");
+				}
+				widebandManager.setAdapters([
+					new AemSerialWidebandAdapter(widebandRuntime, mode),
+				]);
+				const candidate = await selectHardwareCandidateFromSource({
+					source: widebandSerialSource,
+					strategy: widebandSelectionStrategy,
+					forcePrompt: true,
+					emptyMessage:
+						"No wideband serial devices found. Connect a device or request a browser serial port.",
+				});
+				await widebandManager.openCandidate(candidate);
+				widebandSelectionStrategy.rememberCandidate(candidate);
+				persistedWorkspaceState.saveWidebandMode(
+					DEFAULT_WIDEBAND_SELECTION_SLOT,
+					mode,
+				);
+				activeWidebandMode = mode;
+				vscode.window.showInformationMessage(
+					`Connected to ${candidate.device.name}.`,
+				);
+			} catch (err) {
+				if (err instanceof vscode.CancellationError) {
+					return;
+				}
+				if (
+					err instanceof Error &&
+					err.message === "Device selection cancelled by user"
+				) {
+					return;
+				}
+				activeWidebandMode = undefined;
+				vscode.window.showErrorMessage(
+					`Failed to connect wideband: ${err instanceof Error ? err.message : String(err)}`,
+				);
+			}
+		}),
+		vscode.commands.registerCommand(
+			"ecuExplorer.disconnectWideband",
+			async () => {
+				widebandAutoReconnectController?.suppress();
+				if (widebandManager?.activeSession == null) {
+					return;
+				}
+				const deviceName = widebandManager.activeSession.candidate.device.name;
+				await widebandManager.disconnect();
+				activeWidebandMode = undefined;
+				vscode.window.showInformationMessage(
+					`Disconnected from ${deviceName}.`,
+				);
+			},
+		),
+	);
 
 	// Initialize LiveDataPanelManager
 	liveDataPanelManager = new LiveDataPanelManager(ctx, deviceManager);
@@ -1040,112 +1225,6 @@ export async function activate(
 		vscode.commands.registerCommand("ecuExplorer.selectDevice", () => {
 			vscode.window.showInformationMessage("Select Device is coming soon.");
 		}),
-		// Device connection commands
-		vscode.commands.registerCommand("ecuExplorer.connectDevice", async () => {
-			if (!deviceManager) {
-				vscode.window.showErrorMessage("Device manager is not initialized.");
-				return;
-			}
-			if (deviceManager.activeConnection) {
-				vscode.window.showInformationMessage(
-					`Already connected to ${deviceManager.activeConnection.deviceName}. Disconnect first.`,
-				);
-				return;
-			}
-			try {
-				await deviceManager.connect({ forcePrompt: true });
-			} catch (err) {
-				if (err instanceof vscode.CancellationError) {
-					// User cancelled — silent
-					return;
-				}
-				vscode.window.showErrorMessage(
-					`Failed to connect: ${err instanceof Error ? err.message : String(err)}`,
-				);
-			}
-		}),
-		vscode.commands.registerCommand(
-			"ecuExplorer.disconnectDevice",
-			async () => {
-				if (!deviceManager) {
-					return;
-				}
-				if (!deviceManager.activeConnection) {
-					return;
-				}
-				const deviceName = deviceManager.activeConnection.deviceName;
-				await deviceManager.disconnect();
-				vscode.window.showInformationMessage(
-					`Disconnected from ${deviceName}.`,
-				);
-			},
-		),
-		vscode.commands.registerCommand("ecuExplorer.connectWideband", async () => {
-			if (widebandManager == null || widebandSerialSource == null) {
-				vscode.window.showErrorMessage(
-					"Wideband serial runtime is not available in this host.",
-				);
-				return;
-			}
-			if (widebandManager.activeSession) {
-				vscode.window.showInformationMessage(
-					`Already connected to ${widebandManager.activeSession.candidate.device.name}. Disconnect first.`,
-				);
-				return;
-			}
-
-			try {
-				const mode = await promptForWidebandMode();
-				const widebandRuntime = options?.widebandSerialRuntime;
-				if (widebandRuntime == null) {
-					throw new Error("Wideband serial runtime is not available.");
-				}
-				widebandManager.setAdapters([
-					new AemSerialWidebandAdapter(widebandRuntime, mode),
-				]);
-				const candidate = await selectHardwareCandidateFromSource({
-					source: widebandSerialSource,
-					strategy: widebandSelectionStrategy,
-					forcePrompt: true,
-					emptyMessage:
-						"No wideband serial devices found. Connect a device or request a browser serial port.",
-				});
-				await widebandManager.openCandidate(candidate);
-				widebandSelectionStrategy.rememberCandidate(candidate);
-				activeWidebandMode = mode;
-				vscode.window.showInformationMessage(
-					`Connected to ${candidate.device.name}.`,
-				);
-			} catch (err) {
-				if (err instanceof vscode.CancellationError) {
-					return;
-				}
-				if (
-					err instanceof Error &&
-					err.message === "Device selection cancelled by user"
-				) {
-					return;
-				}
-				activeWidebandMode = undefined;
-				vscode.window.showErrorMessage(
-					`Failed to connect wideband: ${err instanceof Error ? err.message : String(err)}`,
-				);
-			}
-		}),
-		vscode.commands.registerCommand(
-			"ecuExplorer.disconnectWideband",
-			async () => {
-				if (widebandManager?.activeSession == null) {
-					return;
-				}
-				const deviceName = widebandManager.activeSession.candidate.device.name;
-				await widebandManager.disconnect();
-				activeWidebandMode = undefined;
-				vscode.window.showInformationMessage(
-					`Disconnected from ${deviceName}.`,
-				);
-			},
-		),
 		vscode.commands.registerCommand("ecuExplorer.startLog", async () => {
 			if (!loggingManager) {
 				return;

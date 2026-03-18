@@ -143,6 +143,22 @@ describe("workspace-state", () => {
 
 			expect(workspaceState.getDeviceSelection("ecu-primary")).toBeUndefined();
 		});
+
+		it("saves and retrieves a wideband mode", () => {
+			workspaceState.saveWidebandMode("wideband-primary", "lambda");
+
+			expect(workspaceState.getWidebandMode("wideband-primary")).toBe("lambda");
+		});
+
+		it("clears a saved wideband mode", () => {
+			workspaceState.saveWidebandMode("wideband-primary", "afr");
+
+			workspaceState.clearWidebandMode("wideband-primary");
+
+			expect(
+				workspaceState.getWidebandMode("wideband-primary"),
+			).toBeUndefined();
+		});
 	});
 
 	describe("saveTableState and getTableState", () => {

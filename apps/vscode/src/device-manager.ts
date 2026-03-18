@@ -184,7 +184,10 @@ export class DeviceManagerImpl implements DeviceManager {
 	 * @returns The connection and matched protocol
 	 * @throws If no devices found, user cancels, or no protocol matches
 	 */
-	async selectDeviceAndProtocol(options?: { forcePrompt?: boolean }): Promise<{
+	async selectDeviceAndProtocol(options?: {
+		forcePrompt?: boolean;
+		silent?: boolean;
+	}): Promise<{
 		connection: DeviceConnection;
 		protocol: EcuProtocol;
 		candidate: HardwareCandidate;
@@ -216,9 +219,11 @@ export class DeviceManagerImpl implements DeviceManager {
 			try {
 				if (await protocol.canHandle(connection)) {
 					this.hardwareSelectionStrategy?.rememberCandidate(selectedCandidate);
-					vscode.window.showInformationMessage(
-						`Connected using ${protocol.name}`,
-					);
+					if (options?.silent !== true) {
+						vscode.window.showInformationMessage(
+							`Connected using ${protocol.name}`,
+						);
+					}
 					return { connection, protocol, candidate: selectedCandidate };
 				}
 			} catch {
@@ -244,6 +249,7 @@ export class DeviceManagerImpl implements DeviceManager {
 	 */
 	async connect(options?: {
 		forcePrompt?: boolean;
+		silent?: boolean;
 	}): Promise<ActiveConnection> {
 		if (this._activeConnection?.state === "connected") {
 			return this._activeConnection;

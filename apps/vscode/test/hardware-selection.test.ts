@@ -192,6 +192,43 @@ describe("hardware-selection", () => {
 		expect(quickPickSpy).not.toHaveBeenCalled();
 	});
 
+	it("workspace strategy still prefers a saved device when request actions exist", async () => {
+		const workspaceState = createWorkspaceState();
+		workspaceState.saveDeviceSelection("ecu-primary", {
+			id: "openport2:DEF",
+			transportName: "openport2",
+			name: "OpenPort 2.0 B",
+			locality: "client-browser",
+		});
+		const strategy = new WorkspaceHardwareSelectionStrategy(
+			new HardwareSelectionService(workspaceState),
+		);
+		const quickPickSpy = vi.spyOn(vscode.window, "createQuickPick");
+
+		const selected = await strategy.selectDevice(
+			[
+				createHardwareCandidate(
+					makeDevice({ id: "openport2:ABC", name: "OpenPort 2.0 A" }),
+					"client-browser",
+				),
+				createHardwareCandidate(
+					makeDevice({ id: "openport2:DEF", name: "OpenPort 2.0 B" }),
+					"client-browser",
+				),
+			],
+			[
+				{
+					id: "request-usb",
+					label: "$(add) Connect New USB Device...",
+					run: vi.fn(),
+				},
+			],
+		);
+
+		expect(selected.device.id).toBe("openport2:DEF");
+		expect(quickPickSpy).not.toHaveBeenCalled();
+	});
+
 	it("matches a saved selection to a candidate", () => {
 		expect(
 			doesSelectionMatchCandidate(
