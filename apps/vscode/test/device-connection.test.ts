@@ -787,6 +787,10 @@ describe("DeviceStatusBarManager", () => {
 		expect(hardwareItem.show).toHaveBeenCalled();
 		expect(widebandItem.show).toHaveBeenCalled();
 		expect(connectItem.show).toHaveBeenCalled();
+		expect(widebandItem.text).toBe("$(dashboard)");
+		expect(widebandItem.tooltip).toBe("Connect Wideband");
+		expect(connectItem.text).toBe("$(plug)");
+		expect(connectItem.tooltip).toBe("Connect ECU");
 
 		// All other items should be hidden
 		for (let i = 3; i < createdItems.length; i++) {
@@ -865,7 +869,8 @@ describe("DeviceStatusBarManager", () => {
 		expect(hardwareItem.text).toContain("warning");
 		expect(hardwareItem.tooltip).toContain("currently unavailable");
 		expect(connectItem.show).toHaveBeenCalled();
-		expect(connectItem.text).toContain("Reconnect");
+		expect(connectItem.text).toBe("$(plug)");
+		expect(connectItem.tooltip).toContain("Retry connection");
 		expect(disconnectItem.hide).toHaveBeenCalled();
 	});
 
@@ -901,6 +906,7 @@ describe("DeviceStatusBarManager", () => {
 		});
 
 		const widebandItem = getRequiredStatusBarItem(createdItems, 1);
+		expect(widebandItem.text).toContain("dashboard");
 		expect(widebandItem.text).toContain("14.70 AFR");
 		expect(widebandItem.tooltip).toContain("Browser");
 		expect(widebandItem.command).toBe("ecuExplorer.disconnectWideband");

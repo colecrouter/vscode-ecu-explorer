@@ -65,17 +65,18 @@ export class DeviceStatusBarManager implements vscode.Disposable {
 			vscode.StatusBarAlignment.Left,
 			100,
 		);
-		this.connectItem.text = "$(plug) Connect";
+		this.connectItem.text = "$(plug)";
 		this.connectItem.command = "ecuExplorer.connectDevice";
-		this.connectItem.tooltip = "Connect to ECU device";
+		this.connectItem.tooltip = "Connect ECU";
 
 		// Create Disconnect button (shown when connected)
 		this.disconnectItem = vscode.window.createStatusBarItem(
 			vscode.StatusBarAlignment.Left,
 			100,
 		);
-		this.disconnectItem.text = "$(debug-disconnect) Disconnect";
+		this.disconnectItem.text = "$(debug-disconnect)";
 		this.disconnectItem.command = "ecuExplorer.disconnectDevice";
+		this.disconnectItem.tooltip = "Disconnect ECU";
 
 		// Create Start Log button (shown when connected, not logging)
 		this.startLogItem = vscode.window.createStatusBarItem(
@@ -143,13 +144,11 @@ export class DeviceStatusBarManager implements vscode.Disposable {
 		if (!connection || connection.state === "failed") {
 			// Disconnected state: show Connect, hide everything else
 			this.connectItem.text =
-				connection?.state === "failed"
-					? "$(plug) Reconnect"
-					: "$(plug) Connect";
+				connection?.state === "failed" ? "$(plug)" : "$(plug)";
 			this.connectItem.tooltip =
 				connection?.state === "failed"
 					? `Retry connection to ${connection.deviceName}`
-					: "Connect to ECU device";
+					: "Connect ECU";
 			this.connectItem.show();
 			this.disconnectItem.hide();
 			this.startLogItem.hide();
@@ -216,13 +215,14 @@ export class DeviceStatusBarManager implements vscode.Disposable {
 		}
 
 		this.hardwareItem.text = "$(chip) Manage Hardware";
-		this.hardwareItem.tooltip = "Connect, request, or forget hardware devices";
+		this.hardwareItem.text = "$(chip)";
+		this.hardwareItem.tooltip = "Manage Hardware";
 	}
 
 	private updateWidebandItem(): void {
 		if (this.activeWidebandSession == null) {
-			this.widebandItem.text = "$(pulse) Connect Wideband";
-			this.widebandItem.tooltip = "Connect or manage wideband hardware";
+			this.widebandItem.text = "$(dashboard)";
+			this.widebandItem.tooltip = "Connect Wideband";
 			this.widebandItem.command = "ecuExplorer.connectWideband";
 			this.widebandItem.show();
 			return;
@@ -231,10 +231,10 @@ export class DeviceStatusBarManager implements vscode.Disposable {
 		const runtime = formatHardwareRuntime(this.activeWidebandSession.candidate);
 		const deviceName = this.activeWidebandSession.candidate.device.name;
 		if (this.latestWidebandReading != null) {
-			this.widebandItem.text = `$(pulse) ${formatWidebandReading(this.latestWidebandReading)}`;
+			this.widebandItem.text = `$(dashboard) ${formatWidebandReading(this.latestWidebandReading)}`;
 			this.widebandItem.tooltip = `${deviceName}\n${runtime}\n${formatWidebandReading(this.latestWidebandReading)}\nDisconnect wideband`;
 		} else {
-			this.widebandItem.text = `$(pulse) ${runtime}`;
+			this.widebandItem.text = `$(dashboard) ${runtime}`;
 			this.widebandItem.tooltip = `${deviceName}\n${runtime}\nWaiting for wideband readings`;
 		}
 		this.widebandItem.command = "ecuExplorer.disconnectWideband";
