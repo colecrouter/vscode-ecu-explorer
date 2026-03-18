@@ -83,9 +83,9 @@ export class DeviceStatusBarManager implements vscode.Disposable {
 			vscode.StatusBarAlignment.Left,
 			99,
 		);
-		this.startLogItem.text = "$(record) Start Log";
+		this.startLogItem.text = "$(output)";
 		this.startLogItem.command = "ecuExplorer.startLog";
-		this.startLogItem.tooltip = "Start recording live data to CSV";
+		this.startLogItem.tooltip = "Start Log";
 
 		// Create Pause/Resume Log button (shown when logging)
 		this.pauseLogItem = vscode.window.createStatusBarItem(
@@ -247,6 +247,8 @@ export class DeviceStatusBarManager implements vscode.Disposable {
 	private updateLogItems(): void {
 		if (this.loggingState === "idle") {
 			// Not logging: show Start Log, hide Pause/Stop
+			this.startLogItem.text = "$(output)";
+			this.startLogItem.tooltip = "Start Log";
 			this.startLogItem.show();
 			this.pauseLogItem.hide();
 			this.stopLogItem.hide();
