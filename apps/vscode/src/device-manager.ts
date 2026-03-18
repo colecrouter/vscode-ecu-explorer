@@ -184,7 +184,7 @@ export class DeviceManagerImpl implements DeviceManager {
 	 * @returns The connection and matched protocol
 	 * @throws If no devices found, user cancels, or no protocol matches
 	 */
-	async selectDeviceAndProtocol(): Promise<{
+	async selectDeviceAndProtocol(options?: { forcePrompt?: boolean }): Promise<{
 		connection: DeviceConnection;
 		protocol: EcuProtocol;
 		candidate: HardwareCandidate;
@@ -194,6 +194,7 @@ export class DeviceManagerImpl implements DeviceManager {
 			...(this.hardwareSelectionStrategy != null
 				? { strategy: this.hardwareSelectionStrategy }
 				: {}),
+			...(options?.forcePrompt === true ? { forcePrompt: true } : {}),
 			emptyMessage:
 				"No devices found. Ensure device is connected and transport is available.",
 		});
@@ -241,7 +242,9 @@ export class DeviceManagerImpl implements DeviceManager {
 	 * @returns The active connection
 	 * @throws If no devices found, user cancels, or no protocol matches
 	 */
-	async connect(): Promise<ActiveConnection> {
+	async connect(options?: {
+		forcePrompt?: boolean;
+	}): Promise<ActiveConnection> {
 		if (this._activeConnection?.state === "connected") {
 			return this._activeConnection;
 		}
@@ -256,7 +259,7 @@ export class DeviceManagerImpl implements DeviceManager {
 		}
 
 		const { connection, protocol, candidate } =
-			await this.selectDeviceAndProtocol();
+			await this.selectDeviceAndProtocol(options);
 		const deviceName = connection.deviceInfo.name;
 
 		this._activeConnection = {

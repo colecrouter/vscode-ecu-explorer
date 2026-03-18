@@ -178,7 +178,7 @@ export interface DeviceManager {
 	 * Show a QuickPick to select a device, then auto-detect the ECU protocol.
 	 * Returns the matched protocol and open connection.
 	 */
-	selectDeviceAndProtocol(): Promise<{
+	selectDeviceAndProtocol(options?: { forcePrompt?: boolean }): Promise<{
 		connection: DeviceConnection;
 		protocol: EcuProtocol;
 	}>;

@@ -111,6 +111,7 @@ export async function selectHardwareCandidateFromSource(options: {
 	source: HardwareCandidateSource;
 	strategy?: HardwareDeviceSelectionStrategy;
 	emptyMessage: string;
+	forcePrompt?: boolean;
 }): Promise<HardwareCandidate> {
 	const candidates = await options.source.listCandidates();
 	const requestActions = options.source.getRequestActions?.() ?? [];
@@ -123,7 +124,7 @@ export async function selectHardwareCandidateFromSource(options: {
 			options.strategy?.forgetCandidate?.(candidate);
 		}) ?? {};
 
-	if (options.strategy != null) {
+	if (options.strategy != null && options.forcePrompt !== true) {
 		return options.strategy.selectDevice(
 			candidates,
 			requestActions,

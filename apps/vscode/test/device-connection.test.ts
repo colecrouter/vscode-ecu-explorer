@@ -499,6 +499,69 @@ describe("DeviceManagerImpl", () => {
 			expect(transport.connect).toHaveBeenCalledWith("openport2:two");
 		});
 
+		it("still shows the picker on explicit connect even with a saved device", async () => {
+			const connection = createMockConnection();
+			const manager = new DeviceManagerImpl();
+			const transport = {
+				name: "openport2",
+				listDevices: vi.fn().mockResolvedValue([
+					{
+						id: "openport2:one",
+						name: "OpenPort 2.0 A",
+						transportName: "openport2",
+						connected: false,
+					},
+					{
+						id: "openport2:two",
+						name: "OpenPort 2.0 B",
+						transportName: "openport2",
+						connected: false,
+					},
+				]),
+				connect: vi.fn().mockResolvedValue(connection),
+			} satisfies DeviceTransport;
+			manager.registerTransport("openport2", transport);
+			manager.registerProtocol(createMockProtocol());
+
+			const workspaceState = createWorkspaceState();
+			workspaceState.saveDeviceSelection("ecu-primary", {
+				id: "openport2:two",
+				transportName: "openport2",
+				name: "OpenPort 2.0 B",
+				locality: "extension-host",
+			});
+			manager.setHardwareSelectionStrategy(
+				new WorkspaceHardwareSelectionStrategy(
+					new HardwareSelectionService(workspaceState),
+				),
+			);
+
+			const harness = createQuickPickHarness();
+			vi.spyOn(vscode.window, "createQuickPick").mockReturnValueOnce(
+				harness.quickPick,
+			);
+
+			const connectPromise = manager.connect({ forcePrompt: true });
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			const candidateEntry = harness.quickPick.items.find(
+				(entry) => "candidate" in entry && entry.label === "OpenPort 2.0 A",
+			);
+			if (candidateEntry == null) {
+				throw new Error("Missing quick pick entry for explicit connect");
+			}
+			harness.accept(candidateEntry);
+
+			await connectPromise;
+
+			expect(transport.connect).toHaveBeenCalledWith("openport2:one");
+			expect(workspaceState.getDeviceSelection("ecu-primary")).toEqual({
+				id: "openport2:one",
+				transportName: "openport2",
+				name: "OpenPort 2.0 A",
+				locality: "extension-host",
+			});
+		});
+
 		it("saves the successful device selection after protocol detection", async () => {
 			const connection = createMockConnection();
 			const transport = {

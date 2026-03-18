@@ -1110,7 +1110,7 @@ export async function activate(
 				return;
 			}
 			try {
-				await deviceManager.connect();
+				await deviceManager.connect({ forcePrompt: true });
 			} catch (err) {
 				if (err instanceof vscode.CancellationError) {
 					// User cancelled — silent
@@ -1163,6 +1163,7 @@ export async function activate(
 				const candidate = await selectHardwareCandidateFromSource({
 					source: widebandSerialSource,
 					strategy: widebandSelectionStrategy,
+					forcePrompt: true,
 					emptyMessage:
 						"No wideband serial devices found. Connect a device or request a browser serial port.",
 				});
