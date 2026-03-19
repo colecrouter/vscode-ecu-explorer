@@ -317,10 +317,7 @@ describe("GraphPanelManager", () => {
 			expect(panel.webview.postMessage).toHaveBeenCalledWith(
 				expect.objectContaining({
 					type: "update",
-					romPatch: {
-						offset: 0,
-						bytes: [90],
-					},
+					snapshot,
 				}),
 			);
 		});
@@ -365,10 +362,7 @@ describe("GraphPanelManager", () => {
 			expect(panel.webview.postMessage).toHaveBeenCalledWith(
 				expect.objectContaining({
 					type: "update",
-					romPatch: {
-						offset: 0,
-						bytes: [90],
-					},
+					snapshot,
 				}),
 			);
 		});
@@ -791,7 +785,6 @@ describe("GraphPanelManager", () => {
 					tableId: GRAPH_TABLE_ID,
 					tableName: GRAPH_TABLE_NAME,
 					romPath: GRAPH_ROM_PATH,
-					preferredChartType: undefined,
 					themeColors: expect.objectContaining({
 						gradient: expect.any(Object),
 						ui: expect.any(Object),

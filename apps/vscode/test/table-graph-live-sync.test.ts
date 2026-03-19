@@ -158,9 +158,10 @@ describe("Table to Graph live synchronization", () => {
 		expect(graphPanel.webview.postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
 				type: "update",
-				romPatch: expect.objectContaining({
-					offset: 0,
-					bytes: [42],
+				snapshot: expect.objectContaining({
+					kind: "table1d",
+					name: TABLE_DEF.name,
+					z: [42, 20, 30, 40],
 				}),
 			}),
 		);

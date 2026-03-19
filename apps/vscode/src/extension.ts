@@ -1334,17 +1334,17 @@ export async function activate(
 		// Graph window commands
 		vscode.commands.registerCommand(
 			"ecuExplorer.open2DGraphForActiveTable",
-			() => handleOpenGraph("line"),
+			() => handleOpenGraph(),
 		),
 		vscode.commands.registerCommand(
 			"ecuExplorer.open3DGraphForActiveTable",
-			() => handleOpenGraph("heatmap"),
+			() => handleOpenGraph(),
 		),
 		vscode.commands.registerCommand(
 			"ecuExplorer.open2DGraph",
 			async (treeItem?: RomTreeItem) => {
 				if (editorProvider) {
-					await handleOpenGraphParameterized(treeItem, editorProvider, "line");
+					await handleOpenGraphParameterized(treeItem, editorProvider);
 				}
 			},
 		),
@@ -1352,11 +1352,7 @@ export async function activate(
 			"ecuExplorer.open3DGraph",
 			async (treeItem?: RomTreeItem) => {
 				if (editorProvider) {
-					await handleOpenGraphParameterized(
-						treeItem,
-						editorProvider,
-						"heatmap",
-					);
+					await handleOpenGraphParameterized(treeItem, editorProvider);
 				}
 			},
 		),
@@ -1706,7 +1702,7 @@ export async function activate(
  * Handle open graph command
  * Opens a graph window for the currently active table
  */
-async function handleOpenGraph(chartType?: "line" | "heatmap"): Promise<void> {
+async function handleOpenGraph(): Promise<void> {
 	console.log(
 		"[DEBUG] handleOpenGraph: graphPanelManager =",
 		!!graphPanelManager,
@@ -1769,7 +1765,6 @@ async function handleOpenGraph(chartType?: "line" | "heatmap"): Promise<void> {
 			tableId,
 			tableName,
 			snapshot,
-			chartType,
 			definitionUri,
 		);
 	} catch (error) {
@@ -1786,7 +1781,6 @@ async function handleOpenGraph(chartType?: "line" | "heatmap"): Promise<void> {
 async function handleOpenGraphParameterized(
 	treeItem: RomTreeItem | undefined,
 	editorProvider: RomEditorProvider,
-	chartType?: "line" | "heatmap",
 ): Promise<void> {
 	if (!graphPanelManager) {
 		vscode.window.showErrorMessage("Graph panel manager not initialized");
@@ -1823,7 +1817,6 @@ async function handleOpenGraphParameterized(
 				tableId,
 				tableName,
 				snapshot,
-				chartType,
 				document.definition.uri,
 			);
 		} catch (error) {
@@ -1835,7 +1828,7 @@ async function handleOpenGraphParameterized(
 	}
 
 	// If called from command palette without arguments, fall back to active table
-	await handleOpenGraph(chartType);
+	await handleOpenGraph();
 }
 
 /**

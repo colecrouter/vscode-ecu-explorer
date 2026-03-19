@@ -1,7 +1,5 @@
-import type { ROMDefinition, TableDefinition } from "@ecu-explorer/core";
 import {
 	ChartState,
-	ROMView,
 	type TableSnapshot,
 	type ThemeColors,
 } from "@ecu-explorer/ui";
@@ -31,25 +29,16 @@ export type GraphSelection = {
 export type GraphInitMessage = {
 	type: "init";
 	snapshot: TableSnapshot;
-	romBytes?: number[];
-	tableDefinition?: TableDefinition;
 	tableId: string;
 	tableName: string;
 	romPath: string;
 	definitionUri?: string;
-	preferredChartType?: "line" | "heatmap";
 	themeColors?: ThemeColors;
 };
 
 export type GraphUpdateMessage = {
 	type: "update";
 	snapshot: TableSnapshot;
-	romBytes?: number[];
-	romPatch?: {
-		offset: number;
-		bytes: number[];
-	};
-	preferredChartType?: "line" | "heatmap";
 };
 
 export type GraphSelectCellMessage = {
@@ -97,7 +86,6 @@ export class GraphSessionController {
 	private themeColorsState: ThemeColors | undefined;
 
 	private snapshotState: TableSnapshot | null = null;
-	private romView: ROMView | null = null;
 
 	constructor(
 		private readonly host: GraphWebviewApi,
@@ -223,19 +211,6 @@ export class GraphSessionController {
 		this.tableNameState = message.tableName;
 		this.romPathState = message.romPath;
 		this.definitionUriState = message.definitionUri ?? "";
-		this.romView =
-			message.romBytes && message.tableDefinition
-				? createGraphRomView(
-						this.definitionUri,
-						message.tableName,
-						message.tableDefinition,
-						message.romBytes,
-					)
-				: null;
-
-		if (message.preferredChartType) {
-			this.chartState.setChartType(message.preferredChartType);
-		}
 		if (message.themeColors) {
 			this.themeColorsState = message.themeColors;
 		}
@@ -245,19 +220,6 @@ export class GraphSessionController {
 
 	private handleUpdate(message: GraphUpdateMessage): void {
 		this.snapshotState = message.snapshot;
-
-		if (this.romView && message.romPatch) {
-			this.romView.patchBytes(
-				message.romPatch.offset,
-				Uint8Array.from(message.romPatch.bytes),
-			);
-		} else if (this.romView && message.romBytes) {
-			this.romView.replaceBytes(Uint8Array.from(message.romBytes));
-		}
-
-		if (message.preferredChartType) {
-			this.chartState.setChartType(message.preferredChartType);
-		}
 	}
 
 	private handleSelectCells(
@@ -271,21 +233,4 @@ export class GraphSessionController {
 
 		this.chartState.selectCell(first.row, first.col);
 	}
-}
-
-function createGraphRomView(
-	definitionUri: string,
-	name: string,
-	tableDefinition: TableDefinition,
-	romBytes: number[],
-): ROMView {
-	const definition: ROMDefinition = {
-		uri: definitionUri || `graph://${tableDefinition.id}`,
-		name,
-		fingerprints: [],
-		platform: {},
-		tables: [tableDefinition],
-	};
-
-	return new ROMView(Uint8Array.from(romBytes), definition);
 }

@@ -1,29 +1,9 @@
-import type { TableDefinition } from "@ecu-explorer/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	GraphSessionController,
 	type GraphWebviewApi,
 	type PersistedGraphPanelState,
 } from "../src/webview/graph-session-controller.svelte.js";
-
-const TABLE_DEF: TableDefinition = {
-	id: "fuel-table",
-	name: "Fuel Table",
-	kind: "table1d",
-	rows: 4,
-	x: {
-		id: "fuel-x",
-		name: "RPM",
-		address: 0x10,
-		dtype: "u8",
-	},
-	z: {
-		id: "fuel-z",
-		name: "Value",
-		address: 0,
-		dtype: "u8",
-	},
-} as TableDefinition;
 
 function createHost(): GraphWebviewApi {
 	return {
@@ -56,7 +36,7 @@ describe("GraphSessionController", () => {
 		expect(controller.definitionUri).toBe("file:///test/definition.xml");
 	});
 
-	it("applies reactive ROM updates through host messages", () => {
+	it("applies snapshot updates through host messages", () => {
 		const controller = new GraphSessionController(host);
 
 		controller.handleHostMessage({
@@ -67,12 +47,9 @@ describe("GraphSessionController", () => {
 				rows: 4,
 				z: [10, 20, 30, 40],
 			},
-			romBytes: [10, 20, 30, 40, 0, 0, 0, 0, 1, 2, 3, 4, 100],
-			tableDefinition: TABLE_DEF,
-			tableId: TABLE_DEF.id,
-			tableName: TABLE_DEF.name,
+			tableId: "fuel-table",
+			tableName: "Fuel Table",
 			romPath: "/test/rom.hex",
-			preferredChartType: "line",
 		});
 
 		expect(controller.snapshot).toEqual(
@@ -81,7 +58,6 @@ describe("GraphSessionController", () => {
 				z: [10, 20, 30, 40],
 			}),
 		);
-		expect(controller.chartState.chartType).toBe("line");
 
 		controller.handleHostMessage({
 			type: "update",
@@ -90,10 +66,6 @@ describe("GraphSessionController", () => {
 				name: "Fuel Table",
 				rows: 4,
 				z: [42, 20, 30, 40],
-			},
-			romPatch: {
-				offset: 0,
-				bytes: [42],
 			},
 		});
 

@@ -48,7 +48,7 @@ function getState() {
  * Opens a graph window for the currently active table
  */
 export async function handleOpenGraph(
-	chartType?: "line" | "heatmap",
+	_chartType?: "line" | "heatmap",
 ): Promise<void> {
 	const state = getState();
 
@@ -115,7 +115,6 @@ export async function handleOpenGraph(
 			tableId,
 			tableName,
 			snapshot,
-			chartType,
 			definitionUri,
 		);
 	} catch (error) {
@@ -132,7 +131,7 @@ export async function handleOpenGraph(
 export async function handleOpenGraphParameterized(
 	treeItem: RomTreeItem | undefined,
 	editorProvider: RomEditorProvider,
-	chartType?: "line" | "heatmap",
+	_chartType?: "line" | "heatmap",
 ): Promise<void> {
 	const state = getState();
 
@@ -171,7 +170,6 @@ export async function handleOpenGraphParameterized(
 				tableId,
 				tableName,
 				snapshot,
-				chartType,
 				document.definition.uri,
 			);
 		} catch (error) {
@@ -183,7 +181,7 @@ export async function handleOpenGraphParameterized(
 	}
 
 	// If called from command palette without arguments, fall back to active table
-	await handleOpenGraph(chartType);
+	await handleOpenGraph();
 }
 
 /**

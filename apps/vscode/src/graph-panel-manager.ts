@@ -12,7 +12,6 @@
  * - Reverse lookup: panel → context (romPath, tableId, tableName)
  */
 
-import type { TableDefinition } from "@ecu-explorer/core";
 import type { TableSnapshot } from "@ecu-explorer/ui";
 import * as vscode from "vscode";
 import type {
@@ -39,8 +38,6 @@ interface PanelContext {
 	tableName: string;
 	definitionUri?: string;
 	snapshot?: TableSnapshot;
-	tableDefinition?: TableDefinition;
-	preferredChartType?: "line" | "heatmap" | undefined;
 	disposables: vscode.Disposable[];
 	documentSubscription?: vscode.Disposable;
 	subscribedDocument?: RomDocument;
@@ -110,7 +107,6 @@ export class GraphPanelManager {
 	 * @param tableId - Table identifier
 	 * @param tableName - Human-readable table name
 	 * @param snapshot - Initial table snapshot
-	 * @param preferredChartType - Optional preferred chart type ('line' | 'heatmap')
 	 * @returns Webview panel
 	 */
 	getOrCreatePanel(
@@ -118,7 +114,6 @@ export class GraphPanelManager {
 		tableId: string,
 		tableName: string,
 		snapshot: TableSnapshot,
-		preferredChartType?: "line" | "heatmap",
 		definitionUri?: string,
 	): vscode.WebviewPanel {
 		// Check if panel already exists
@@ -127,24 +122,15 @@ export class GraphPanelManager {
 			existing.reveal();
 
 			const context = this.panelContext.get(existing);
-			const romBytes = context?.subscribedDocument?.romBytes;
 			if (context) {
-				context.preferredChartType = preferredChartType;
 				if (definitionUri !== undefined) {
 					context.definitionUri = definitionUri;
 				}
 			}
 
-			// Send updated snapshot and preferred type to existing panel
 			existing.webview.postMessage({
 				type: "update",
 				snapshot,
-				...(context?.tableDefinition && romBytes
-					? {
-							romBytes: Array.from(romBytes),
-						}
-					: {}),
-				preferredChartType,
 			});
 			return existing;
 		}
@@ -173,7 +159,6 @@ export class GraphPanelManager {
 			tableId,
 			tableName,
 			snapshot,
-			preferredChartType,
 			definitionUri,
 		);
 
@@ -222,7 +207,6 @@ export class GraphPanelManager {
 			romPath,
 			tableId,
 			tableName,
-			undefined,
 			undefined,
 			definitionUri,
 		);
@@ -453,23 +437,15 @@ export class GraphPanelManager {
 
 		const themeColors = getThemeColors();
 
-		const romBytes = context.subscribedDocument?.romBytes;
 		panel.webview.postMessage({
 			type: "init",
 			snapshot: context.snapshot,
-			...(context.tableDefinition && romBytes
-				? {
-						romBytes: Array.from(romBytes),
-						tableDefinition: context.tableDefinition,
-					}
-				: {}),
 			tableId: context.tableId,
 			tableName: context.tableName,
 			romPath: context.romPath,
 			...(context.definitionUri
 				? { definitionUri: context.definitionUri }
 				: {}),
-			preferredChartType: context.preferredChartType,
 			themeColors,
 		});
 
@@ -506,7 +482,6 @@ export class GraphPanelManager {
 		tableId: string,
 		tableName: string,
 		snapshot?: TableSnapshot,
-		preferredChartType?: "line" | "heatmap",
 		definitionUri?: string,
 	): void {
 		let romPanels = this.panels.get(romPath);
@@ -516,29 +491,18 @@ export class GraphPanelManager {
 		}
 		romPanels.set(tableId, panel);
 
-		const tableDefinition = this.getStructuredCloneSafeTableDefinition(
-			romPath,
-			tableId,
-		);
-
 		this.panelContext.set(panel, {
 			romPath,
 			tableId,
 			tableName,
 			...(definitionUri ? { definitionUri } : {}),
 			...(snapshot !== undefined && { snapshot }),
-			...(tableDefinition
-				? {
-						tableDefinition,
-					}
-				: {}),
 			tableUri: createTableUri(
 				romPath,
 				tableId,
 				tableName,
 				definitionUri,
 			).toString(),
-			preferredChartType,
 			disposables: [],
 		});
 
@@ -561,15 +525,6 @@ export class GraphPanelManager {
 		context.sessionSubscription?.();
 		context.subscribedSessionId = session.id;
 		context.tableUri = session.tableUri.toString();
-		if (!context.tableDefinition) {
-			const tableDefinition = this.getStructuredCloneSafeTableDefinition(
-				context.romPath,
-				context.tableId,
-			);
-			if (tableDefinition) {
-				context.tableDefinition = tableDefinition;
-			}
-		}
 		context.sessionSubscription = session.onDidUpdate((message) => {
 			this.applySessionUpdate(panel, context, session, message);
 		});
@@ -590,7 +545,7 @@ export class GraphPanelManager {
 
 		context.documentSubscription?.dispose();
 		context.subscribedDocument = doc;
-		context.documentSubscription = doc.onDidUpdateBytes((event) => {
+		context.documentSubscription = doc.onDidUpdateBytes((_event) => {
 			const panel = this.panels.get(context.romPath)?.get(context.tableId);
 			if (!panel) {
 				return;
@@ -605,47 +560,13 @@ export class GraphPanelManager {
 				const newSnapshot = this.getSnapshot(context.romPath, context.tableId);
 				if (newSnapshot) {
 					context.snapshot = newSnapshot;
-					const romPatch = createRomPatch(
-						doc.romBytes,
-						event.offset,
-						event.length,
-					);
-					if (context.tableDefinition && romPatch) {
-						panel.webview.postMessage({
-							type: "update",
-							snapshot: newSnapshot,
-							romPatch,
-						});
-						return;
-					}
-
 					panel.webview.postMessage({
 						type: "update",
 						snapshot: newSnapshot,
-						...(context.tableDefinition
-							? {
-									romBytes: Array.from(doc.romBytes),
-								}
-							: {}),
 					});
 				}
 			}
 		});
-	}
-
-	private getStructuredCloneSafeTableDefinition(
-		romPath: string,
-		tableId: string,
-	): TableDefinition | undefined {
-		const doc = this.getDocument(romPath);
-		const tableDefinition = doc?.definition?.tables.find(
-			(table) => table.id === tableId,
-		);
-		if (!tableDefinition) {
-			return undefined;
-		}
-
-		return isStructuredCloneSafe(tableDefinition) ? tableDefinition : undefined;
 	}
 
 	private applySessionUpdate(
@@ -655,24 +576,9 @@ export class GraphPanelManager {
 		message: TableSessionUpdateMessage,
 	): void {
 		context.snapshot = message.snapshot;
-		if (context.tableDefinition && message.romPatch) {
-			panel.webview.postMessage({
-				type: "update",
-				snapshot: message.snapshot,
-				romPatch: message.romPatch,
-			});
-			return;
-		}
-
 		panel.webview.postMessage({
 			type: "update",
 			snapshot: message.snapshot,
-			...(context.tableDefinition
-				? {
-						...(message.rom ? { romBytes: message.rom } : {}),
-						...(message.romPatch ? { romPatch: message.romPatch } : {}),
-					}
-				: {}),
 		});
 	}
 
@@ -742,50 +648,4 @@ function createTableUri(
 	const uriPath = vscode.Uri.file(romPath).path;
 	const displayPath = `${uriPath}/${encodeURIComponent(tableName)}`;
 	return vscode.Uri.parse(`ecu-table://${displayPath}?${params.toString()}`);
-}
-
-function isStructuredCloneSafe(value: unknown): boolean {
-	if (typeof value === "function") {
-		return false;
-	}
-
-	if (
-		value === null ||
-		value === undefined ||
-		typeof value === "string" ||
-		typeof value === "number" ||
-		typeof value === "boolean"
-	) {
-		return true;
-	}
-
-	if (Array.isArray(value)) {
-		return value.every((item) => isStructuredCloneSafe(item));
-	}
-
-	if (typeof value === "object") {
-		return Object.values(value).every((entry) => isStructuredCloneSafe(entry));
-	}
-
-	return false;
-}
-
-function createRomPatch(
-	romBytes: Uint8Array,
-	offset?: number,
-	length?: number,
-): { offset: number; bytes: number[] } | undefined {
-	if (offset === undefined || length === undefined || length <= 0) {
-		return undefined;
-	}
-
-	const end = Math.min(offset + length, romBytes.length);
-	if (offset < 0 || offset >= end) {
-		return undefined;
-	}
-
-	return {
-		offset,
-		bytes: Array.from(romBytes.slice(offset, end)),
-	};
 }
