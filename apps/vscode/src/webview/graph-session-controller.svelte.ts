@@ -43,7 +43,7 @@ export type GraphInitMessage = {
 
 export type GraphUpdateMessage = {
 	type: "update";
-	snapshot?: TableSnapshot;
+	snapshot: TableSnapshot;
 	romBytes?: number[];
 	romPatch?: {
 		offset: number;
@@ -98,7 +98,6 @@ export class GraphSessionController {
 
 	private snapshotState: TableSnapshot | null = null;
 	private romView: ROMView | null = null;
-	private reactiveTableId: string | null = null;
 
 	constructor(
 		private readonly host: GraphWebviewApi,
@@ -110,10 +109,6 @@ export class GraphSessionController {
 	}
 
 	get snapshot(): TableSnapshot | null {
-		if (this.romView && this.reactiveTableId) {
-			return this.romView.table(this.reactiveTableId)?.snapshot ?? null;
-		}
-
 		return this.snapshotState;
 	}
 
@@ -237,7 +232,6 @@ export class GraphSessionController {
 						message.romBytes,
 					)
 				: null;
-		this.reactiveTableId = message.tableDefinition?.id ?? null;
 
 		if (message.preferredChartType) {
 			this.chartState.setChartType(message.preferredChartType);
@@ -250,6 +244,8 @@ export class GraphSessionController {
 	}
 
 	private handleUpdate(message: GraphUpdateMessage): void {
+		this.snapshotState = message.snapshot;
+
 		if (this.romView && message.romPatch) {
 			this.romView.patchBytes(
 				message.romPatch.offset,
@@ -257,8 +253,6 @@ export class GraphSessionController {
 			);
 		} else if (this.romView && message.romBytes) {
 			this.romView.replaceBytes(Uint8Array.from(message.romBytes));
-		} else if (message.snapshot) {
-			this.snapshotState = message.snapshot;
 		}
 
 		if (message.preferredChartType) {

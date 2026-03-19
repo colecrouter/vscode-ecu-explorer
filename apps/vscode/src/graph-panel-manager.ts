@@ -613,6 +613,7 @@ export class GraphPanelManager {
 					if (context.tableDefinition && romPatch) {
 						panel.webview.postMessage({
 							type: "update",
+							snapshot: newSnapshot,
 							romPatch,
 						});
 						return;
@@ -657,6 +658,7 @@ export class GraphPanelManager {
 		if (context.tableDefinition && message.romPatch) {
 			panel.webview.postMessage({
 				type: "update",
+				snapshot: message.snapshot,
 				romPatch: message.romPatch,
 			});
 			return;

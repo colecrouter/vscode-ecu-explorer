@@ -85,6 +85,12 @@ describe("GraphSessionController", () => {
 
 		controller.handleHostMessage({
 			type: "update",
+			snapshot: {
+				kind: "table1d",
+				name: "Fuel Table",
+				rows: 4,
+				z: [42, 20, 30, 40],
+			},
 			romPatch: {
 				offset: 0,
 				bytes: [42],
