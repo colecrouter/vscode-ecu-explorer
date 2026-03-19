@@ -52,6 +52,53 @@ interface PanelContext {
 	tableUri?: string;
 }
 
+interface PersistedGraphPanelState {
+	romPath: string;
+	tableId: string;
+	tableName: string;
+	definitionUri?: string;
+}
+
+const GRAPH_PANEL_STATE_KEY = "ecuExplorer.graphPanelStates";
+
+function normalizePersistedGraphState(
+	state: unknown,
+): PersistedGraphPanelState | undefined {
+	if (!state || typeof state !== "object") {
+		return undefined;
+	}
+
+	const candidate = state as Partial<
+		Record<keyof PersistedGraphPanelState, unknown>
+	>;
+	if (
+		typeof candidate.romPath === "string" &&
+		candidate.romPath.length > 0 &&
+		typeof candidate.tableId === "string" &&
+		candidate.tableId.length > 0 &&
+		typeof candidate.tableName === "string" &&
+		candidate.tableName.length > 0
+	) {
+		const state: PersistedGraphPanelState = {
+			romPath: candidate.romPath,
+			tableId: candidate.tableId,
+			tableName: candidate.tableName,
+		};
+
+		if (typeof candidate.definitionUri === "string") {
+			state.definitionUri = candidate.definitionUri;
+		}
+
+		return state;
+	}
+
+	return undefined;
+}
+
+function makeGraphPanelStateId(state: PersistedGraphPanelState): string {
+	return `${state.romPath}::${state.tableId}`;
+}
+
 /**
  * Manages lifecycle and state of graph webview panels
  */
@@ -357,6 +404,19 @@ export class GraphPanelManager {
 		}
 	}
 
+	consumePersistedState(): PersistedGraphPanelState | undefined {
+		const states = this.readPersistedStates();
+		if (states.length === 0) {
+			return undefined;
+		}
+
+		const [first, ...rest] = states;
+		this.context.workspaceState
+			.update(GRAPH_PANEL_STATE_KEY, rest)
+			.then(() => {});
+		return first;
+	}
+
 	handleTableSessionAvailable(session: TableEditSession): void {
 		const romPath = session.romDocument.uri.fsPath;
 		const romPanels = this.panels.get(romPath);
@@ -514,10 +574,60 @@ export class GraphPanelManager {
 			disposables: [],
 		});
 
+		this.upsertPersistedState({
+			romPath,
+			tableId,
+			tableName,
+			...(definitionUri ? { definitionUri } : {}),
+		});
+
 		const context = this.panelContext.get(panel);
 		if (context) {
 			this.attachDocumentSubscription(panel, context);
 			this.attachTableSessionSubscription(panel, context);
+		}
+	}
+
+	private readPersistedStates(): PersistedGraphPanelState[] {
+		const states = this.context.workspaceState.get<unknown[]>(
+			GRAPH_PANEL_STATE_KEY,
+		);
+		if (!Array.isArray(states)) {
+			return [];
+		}
+
+		const normalized = states
+			.map((state) => normalizePersistedGraphState(state))
+			.filter((state): state is PersistedGraphPanelState => Boolean(state));
+
+		return normalized;
+	}
+
+	private upsertPersistedState(state: PersistedGraphPanelState): void {
+		const states = this.readPersistedStates();
+		const id = makeGraphPanelStateId(state);
+		const filtered = states.filter(
+			(entry) => makeGraphPanelStateId(entry) !== id,
+		);
+		filtered.unshift(state);
+		this.context.workspaceState
+			.update(GRAPH_PANEL_STATE_KEY, filtered.slice(0, 20))
+			.then(() => {});
+	}
+
+	private removePersistedState(state: {
+		romPath: string;
+		tableId: string;
+	}): void {
+		const states = this.readPersistedStates();
+		const id = `${state.romPath}::${state.tableId}`;
+		const filtered = states.filter(
+			(entry) => makeGraphPanelStateId(entry) !== id,
+		);
+		if (filtered.length !== states.length) {
+			this.context.workspaceState
+				.update(GRAPH_PANEL_STATE_KEY, filtered)
+				.then(() => {});
 		}
 	}
 
@@ -606,6 +716,7 @@ export class GraphPanelManager {
 			}
 			this.panels.get(context.romPath)?.delete(context.tableId);
 			this.panelContext.delete(panel);
+			this.removePersistedState(context);
 		}
 	}
 

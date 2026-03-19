@@ -25,6 +25,24 @@ interface GraphPanelState {
 	definitionUri?: string;
 }
 
+function isGraphPanelState(value: unknown): value is GraphPanelState {
+	if (!value || typeof value !== "object") {
+		return false;
+	}
+
+	const candidate = value as Partial<
+		Record<keyof GraphPanelState, string | undefined>
+	>;
+	return (
+		typeof candidate.romPath === "string" &&
+		candidate.romPath.length > 0 &&
+		typeof candidate.tableId === "string" &&
+		candidate.tableId.length > 0 &&
+		typeof candidate.tableName === "string" &&
+		candidate.tableName.length > 0
+	);
+}
+
 const NON_CANCELLABLE_TOKEN: CancellationToken = {
 	isCancellationRequested: false,
 	onCancellationRequested: () => ({ dispose() {} }),
@@ -50,29 +68,26 @@ export class GraphPanelSerializer implements vscode.WebviewPanelSerializer {
 		webviewPanel: vscode.WebviewPanel,
 		state: unknown,
 	): Promise<void> {
-		// Validate state
-		if (!state || typeof state !== "object") {
-			console.error("[GraphPanelSerializer] Invalid state:", state);
-			vscode.window.showErrorMessage("Failed to restore graph: Invalid state");
-			webviewPanel.dispose();
-			return;
+		let panelState = isGraphPanelState(state) ? state : undefined;
+		if (!panelState) {
+			const fallbackState = this.graphPanelManager.consumePersistedState();
+			if (fallbackState) {
+				panelState = fallbackState;
+				console.warn(
+					"[GraphPanelSerializer] Restoring graph panel from fallback persisted state",
+					fallbackState,
+				);
+			} else {
+				console.error("[GraphPanelSerializer] Invalid state:", state);
+				vscode.window.showErrorMessage(
+					"Failed to restore graph: Missing graph session state",
+				);
+				webviewPanel.dispose();
+				return;
+			}
 		}
 
-		const panelState = state as GraphPanelState;
 		const { romPath, tableId, tableName, definitionUri } = panelState;
-
-		// Validate required fields
-		if (!romPath || !tableId || !tableName) {
-			console.error(
-				"[GraphPanelSerializer] Missing required fields in state:",
-				panelState,
-			);
-			vscode.window.showErrorMessage(
-				"Failed to restore graph: Missing required state",
-			);
-			webviewPanel.dispose();
-			return;
-		}
 
 		try {
 			const romUri = vscode.Uri.file(romPath);
