@@ -13,6 +13,11 @@
 	import type { ThemeColors } from "@ecu-explorer/ui";
 	import { onMount } from "svelte";
 	import { rebuildTableViewFromHostUpdate } from "./table-host-sync.js";
+	import type {
+		TableSessionInitMessage,
+		TableSessionHostMessage,
+	} from "../table-session-protocol.js";
+	import { TableSessionController } from "./table-session-controller.svelte.js";
 
 	type TableGridInstance = {
 		focusActiveCell: () => void;
@@ -26,11 +31,11 @@
 		throw error;
 	}
 
+	const controller = new TableSessionController(vscode);
+	let viewModel = $state(controller.getViewModel());
 	// State
 	let tableView: TableView<TableDefinition> | null = $state(null);
 	let definition: TableDefinition | null = $state(null);
-	let tableName = $state("");
-	let isReady = $state(false);
 	let saveStatus: "idle" | "saving" | "success" | "error" = $state("idle");
 	let isInitialLoad = $state(true); // Track if this is the initial load
 	let themeColors: ThemeColors | undefined = $state(undefined);
@@ -43,12 +48,7 @@
 	$effect(() => {
 		if (tableView) {
 			const selection = tableView.getSelectedCells();
-			// Only report if we have a selection and it's not the initial load
-			// or if it's an empty selection after having one
-			vscode.postMessage({
-				type: "selectionChange",
-				selection,
-			});
+			controller.handleCellSelectionChange({ selection });
 		}
 	});
 
@@ -84,7 +84,7 @@
 		document.addEventListener("keydown", handleKeyDown, true);
 
 		// Signal readiness to extension host
-		vscode.postMessage({ type: "ready" });
+		controller.signalReady();
 
 		return () => {
 			window.removeEventListener("message", handleMessage);
@@ -98,10 +98,10 @@
 
 		switch (msg.type) {
 			case "init":
-				handleInit(msg);
+				applySessionMessage(msg);
 				break;
 			case "update":
-				handleUpdate(msg);
+				applySessionMessage(msg);
 				break;
 			case "error":
 				handleError(msg);
@@ -116,69 +116,61 @@
 				handleMathOp(msg);
 				break;
 			case "themeChanged":
-				handleThemeChanged(msg);
+				applySessionMessage(msg);
 				break;
 			case "switchTable":
 				handleSwitchTable(msg);
 				break;
 			case "selectCells":
-				handleSelectCells(msg);
+				applySessionMessage(msg);
 				break;
 		}
 	}
 
-	function handleSelectCells(msg: {
-		type: "selectCells";
-		selection: { row: number; col: number; depth?: number }[];
-	}) {
-		if (tableView) {
-			tableView.clearSelection();
-			for (const coord of msg.selection) {
-				tableView.selectCell(coord, "add");
+	function applySessionMessage(msg: TableSessionHostMessage) {
+		controller.handleHostMessage(msg);
+		viewModel = controller.getViewModel();
+		themeColors = viewModel.themeColors;
+		tableSnapshot = viewModel.snapshot;
+
+		switch (msg.type) {
+			case "init": {
+				const initMessage = msg as TableSessionInitMessage & {
+					definition: TableDefinition;
+					rom: number[] | Uint8Array;
+				};
+				if (!initMessage.rom || !initMessage.definition) {
+					return;
+				}
+				definition = initMessage.definition;
+				const rom = initMessage.rom
+					? new Uint8Array(initMessage.rom)
+					: controller.rom;
+				if (!rom) {
+					return;
+				}
+				tableView = new TableView(rom, initMessage.definition);
+				return;
 			}
-		}
-	}
-
-	function handleInit(msg: {
-		type: "init";
-		snapshot: {
-			kind: string;
-			name: string;
-			rows: number;
-			cols?: number;
-			x?: number[];
-			y?: number[];
-			z: number[] | number[][];
-		};
-		definition: TableDefinition;
-		rom: Uint8Array;
-		themeColors?: ThemeColors;
-	}) {
-		tableName = msg.snapshot.name;
-		definition = msg.definition;
-		tableSnapshot = msg.snapshot;
-
-		// Extract theme colors if provided
-		if (msg.themeColors) {
-			themeColors = msg.themeColors;
-		}
-
-		// Create TableView with ROM bytes
-		const rom = new Uint8Array(msg.rom);
-		tableView = new TableView(rom, msg.definition);
-
-		isReady = true;
-	}
-
-	/**
-	 * Handle theme change message
-	 */
-	function handleThemeChanged(msg: {
-		type: "themeChanged";
-		themeColors: ThemeColors;
-	}) {
-		if (msg.themeColors) {
-			themeColors = msg.themeColors;
+			case "update":
+				if (tableView && definition && controller.rom) {
+					tableView = rebuildTableViewFromHostUpdate(
+						TableView,
+						definition,
+						controller.rom,
+					);
+				}
+				return;
+			case "themeChanged":
+				return;
+			case "selectCells": {
+				if (!tableView) return;
+				tableView.clearSelection();
+				for (const coord of controller.normalizeSelection(msg.selection)) {
+					tableView.selectCell(coord, "add");
+				}
+				return;
+			}
 		}
 	}
 
@@ -192,23 +184,6 @@
 			type: "requestTableSwitch",
 			tableName: msg.tableName,
 		});
-	}
-
-	function handleUpdate(msg: {
-		type: "update";
-		snapshot: any;
-		rom?: number[];
-		reason?: string;
-	}) {
-		// Update reactive snapshot
-		tableSnapshot = msg.snapshot;
-
-		// Reload table view from updated ROM
-		if (tableView && definition) {
-			// Use updated ROM bytes if provided, otherwise use existing ROM
-			const rom = msg.rom ? new Uint8Array(msg.rom) : tableView["rom"];
-			tableView = rebuildTableViewFromHostUpdate(TableView, definition, rom);
-		}
 	}
 
 	function handleError(msg: { type: "error"; message: string }) {
@@ -372,7 +347,7 @@
 			const transaction = tableView.commit("Cell edit");
 			if (transaction) {
 				// Update local snapshot immediately for responsiveness
-				tableSnapshot = tableView.snapshot;
+				tableSnapshot = tableView.snapshot as any;
 
 				// Send edit to host
 				for (const edit of transaction.edits) {
@@ -395,9 +370,9 @@
 </script>
 
 <div class="table-app">
-	{#if isReady && tableView && definition && tableSnapshot}
+	{#if viewModel.isReady && tableView && definition && tableSnapshot}
 		<div class="toolbar">
-			<h2>{tableName}</h2>
+			<h2>{viewModel.tableName}</h2>
 		</div>
 		<div class="table-container">
 			{#if themeColors}

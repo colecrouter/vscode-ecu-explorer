@@ -10,6 +10,7 @@ import * as vscode from "vscode";
 import type { TableEditSession } from "../history/table-edit-session.js";
 import type { RomDocument } from "../rom/document.js";
 import { TableDocument } from "../table-document.js";
+import type { TableSessionInitMessage } from "../table-session-protocol.js";
 import { getThemeColors } from "../theme-colors.js";
 import type { RomExplorerTreeProvider } from "../tree/rom-tree-provider.js";
 
@@ -381,13 +382,17 @@ export async function handleTableOpen(
 				if (!didInit) {
 					didInit = true;
 					const themeColors = getThemeColors();
-					await panel.webview.postMessage({
+					const message: TableSessionInitMessage = {
 						type: "init",
+						tableId: selectedTable.id,
+						tableName: selectedTable.name,
+						romPath: rom.romUri,
 						snapshot,
-						definition: selectedTable,
 						rom: Array.from(rom.bytes),
+						definition: selectedTable,
 						themeColors,
-					});
+					};
+					await panel.webview.postMessage(message);
 				}
 				return;
 			}

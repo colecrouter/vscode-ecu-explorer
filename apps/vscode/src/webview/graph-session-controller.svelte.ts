@@ -3,6 +3,13 @@ import {
 	type TableSnapshot,
 	type ThemeColors,
 } from "@ecu-explorer/ui";
+import type {
+	TableSessionInitMessage,
+	TableSessionSelectCellsMessage,
+	TableSessionSelection,
+	TableSessionThemeMessage,
+	TableSessionUpdateMessage,
+} from "../table-session-protocol.js";
 
 export interface GraphWebviewApi {
 	postMessage(message: unknown): void;
@@ -15,31 +22,13 @@ export type PersistedGraphPanelState = {
 	tableId: string;
 	tableName: string;
 	definitionUri?: string;
-	zoom?: number;
-	pan?: { x: number; y: number };
-	layer?: number;
 };
 
-export type GraphSelection = {
-	row: number;
-	col: number;
-	depth?: number;
-};
+export type GraphSelection = TableSessionSelection;
 
-export type GraphInitMessage = {
-	type: "init";
-	snapshot: TableSnapshot;
-	tableId: string;
-	tableName: string;
-	romPath: string;
-	definitionUri?: string;
-	themeColors?: ThemeColors;
-};
+export type GraphInitMessage = TableSessionInitMessage;
 
-export type GraphUpdateMessage = {
-	type: "update";
-	snapshot: TableSnapshot;
-};
+export type GraphUpdateMessage = TableSessionUpdateMessage;
 
 export type GraphSelectCellMessage = {
 	type: "selectCell";
@@ -47,15 +36,9 @@ export type GraphSelectCellMessage = {
 	col: number;
 };
 
-export type GraphSelectCellsMessage = {
-	type: "selectCells";
-	selection: GraphSelection | GraphSelection[] | null;
-};
+export type GraphSelectCellsMessage = TableSessionSelectCellsMessage;
 
-export type GraphThemeChangedMessage = {
-	type: "themeChanged";
-	themeColors: ThemeColors;
-};
+export type GraphThemeChangedMessage = TableSessionThemeMessage;
 
 export type GraphHostMessage =
 	| GraphInitMessage

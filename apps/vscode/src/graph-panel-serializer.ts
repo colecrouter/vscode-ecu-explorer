@@ -23,10 +23,6 @@ interface GraphPanelState {
 	tableId: string;
 	tableName: string;
 	definitionUri?: string;
-	// Chart view state (optional)
-	zoom?: number;
-	pan?: { x: number; y: number };
-	layer?: number;
 }
 
 const NON_CANCELLABLE_TOKEN: CancellationToken = {

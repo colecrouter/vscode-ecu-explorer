@@ -19,6 +19,12 @@ import type {
 	TableSessionUpdateMessage,
 } from "./history/table-edit-session.js";
 import type { RomDocument } from "./rom/document.js";
+import type {
+	TableSessionInitMessage,
+	TableSessionUpdateMessage as TableSessionProtocolUpdateMessage,
+	TableSessionSelectCellsMessage,
+	TableSessionThemeMessage,
+} from "./table-session-protocol.js";
 import { getThemeColors, type ThemeColors } from "./theme-colors.js";
 
 /**
@@ -90,10 +96,11 @@ export class GraphPanelManager {
 	) {
 		const panel = this.panels.get(romPath)?.get(tableId);
 		if (panel) {
-			panel.webview.postMessage({
+			const message: TableSessionSelectCellsMessage = {
 				type: "selectCells",
 				selection,
-			});
+			};
+			panel.webview.postMessage(message);
 		}
 	}
 
@@ -280,10 +287,11 @@ export class GraphPanelManager {
 	broadcastThemeColors(themeColors: ThemeColors): void {
 		for (const romPanels of this.panels.values()) {
 			for (const panel of romPanels.values()) {
-				panel.webview.postMessage({
+				const payload: TableSessionThemeMessage = {
 					type: "themeChanged",
 					themeColors,
-				});
+				};
+				panel.webview.postMessage(payload);
 			}
 		}
 	}
@@ -436,8 +444,7 @@ export class GraphPanelManager {
 		}
 
 		const themeColors = getThemeColors();
-
-		panel.webview.postMessage({
+		const payload: TableSessionInitMessage = {
 			type: "init",
 			snapshot: context.snapshot,
 			tableId: context.tableId,
@@ -447,7 +454,8 @@ export class GraphPanelManager {
 				? { definitionUri: context.definitionUri }
 				: {}),
 			themeColors,
-		});
+		};
+		panel.webview.postMessage(payload);
 
 		console.log(
 			`[GraphPanelManager] Initial snapshot sent for table: ${context.tableName}`,
@@ -560,10 +568,11 @@ export class GraphPanelManager {
 				const newSnapshot = this.getSnapshot(context.romPath, context.tableId);
 				if (newSnapshot) {
 					context.snapshot = newSnapshot;
-					panel.webview.postMessage({
+					const message: TableSessionProtocolUpdateMessage = {
 						type: "update",
 						snapshot: newSnapshot,
-					});
+					};
+					panel.webview.postMessage(message);
 				}
 			}
 		});
@@ -576,10 +585,11 @@ export class GraphPanelManager {
 		message: TableSessionUpdateMessage,
 	): void {
 		context.snapshot = message.snapshot;
-		panel.webview.postMessage({
+		const payload: TableSessionProtocolUpdateMessage = {
 			type: "update",
 			snapshot: message.snapshot,
-		});
+		};
+		panel.webview.postMessage(payload);
 	}
 
 	/**

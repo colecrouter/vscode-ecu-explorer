@@ -1,7 +1,7 @@
 import { snapshotTable, type TableDefinition } from "@ecu-explorer/core";
 import { type EditTransaction, HistoryStack } from "@ecu-explorer/ui";
 import type * as vscode from "vscode";
-import type { RomChangeEvent, RomDocument } from "../rom/document.js";
+import type { RomDocument } from "../rom/document.js";
 import { VsCodeHistoryExecutor } from "./vscode-history-executor.js";
 
 export type TableSessionId = string;
@@ -24,10 +24,6 @@ export interface TableSessionUpdateMessage {
 	type: "update";
 	snapshot: ReturnType<typeof snapshotTable>;
 	rom?: number[];
-	romPatch?: {
-		offset: number;
-		bytes: number[];
-	};
 	reason: "undo" | "redo" | "sync";
 }
 
@@ -172,19 +168,16 @@ export class TableEditSession {
 	private bindRomDocument(romDocument: RomDocument): void {
 		this.disposeDocumentListener?.();
 		this._romDocument = romDocument;
-		const subscription = romDocument.onDidUpdateBytes((event) => {
-			this.emitUpdate("sync", event);
+		const subscription = romDocument.onDidUpdateBytes(() => {
+			this.emitUpdate("sync");
 		});
 		this.disposeDocumentListener = () => {
 			subscription.dispose();
 		};
 	}
 
-	private emitUpdate(
-		reason: TableSessionUpdateMessage["reason"],
-		event?: Pick<RomChangeEvent, "offset" | "length">,
-	): void {
-		const message = this.createUpdateMessage(reason, event);
+	private emitUpdate(reason: TableSessionUpdateMessage["reason"]): void {
+		const message = this.createUpdateMessage(reason);
 		for (const listener of this.listeners) {
 			listener(message);
 		}
@@ -192,37 +185,14 @@ export class TableEditSession {
 
 	private createUpdateMessage(
 		reason: TableSessionUpdateMessage["reason"],
-		event?: Pick<RomChangeEvent, "offset" | "length">,
 	): TableSessionUpdateMessage {
 		const romBytes = this._romDocument.romBytes;
-		const romPatch = createRomPatch(romBytes, event?.offset, event?.length);
 
 		return {
 			type: "update",
 			snapshot: snapshotTable(this.tableDef, romBytes),
-			...((reason !== "sync" || !romPatch) && { rom: Array.from(romBytes) }),
-			...(romPatch ? { romPatch } : {}),
+			rom: Array.from(romBytes),
 			reason,
 		};
 	}
-}
-
-function createRomPatch(
-	romBytes: Uint8Array,
-	offset?: number,
-	length?: number,
-): { offset: number; bytes: number[] } | undefined {
-	if (offset === undefined || length === undefined || length <= 0) {
-		return undefined;
-	}
-
-	const end = Math.min(offset + length, romBytes.length);
-	if (offset < 0 || offset >= end) {
-		return undefined;
-	}
-
-	return {
-		offset,
-		bytes: Array.from(romBytes.slice(offset, end)),
-	};
 }
