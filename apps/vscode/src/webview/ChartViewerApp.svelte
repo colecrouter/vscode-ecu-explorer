@@ -20,11 +20,13 @@
 	 * - Sends: ready, cellSelect
 	 */
 
-	import { Chart, ChartState } from "@ecu-explorer/ui";
-	import { ROMView } from "@ecu-explorer/ui";
-	import type { ROMDefinition, TableDefinition } from "@ecu-explorer/core";
-	import type { TableSnapshot, ThemeColors } from "@ecu-explorer/ui";
+	import { Chart } from "@ecu-explorer/ui";
 	import { onMount } from "svelte";
+	import {
+		GraphSessionController,
+		type GraphHostMessage,
+		type PersistedGraphPanelState,
+	} from "./graph-session-controller.svelte.js";
 
 	// VSCode API
 	let vscode: ReturnType<typeof acquireVsCodeApi>;
@@ -35,73 +37,23 @@
 		throw error;
 	}
 
-	// State
-	let chartState = new ChartState();
-	let snapshot = $state<TableSnapshot | null>(null);
-	let romView = $state<ROMView | null>(null);
-	let reactiveTableId = $state<string | null>(null);
-	let tableId = $state("");
-	let tableName = $state("");
-	let romPath = $state("");
-	let definitionUri = $state("");
-	let isReady = $state(false);
-	let themeColors = $state<ThemeColors | undefined>(undefined);
-
-	type PersistedGraphPanelState = {
-		romPath: string;
-		tableId: string;
-		tableName: string;
-		definitionUri?: string;
-		zoom?: number;
-		pan?: { x: number; y: number };
-		layer?: number;
-	};
-
 	const persistedState = vscode.getState() as
 		| PersistedGraphPanelState
 		| undefined;
-	if (persistedState) {
-		tableId = persistedState.tableId ?? "";
-		tableName = persistedState.tableName ?? "";
-		romPath = persistedState.romPath ?? "";
-		definitionUri = persistedState.definitionUri ?? "";
-	}
+	const controller = new GraphSessionController(vscode, persistedState);
+	const chartState = controller.chartState;
+	let viewModel = $state(controller.getViewModel());
 
-	// Sync chartState with snapshot reactively
 	$effect(() => {
-		if (romView && reactiveTableId) {
-			const table = romView.table(reactiveTableId);
-			chartState.snapshot = table?.snapshot ?? null;
-			return;
-		}
-
-		if (snapshot) {
-			chartState.snapshot = snapshot;
-		}
-	});
-
-	// Derived state
-	const hasData = $derived(snapshot !== null);
-
-	// Watch for selection changes in chartState
-	$effect(() => {
-		if (chartState.selectedCell) {
-			vscode.postMessage({
-				type: "selectionChange",
-				selection: [chartState.selectedCell],
-			});
-		}
+		chartState.snapshot = viewModel.snapshot;
 	});
 
 	$effect(() => {
-		if (!tableId || !tableName || !romPath) return;
+		controller.syncSelectionChange();
+	});
 
-		vscode.setState({
-			romPath,
-			tableId,
-			tableName,
-			...(definitionUri ? { definitionUri } : {}),
-		} satisfies PersistedGraphPanelState);
+	$effect(() => {
+		controller.persistState();
 	});
 
 	/**
@@ -110,171 +62,27 @@
 	function handleMessage(event: MessageEvent) {
 		const message = event.data;
 		if (!message || typeof message !== "object") return;
-
-		switch (message.type) {
-			case "init":
-				handleInit(message);
-				break;
-			case "update":
-				handleUpdate(message);
-				break;
-			case "selectCell":
-				handleSelectCell(message);
-				break;
-			case "selectCells":
-				handleSelectCells(message);
-				break;
-			case "themeChanged":
-				handleThemeChanged(message);
-				break;
-		}
-	}
-
-	function handleSelectCells(message: {
-		type: "selectCells";
-		selection: { row: number; col: number; depth?: number }[];
-	}) {
-		if (message.selection && message.selection.length > 0) {
-			const first = message.selection[0];
-			if (first) {
-				chartState.selectCell(first.row, first.col);
-			}
-		}
-	}
-
-	/**
-	 * Handle init message - initial table snapshot
-	 */
-	function handleInit(message: {
-		type: "init";
-		snapshot: TableSnapshot;
-		romBytes?: number[];
-		tableDefinition?: TableDefinition;
-		tableId: string;
-		tableName: string;
-		romPath: string;
-		definitionUri?: string;
-		preferredChartType?: "line" | "heatmap";
-		themeColors?: ThemeColors;
-	}) {
-		snapshot = message.snapshot;
-		tableId = message.tableId;
-		tableName = message.tableName;
-		romPath = message.romPath;
-		definitionUri = message.definitionUri ?? "";
-		if (message.romBytes && message.tableDefinition) {
-			romView = createGraphRomView(
-				message.tableName,
-				message.tableDefinition,
-				message.romBytes,
-			);
-			reactiveTableId = message.tableDefinition.id;
-		} else {
-			romView = null;
-			reactiveTableId = null;
-		}
-
-		if (message.preferredChartType) {
-			chartState.setChartType(message.preferredChartType);
-		}
-
-		// Extract theme colors if provided
-		if (message.themeColors) {
-			themeColors = message.themeColors;
-		}
-
-		isReady = true;
-	}
-
-	/**
-	 * Handle theme change message
-	 */
-	function handleThemeChanged(message: {
-		type: "themeChanged";
-		themeColors: ThemeColors;
-	}) {
-		if (message.themeColors) {
-			themeColors = message.themeColors;
-		}
-	}
-
-	/**
-	 * Handle update message - updated table snapshot after edits
-	 */
-	function handleUpdate(message: {
-		type: "update";
-		snapshot?: TableSnapshot;
-		romBytes?: number[];
-		romPatch?: {
-			offset: number;
-			bytes: number[];
-		};
-		preferredChartType?: "line" | "heatmap";
-	}) {
-		if (romView && message.romPatch) {
-			romView.patchBytes(
-				message.romPatch.offset,
-				Uint8Array.from(message.romPatch.bytes),
-			);
-		} else if (romView && message.romBytes) {
-			romView.replaceBytes(Uint8Array.from(message.romBytes));
-		} else if (message.snapshot) {
-			snapshot = message.snapshot;
-		}
-		if (message.preferredChartType) {
-			chartState.setChartType(message.preferredChartType);
-		}
-	}
-
-	/**
-	 * Handle selectCell message - highlight cell in chart
-	 */
-	function handleSelectCell(message: {
-		type: "selectCell";
-		row: number;
-		col: number;
-	}) {
-		chartState.selectCell(message.row, message.col);
+		controller.handleHostMessage(message as GraphHostMessage);
+		viewModel = controller.getViewModel();
 	}
 
 	/**
 	 * Handle cell selection in chart - send to extension host
 	 */
 	function handleCellSelect(row: number, col: number) {
-		vscode.postMessage({
-			type: "cellSelect",
-			row,
-			col,
-		});
+		controller.handleChartCellSelect(row, col);
 	}
 
 	// Lifecycle
 	onMount(() => {
 		window.addEventListener("message", handleMessage);
 
-		// Signal readiness to extension host
-		vscode.postMessage({ type: "ready" });
+		controller.signalReady();
 
 		return () => {
 			window.removeEventListener("message", handleMessage);
 		};
 	});
-
-	function createGraphRomView(
-		name: string,
-		tableDefinition: TableDefinition,
-		romBytes: number[],
-	) {
-		const definition: ROMDefinition = {
-			uri: definitionUri || `graph://${tableDefinition.id}`,
-			name,
-			fingerprints: [],
-			platform: {},
-			tables: [tableDefinition],
-		};
-
-		return new ROMView(Uint8Array.from(romBytes), definition);
-	}
 </script>
 
 <div class="chart-viewer">
@@ -282,26 +90,30 @@
 		<div class="chart-title">
 			<div class="toolbar">
 				<!-- Future toolbar buttons can go here -->
-				<h2>{tableName}</h2>
-				{#if romPath}
-					<span class="rom-path">{romPath}</span>
+				<h2>{viewModel.tableName}</h2>
+				{#if viewModel.romPath}
+					<span class="rom-path">{viewModel.romPath}</span>
 				{/if}
 			</div>
 		</div>
 	</header>
 
 	<div class="chart-content">
-		{#if !isReady}
+		{#if !viewModel.isReady}
 			<div class="loading">
 				<div class="spinner"></div>
 				<p>Loading chart...</p>
 			</div>
-		{:else if !hasData}
+		{:else if !viewModel.hasData}
 			<div class="no-data">
 				<p>No data available</p>
 			</div>
 		{:else}
-			<Chart {chartState} {themeColors} onCellSelect={handleCellSelect} />
+			<Chart
+				{chartState}
+				themeColors={viewModel.themeColors}
+				onCellSelect={handleCellSelect}
+			/>
 		{/if}
 	</div>
 </div>
