@@ -1,4 +1,8 @@
-import type { ROMDefinition, Table2DDefinition } from "@ecu-explorer/core";
+import type {
+	ROMDefinition,
+	Table1DDefinition,
+	Table2DDefinition,
+} from "@ecu-explorer/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	createMcpConfig,
@@ -99,5 +103,47 @@ describe("handleReadTable", () => {
 		await expect(
 			handleReadTable("/tmp/sample.hex", "ignitoin rpm", config),
 		).rejects.toThrow(/Did you mean: High Octane Ignition\?/);
+	});
+
+	it("adds an index column for 1D tables when axis values repeat", async () => {
+		romBytes = Uint8Array.from([10, 20, 30]);
+		const mafTable = {
+			id: "maf",
+			name: "MAF Scaling Horizontal",
+			kind: "table1d",
+			rows: 3,
+			category: "Fuel",
+			x: {
+				id: "x-maf",
+				kind: "static",
+				name: "Volts",
+				values: [0, 5, 5],
+			},
+			z: {
+				id: "z-maf",
+				name: "values",
+				address: 0,
+				dtype: "u8",
+			},
+		} satisfies Table1DDefinition;
+		definition = {
+			uri: "file:///tmp/sample.xml",
+			name: "Sample Definition",
+			fingerprints: [],
+			platform: {},
+			tables: [mafTable],
+		};
+
+		const result = await handleReadTable(
+			"/tmp/sample.hex",
+			"MAF Scaling Horizontal",
+			config,
+		);
+
+		expect(result).toContain(
+			"| Index | Volts () | MAF Scaling Horizontal () |",
+		);
+		expect(result).toContain("| 1     | 5");
+		expect(result).toContain("| 2     | 5");
 	});
 });

@@ -158,6 +158,91 @@ describe("handleDiffTables", () => {
 		expect(result).toContain("| 20         | 25");
 	});
 
+	it("adds a row index in 1D detail mode when axis values repeat", async () => {
+		baseDefinition = {
+			...baseDefinition,
+			tables: [
+				makeIdleTable({
+					name: "Repeated Axis Table",
+					x: {
+						id: "x-repeat",
+						kind: "static",
+						name: "Volts",
+						values: [0, 5],
+					},
+				}),
+			],
+		};
+		targetDefinition = {
+			...targetDefinition,
+			tables: [
+				makeIdleTable({
+					name: "Repeated Axis Table",
+					x: {
+						id: "x-repeat",
+						kind: "static",
+						name: "Volts",
+						values: [0, 5],
+					},
+				}),
+			],
+		};
+		baseBytes = Uint8Array.from([50, 60, 0, 0, 10, 20]);
+		targetBytes = Uint8Array.from([50, 60, 0, 0, 10, 30]);
+
+		const result = await handleDiffTables(
+			{
+				baseRom: "/tmp/base.rom",
+				targetRom: "/tmp/target.rom",
+				table: "Repeated Axis Table",
+			},
+			config,
+		);
+
+		expect(result).not.toContain("| index |");
+
+		baseDefinition = {
+			...baseDefinition,
+			tables: [
+				makeIdleTable({
+					name: "Repeated Axis Table",
+					x: {
+						id: "x-repeat-dup",
+						kind: "static",
+						name: "Volts",
+						values: [5, 5],
+					},
+				}),
+			],
+		};
+		targetDefinition = {
+			...targetDefinition,
+			tables: [
+				makeIdleTable({
+					name: "Repeated Axis Table",
+					x: {
+						id: "x-repeat-dup",
+						kind: "static",
+						name: "Volts",
+						values: [5, 5],
+					},
+				}),
+			],
+		};
+
+		const duplicateResult = await handleDiffTables(
+			{
+				baseRom: "/tmp/base.rom",
+				targetRom: "/tmp/target.rom",
+				table: "Repeated Axis Table",
+			},
+			config,
+		);
+
+		expect(duplicateResult).toContain("| index | axis |");
+		expect(duplicateResult).toContain("| 1     | 5");
+	});
+
 	it("reports axis changes when table breakpoints differ", async () => {
 		targetDefinition = {
 			...targetDefinition,

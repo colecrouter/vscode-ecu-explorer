@@ -47,6 +47,10 @@ export interface TableSliceOptions {
 	selectorAxes?: string[];
 }
 
+function hasDuplicateNumbers(values: number[]): boolean {
+	return new Set(values).size !== values.length;
+}
+
 /**
  * Get the byte size of a scalar type.
  */
@@ -219,14 +223,19 @@ export function formatTable1D(
 		? `${def.x.name} (${formatUnit(def.x.unit)})`
 		: "Index";
 	const valueName = `${def.name} (${formatUnit(def.z.unit)})`;
-	const headers = [axisName, valueName];
+	const showIndexColumn = hasDuplicateNumbers(xAxisValues);
+	const headers = showIndexColumn
+		? ["Index", axisName, valueName]
+		: [axisName, valueName];
 
 	const tableRows: string[][] = values.map((val, i) => {
 		const axisVal =
 			xAxisValues.length > i
 				? formatNumber(xAxisValues[i] as number)
 				: String(i);
-		return [axisVal, formatNumber(val)];
+		return showIndexColumn
+			? [String(i), axisVal, formatNumber(val)]
+			: [axisVal, formatNumber(val)];
 	});
 
 	const markdownTable = buildMarkdownTable(headers, tableRows);
@@ -415,8 +424,15 @@ export function formatTableSlice(
 			? `${def.x.name} (${formatUnit(def.x.unit)})`
 			: "Index";
 		const valueName = `${def.name} (${formatUnit(def.z.unit)})`;
-		const headers = [axisName, valueName];
+		const selectedAxisValues = slice.rowIndices.map(
+			(rowIndex) => full.xAxisValues[rowIndex] as number,
+		);
+		const showIndexColumn = hasDuplicateNumbers(selectedAxisValues);
+		const headers = showIndexColumn
+			? ["Index", axisName, valueName]
+			: [axisName, valueName];
 		const tableRows = slice.rowIndices.map((rowIndex) => [
+			...(showIndexColumn ? [String(rowIndex)] : []),
 			full.xAxisValues.length > rowIndex
 				? formatNumber(full.xAxisValues[rowIndex] as number)
 				: String(rowIndex),

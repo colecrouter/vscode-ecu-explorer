@@ -96,6 +96,10 @@ function compareNumericArrays(a: number[], b: number[]): boolean {
 	return true;
 }
 
+function hasDuplicateNumbers(values: number[]): boolean {
+	return new Set(values).size !== values.length;
+}
+
 function compareValueGrids(a: number[][], b: number[][]): DiffMetrics {
 	let cellsChanged = 0;
 	let maxAbsDelta = 0;
@@ -561,12 +565,14 @@ function buildChangedCellsTable(analysis: TablePairAnalysis): string {
 	const rows: string[][] = [];
 
 	if (analysis.kind === "table1d") {
+		const showIndexColumn = hasDuplicateNumbers(baseSnapshot.xAxisValues);
 		for (let row = 0; row < baseSnapshot.rows; row++) {
 			const baseValue = baseSnapshot.values[row]?.[0];
 			const targetValue = targetSnapshot.values[row]?.[0];
 			if (baseValue === undefined || targetValue === undefined) continue;
 			if (baseValue === targetValue) continue;
 			rows.push([
+				...(showIndexColumn ? [String(row)] : []),
 				formatNumber(baseSnapshot.xAxisValues[row] ?? row),
 				formatNumber(baseValue),
 				formatNumber(targetValue),
@@ -576,7 +582,9 @@ function buildChangedCellsTable(analysis: TablePairAnalysis): string {
 		}
 
 		return buildMarkdownTable(
-			["axis", "base_value", "target_value", "delta"],
+			showIndexColumn
+				? ["index", "axis", "base_value", "target_value", "delta"]
+				: ["axis", "base_value", "target_value", "delta"],
 			rows,
 		);
 	}
