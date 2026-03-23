@@ -24,6 +24,7 @@ import {
 	buildOpenDocumentsContextPayload,
 	buildQuerySyntaxResourceText,
 } from "./resources.js";
+import { handleDiffTables } from "./tools/diff-tables.js";
 import type { PatchTableOptions } from "./tools/patch-table.js";
 
 /**
@@ -162,6 +163,79 @@ export function updateOpenContext(
 }
 
 // ─── Tool: list_tables ────────────────────────────────────────────────────────
+
+server.tool(
+	"diff_tables",
+	"Compare calibration tables across two ROMs. Omit `table` for a changed-table summary, or provide `table` to inspect one table in detail.",
+	{
+		base_rom: z
+			.string()
+			.describe("Absolute or workspace-relative path to the baseline ROM"),
+		target_rom: z
+			.string()
+			.describe("Absolute or workspace-relative path to the comparison ROM"),
+		base_definition: z
+			.string()
+			.optional()
+			.describe("Optional explicit definition path for `base_rom`"),
+		target_definition: z
+			.string()
+			.optional()
+			.describe("Optional explicit definition path for `target_rom`"),
+		table: z
+			.string()
+			.optional()
+			.describe(
+				"Optional exact table name to inspect in detail; omit for summary mode",
+			),
+		query: z
+			.string()
+			.optional()
+			.describe(
+				"Optional metadata query over summary results; valid only when `table` is omitted",
+			),
+		page: z.number().int().min(1).optional().describe("1-based page number"),
+		page_size: z
+			.number()
+			.int()
+			.min(1)
+			.optional()
+			.describe("Maximum rows to return per page in summary mode"),
+	},
+	async ({
+		base_rom,
+		target_rom,
+		base_definition,
+		target_definition,
+		table,
+		query,
+		page,
+		page_size,
+	}) => {
+		try {
+			const content = await handleDiffTables(
+				{
+					baseRom: base_rom,
+					targetRom: target_rom,
+					baseDefinitionPath: base_definition,
+					targetDefinitionPath: target_definition,
+					table,
+					query,
+					page,
+					pageSize: page_size,
+				},
+				config,
+			);
+			return { content: [{ type: "text", text: content }] };
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			return {
+				content: [{ type: "text", text: `Error: ${message}` }],
+				isError: true,
+			};
+		}
+	},
+);
 
 server.tool(
 	"list_tables",

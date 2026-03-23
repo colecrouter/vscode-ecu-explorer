@@ -84,6 +84,7 @@ For headless debugging of the MCP ROM/log flows, use the matching tools:
 
 ```bash
 npm run tools:rom-info -- --rom ./56890009_2011_USDM_5MT.hex
+npm run tools:diff-tables -- --base-rom ./56890009_2011_USDM_5MT.hex --target-rom ./56890013_2011_USDM_5MT.hex
 npm run tools:list-tables -- --rom ./56890009_2011_USDM_5MT.hex --query timing
 npm run tools:read-table -- --rom ./56890009_2011_USDM_5MT.hex --table "Fuel Injector Scaling"
 npm run tools:list-logs -- --logs-dir ./logs

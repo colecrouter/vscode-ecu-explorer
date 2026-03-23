@@ -8,6 +8,7 @@
 		"build": "echo 'No build step required for JS package'",
 		"inspect-rom": "node ./inspect-rom.js",
 		"rom-info": "node ./rom-info.js",
+		"diff-tables": "node ./diff-tables.js",
 		"list-tables": "node ./list-tables.js",
 		"read-table": "node ./read-table.js",
 		"patch-table": "node ./patch-table.js",

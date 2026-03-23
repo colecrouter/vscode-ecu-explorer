@@ -41,6 +41,7 @@
 		"check": "npm run check --workspaces --if-present && tsc --noEmit -p tsconfig.test.node.json && tsc --noEmit -p tsconfig.test.vscode.json && tsc --noEmit -p tsconfig.test.browser.json",
 		"tools:inspect-rom": "npm run inspect-rom -w @ecu-explorer/tools --",
 		"tools:rom-info": "npm run rom-info -w @ecu-explorer/tools --",
+		"tools:diff-tables": "npm run diff-tables -w @ecu-explorer/tools --",
 		"tools:list-tables": "npm run list-tables -w @ecu-explorer/tools --",
 		"tools:read-table": "npm run read-table -w @ecu-explorer/tools --",
 		"tools:patch-table": "npm run patch-table -w @ecu-explorer/tools --",
