@@ -6,27 +6,27 @@
  * detailed diff for that single named table.
  */
 
-import type { TableDefinition } from "@ecu-explorer/core";
 import type { McpConfig } from "../config.js";
 import { buildMarkdownTable } from "../formatters/markdown.js";
-import { formatTable } from "../formatters/table-formatter.js";
-import { formatUnit } from "../formatters/unit.js";
 import { toYamlFrontmatter } from "../formatters/yaml-formatter.js";
 import { loadRom } from "../rom-loader.js";
+import {
+	analyzeTablePair,
+	buildDiffFrontmatterData,
+	type DiffStatus,
+	findTableByName,
+	formatDiffNumber,
+	type Portability,
+	renderChangedCellsMarkdown,
+	sortWeight,
+	type TablePairAnalysis,
+	tableCols,
+	tableRows,
+} from "../table-diff.js";
 
 function toLoadRomOptions(definitionPath?: string) {
 	return definitionPath === undefined ? {} : { definitionPath };
 }
-
-type DiffStatus =
-	| "unchanged"
-	| "changed"
-	| "axis_changed"
-	| "incompatible"
-	| "base_only"
-	| "target_only";
-
-type Portability = "safe" | "review" | "no";
 
 interface DiffTablesOptions {
 	baseRom: string;
@@ -39,15 +39,6 @@ interface DiffTablesOptions {
 	pageSize?: number | undefined;
 }
 
-interface TableSnapshot {
-	definition: TableDefinition;
-	rows: number;
-	cols: number;
-	values: number[][];
-	xAxisValues: number[];
-	yAxisValues: number[];
-}
-
 interface SummaryRow {
 	name: string;
 	category: string;
@@ -57,106 +48,6 @@ interface SummaryRow {
 	cellsChanged?: number | undefined;
 	maxAbsDelta?: number | undefined;
 	portability: Portability;
-}
-
-interface DiffMetrics {
-	cellsChanged: number;
-	maxAbsDelta: number;
-	meanAbsDelta: number;
-}
-
-interface TablePairAnalysis {
-	status: DiffStatus;
-	name: string;
-	category: string;
-	kind: string;
-	unit: string;
-	portability: Portability;
-	baseTable?: TableDefinition | undefined;
-	targetTable?: TableDefinition | undefined;
-	baseSnapshot?: TableSnapshot | undefined;
-	targetSnapshot?: TableSnapshot | undefined;
-	metrics?: DiffMetrics | undefined;
-	xAxisChanged?: boolean | undefined;
-	yAxisChanged?: boolean | undefined;
-	incompatibilityReason?: string | undefined;
-}
-
-function formatNumber(n: number): string {
-	if (!Number.isFinite(n)) return String(n);
-	const s = n.toFixed(4);
-	return s.replace(/\.?0+$/, "");
-}
-
-function compareNumericArrays(a: number[], b: number[]): boolean {
-	if (a.length !== b.length) return false;
-	for (let i = 0; i < a.length; i++) {
-		if (a[i] !== b[i]) return false;
-	}
-	return true;
-}
-
-function hasDuplicateNumbers(values: number[]): boolean {
-	return new Set(values).size !== values.length;
-}
-
-function compareValueGrids(a: number[][], b: number[][]): DiffMetrics {
-	let cellsChanged = 0;
-	let maxAbsDelta = 0;
-	let totalAbsDelta = 0;
-
-	for (let row = 0; row < a.length; row++) {
-		const leftRow = a[row] ?? [];
-		const rightRow = b[row] ?? [];
-		for (let col = 0; col < leftRow.length; col++) {
-			const left = leftRow[col];
-			const right = rightRow[col];
-			if (left === undefined || right === undefined) continue;
-			if (left === right) continue;
-			const delta = Math.abs(right - left);
-			cellsChanged += 1;
-			totalAbsDelta += delta;
-			if (delta > maxAbsDelta) {
-				maxAbsDelta = delta;
-			}
-		}
-	}
-
-	return {
-		cellsChanged,
-		maxAbsDelta,
-		meanAbsDelta: cellsChanged === 0 ? 0 : totalAbsDelta / cellsChanged,
-	};
-}
-
-function portabilityForStatus(status: DiffStatus): Portability {
-	switch (status) {
-		case "changed":
-		case "unchanged":
-			return "safe";
-		case "axis_changed":
-		case "base_only":
-		case "target_only":
-			return "review";
-		case "incompatible":
-			return "no";
-	}
-}
-
-function sortWeight(status: DiffStatus): number {
-	switch (status) {
-		case "changed":
-			return 0;
-		case "axis_changed":
-			return 1;
-		case "incompatible":
-			return 2;
-		case "base_only":
-		case "target_only":
-			return 3;
-		case "unchanged":
-			return 4;
-	}
 }
 
 function queryText(row: SummaryRow): string {
@@ -181,234 +72,6 @@ function matchesSummaryQuery(row: SummaryRow, query?: string): boolean {
 		.map((term) => term.trim())
 		.filter((term) => term.length > 0);
 	return terms.every((term) => haystack.includes(term));
-}
-
-function findTableByName(
-	tables: TableDefinition[],
-	tableName: string,
-): TableDefinition | undefined {
-	const exact = tables.find((table) => table.name === tableName);
-	if (exact) return exact;
-	return tables.find(
-		(table) => table.name.toLowerCase() === tableName.toLowerCase(),
-	);
-}
-
-function getTableSnapshot(
-	romPath: string,
-	table: TableDefinition,
-	romBytes: Uint8Array,
-): TableSnapshot | undefined {
-	if (table.kind !== "table1d" && table.kind !== "table2d") {
-		return undefined;
-	}
-
-	const formatted = formatTable(romPath, table, romBytes);
-	return {
-		definition: table,
-		rows: formatted.rows,
-		cols: formatted.cols,
-		values: formatted.values,
-		xAxisValues: formatted.xAxisValues,
-		yAxisValues: formatted.yAxisValues,
-	};
-}
-
-function tableRows(table: TableDefinition | undefined): number | undefined {
-	if (table === undefined) return undefined;
-	return table.rows;
-}
-
-function tableCols(table: TableDefinition | undefined): number | undefined {
-	if (table === undefined) return undefined;
-	return table.kind === "table2d" || table.kind === "table3d" ? table.cols : 1;
-}
-
-function analyzeTablePair(
-	name: string,
-	baseRomPath: string,
-	targetRomPath: string,
-	baseTable: TableDefinition | undefined,
-	targetTable: TableDefinition | undefined,
-	baseBytes: Uint8Array,
-	targetBytes: Uint8Array,
-): TablePairAnalysis {
-	const tableForMeta = baseTable ?? targetTable;
-	const category = tableForMeta?.category ?? "";
-	const kind = tableForMeta?.kind ?? "";
-	const unit = formatUnit(tableForMeta?.z.unit);
-
-	if (baseTable === undefined) {
-		return {
-			status: "target_only",
-			name,
-			category,
-			kind,
-			unit,
-			portability: portabilityForStatus("target_only"),
-			targetTable,
-		};
-	}
-
-	if (targetTable === undefined) {
-		return {
-			status: "base_only",
-			name,
-			category,
-			kind,
-			unit,
-			portability: portabilityForStatus("base_only"),
-			baseTable,
-		};
-	}
-
-	if (baseTable.kind !== targetTable.kind) {
-		return {
-			status: "incompatible",
-			name,
-			category,
-			kind: `${baseTable.kind} vs ${targetTable.kind}`,
-			unit,
-			portability: portabilityForStatus("incompatible"),
-			baseTable,
-			targetTable,
-			incompatibilityReason: `different kinds: ${baseTable.kind} vs ${targetTable.kind}`,
-		};
-	}
-
-	if (baseTable.kind === "table1d" && baseTable.rows !== targetTable.rows) {
-		return {
-			status: "incompatible",
-			name,
-			category,
-			kind,
-			unit,
-			portability: portabilityForStatus("incompatible"),
-			baseTable,
-			targetTable,
-			incompatibilityReason: `different dimensions: ${baseTable.rows} vs ${targetTable.rows}`,
-		};
-	}
-
-	if (
-		baseTable.kind === "table2d" &&
-		targetTable.kind === "table2d" &&
-		(baseTable.rows !== targetTable.rows || baseTable.cols !== targetTable.cols)
-	) {
-		return {
-			status: "incompatible",
-			name,
-			category,
-			kind,
-			unit,
-			portability: portabilityForStatus("incompatible"),
-			baseTable,
-			targetTable,
-			incompatibilityReason: `different dimensions: ${baseTable.rows}x${baseTable.cols} vs ${targetTable.rows}x${targetTable.cols}`,
-		};
-	}
-
-	const baseSnapshot = getTableSnapshot(baseRomPath, baseTable, baseBytes);
-	const targetSnapshot = getTableSnapshot(
-		targetRomPath,
-		targetTable,
-		targetBytes,
-	);
-
-	if (baseSnapshot === undefined || targetSnapshot === undefined) {
-		return {
-			status: "incompatible",
-			name,
-			category,
-			kind,
-			unit,
-			portability: portabilityForStatus("incompatible"),
-			baseTable,
-			targetTable,
-			incompatibilityReason: "only 1D and 2D tables are comparable in v1",
-		};
-	}
-
-	if (
-		baseSnapshot.rows !== targetSnapshot.rows ||
-		baseSnapshot.cols !== targetSnapshot.cols
-	) {
-		return {
-			status: "incompatible",
-			name,
-			category,
-			kind,
-			unit,
-			portability: portabilityForStatus("incompatible"),
-			baseTable,
-			targetTable,
-			baseSnapshot,
-			targetSnapshot,
-			incompatibilityReason: "decoded table shapes differ",
-		};
-	}
-
-	const xAxisChanged = !compareNumericArrays(
-		baseSnapshot.xAxisValues,
-		targetSnapshot.xAxisValues,
-	);
-	const yAxisChanged = !compareNumericArrays(
-		baseSnapshot.yAxisValues,
-		targetSnapshot.yAxisValues,
-	);
-	const metrics = compareValueGrids(baseSnapshot.values, targetSnapshot.values);
-
-	if (xAxisChanged || yAxisChanged) {
-		return {
-			status: "axis_changed",
-			name,
-			category,
-			kind,
-			unit,
-			portability: portabilityForStatus("axis_changed"),
-			baseTable,
-			targetTable,
-			baseSnapshot,
-			targetSnapshot,
-			metrics,
-			xAxisChanged,
-			yAxisChanged,
-		};
-	}
-
-	if (metrics.cellsChanged > 0) {
-		return {
-			status: "changed",
-			name,
-			category,
-			kind,
-			unit,
-			portability: portabilityForStatus("changed"),
-			baseTable,
-			targetTable,
-			baseSnapshot,
-			targetSnapshot,
-			metrics,
-			xAxisChanged,
-			yAxisChanged,
-		};
-	}
-
-	return {
-		status: "unchanged",
-		name,
-		category,
-		kind,
-		unit,
-		portability: portabilityForStatus("unchanged"),
-		baseTable,
-		targetTable,
-		baseSnapshot,
-		targetSnapshot,
-		metrics,
-		xAxisChanged,
-		yAxisChanged,
-	};
 }
 
 function summarizeRows(analyses: TablePairAnalysis[]): SummaryRow[] {
@@ -532,7 +195,7 @@ function buildSummaryOutput(
 		row.kind,
 		row.status,
 		row.cellsChanged === undefined ? "" : String(row.cellsChanged),
-		row.maxAbsDelta === undefined ? "" : formatNumber(row.maxAbsDelta),
+		row.maxAbsDelta === undefined ? "" : formatDiffNumber(row.maxAbsDelta),
 		row.portability,
 	]);
 
@@ -548,69 +211,12 @@ function buildAxisDifferenceTable(
 	const length = Math.max(baseValues.length, targetValues.length);
 	const rows = Array.from({ length }, (_, index) => [
 		String(index),
-		baseValues[index] === undefined ? "" : formatNumber(baseValues[index]),
-		targetValues[index] === undefined ? "" : formatNumber(targetValues[index]),
+		baseValues[index] === undefined ? "" : formatDiffNumber(baseValues[index]),
+		targetValues[index] === undefined
+			? ""
+			: formatDiffNumber(targetValues[index]),
 	]);
 	return buildMarkdownTable(headers, rows);
-}
-
-function buildChangedCellsTable(analysis: TablePairAnalysis): string {
-	const baseSnapshot = analysis.baseSnapshot;
-	const targetSnapshot = analysis.targetSnapshot;
-	if (baseSnapshot === undefined || targetSnapshot === undefined) {
-		return "";
-	}
-
-	const maxChangedRows = 200;
-	const rows: string[][] = [];
-
-	if (analysis.kind === "table1d") {
-		const showIndexColumn = hasDuplicateNumbers(baseSnapshot.xAxisValues);
-		for (let row = 0; row < baseSnapshot.rows; row++) {
-			const baseValue = baseSnapshot.values[row]?.[0];
-			const targetValue = targetSnapshot.values[row]?.[0];
-			if (baseValue === undefined || targetValue === undefined) continue;
-			if (baseValue === targetValue) continue;
-			rows.push([
-				...(showIndexColumn ? [String(row)] : []),
-				formatNumber(baseSnapshot.xAxisValues[row] ?? row),
-				formatNumber(baseValue),
-				formatNumber(targetValue),
-				formatNumber(targetValue - baseValue),
-			]);
-			if (rows.length >= maxChangedRows) break;
-		}
-
-		return buildMarkdownTable(
-			showIndexColumn
-				? ["index", "axis", "base_value", "target_value", "delta"]
-				: ["axis", "base_value", "target_value", "delta"],
-			rows,
-		);
-	}
-
-	for (let row = 0; row < baseSnapshot.rows; row++) {
-		for (let col = 0; col < baseSnapshot.cols; col++) {
-			const baseValue = baseSnapshot.values[row]?.[col];
-			const targetValue = targetSnapshot.values[row]?.[col];
-			if (baseValue === undefined || targetValue === undefined) continue;
-			if (baseValue === targetValue) continue;
-			rows.push([
-				formatNumber(baseSnapshot.yAxisValues[row] ?? row),
-				formatNumber(baseSnapshot.xAxisValues[col] ?? col),
-				formatNumber(baseValue),
-				formatNumber(targetValue),
-				formatNumber(targetValue - baseValue),
-			]);
-			if (rows.length >= maxChangedRows) break;
-		}
-		if (rows.length >= maxChangedRows) break;
-	}
-
-	return buildMarkdownTable(
-		["row_axis", "col_axis", "base_value", "target_value", "delta"],
-		rows,
-	);
 }
 
 function buildDetailOutput(
@@ -633,36 +239,21 @@ function buildDetailOutput(
 		tableCols(analysis.targetTable);
 
 	const frontmatterData: Record<string, unknown> = {
-		table: analysis.name,
+		...buildDiffFrontmatterData(analysis),
 		base_rom: options.baseRom,
 		target_rom: options.targetRom,
 		base_definition: baseDefinitionName,
 		target_definition: targetDefinitionName,
-		status: analysis.status,
-		kind: analysis.kind,
 		rows,
 		cols,
-		portability: analysis.portability,
 	};
-
-	if (analysis.metrics !== undefined) {
-		frontmatterData.cells_changed = analysis.metrics.cellsChanged;
-		frontmatterData.max_abs_delta = analysis.metrics.maxAbsDelta;
-		frontmatterData.mean_abs_delta = analysis.metrics.meanAbsDelta;
-	}
-	if (analysis.xAxisChanged !== undefined) {
-		frontmatterData.x_axis_changed = analysis.xAxisChanged;
-	}
-	if (analysis.yAxisChanged !== undefined) {
-		frontmatterData.y_axis_changed = analysis.yAxisChanged;
-	}
 
 	const frontmatter = toYamlFrontmatter(frontmatterData);
 
 	switch (analysis.status) {
 		case "changed": {
 			const heading = `Changed cells for ${analysis.name}.`;
-			return `${frontmatter}\n${heading}\n\n${buildChangedCellsTable(analysis)}`;
+			return `${frontmatter}\n${heading}\n\n${renderChangedCellsMarkdown(analysis)}`;
 		}
 		case "unchanged":
 			return `${frontmatter}\n${analysis.name} is unchanged between the base and target ROMs.`;

@@ -224,9 +224,64 @@ describe("handlePatchTable transform handling", () => {
 		);
 
 		expect(lastWrittenBytes).toEqual(Uint8Array.from([15, 20, 30, 45]));
+		expect(result).toContain("status: changed");
+		expect(result).toContain("cells_changed: 2");
+		expect(result).toContain("portability: safe");
 		expect(result).toContain("cells_written: 2");
-		expect(result).toContain("| Load (g/rev)\\RPM (rpm) | 3000 | 4000 |");
-		expect(result).toContain("| 1.6                    | 15   | 20");
-		expect(result).toContain("| 2                      | 30   | 45");
+		expect(result).toContain("Changed cells for Selector Table.");
+		expect(result).toContain(
+			"| row_axis | col_axis | base_value | target_value | delta |",
+		);
+		expect(result).toContain(
+			"| 1.6      | 3000     | 10         | 15           | 5",
+		);
+		expect(result).toContain(
+			"| 2        | 4000     | 40         | 45           | 5",
+		);
+	});
+
+	it("reports zero changed cells when a patch is a no-op", async () => {
+		romBytes = Uint8Array.from([10, 20]);
+		const table1d = {
+			id: "noop-table",
+			name: "Noop Table",
+			kind: "table1d",
+			rows: 2,
+			x: {
+				id: "x-noop",
+				kind: "static",
+				name: "RPM (rpm)",
+				values: [1000, 2000],
+			},
+			z: {
+				id: "z-noop",
+				name: "values",
+				address: 0,
+				dtype: "u8",
+			},
+		} satisfies Table1DDefinition;
+
+		definition = {
+			uri: "file:///tmp/noop.xml",
+			name: "Noop Definition",
+			fingerprints: [],
+			platform: {},
+			tables: [table1d],
+		};
+
+		const result = await handlePatchTable(
+			{
+				rom: "/tmp/transformed.rom",
+				table: "Noop Table",
+				op: "add",
+				value: 0,
+			},
+			config,
+		);
+
+		expect(result).toContain("cells_written: 0");
+		expect(result).toContain("status: unchanged");
+		expect(result).toContain("cells_changed: 0");
+		expect(result).toContain("No cells changed.");
 	});
 });

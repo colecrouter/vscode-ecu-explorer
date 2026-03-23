@@ -22,11 +22,19 @@ import {
 import type { McpConfig } from "../config.js";
 import {
 	formatTable,
-	formatTableSlice,
 	writeTable1DValues,
 	writeTable2DValues,
 } from "../formatters/table-formatter.js";
+import { toYamlFrontmatter } from "../formatters/yaml-formatter.js";
 import { invalidateRomCache, loadRom } from "../rom-loader.js";
+import {
+	analyzeTablePair,
+	buildDiffFrontmatterData,
+	findTableByName,
+	renderChangedCellsMarkdown,
+	tableCols,
+	tableRows,
+} from "../table-diff.js";
 import { selectTableCells } from "../table-selectors.js";
 
 function toLoadRomOptions(definitionPath?: string) {
@@ -107,14 +115,7 @@ export async function handlePatchTable(
 	const { definition, romBytes } = loaded;
 
 	// Find the table definition by name
-	let tableDef = definition.tables.find((t) => t.name === tableName);
-
-	// If not found, try case-insensitive exact match
-	if (!tableDef) {
-		tableDef = definition.tables.find(
-			(t) => t.name.toLowerCase() === tableName.toLowerCase(),
-		);
-	}
+	const tableDef = findTableByName(definition.tables, tableName);
 
 	if (!tableDef) {
 		const suggestions = findClosestTableMatches(
@@ -325,34 +326,51 @@ export async function handlePatchTable(
 	// Invalidate ROM cache
 	invalidateRomCache(absoluteRomPath);
 
-	// Reload ROM with new bytes and return updated table
+	// Reload ROM with new bytes and return updated table diff
 	const reloaded = await loadRom(
 		romPath,
 		config.definitionsPaths,
 		toLoadRomOptions(definitionPath),
 	);
-	const result =
-		selector !== undefined
-			? (() => {
-					const sliceOptions = {
-						...selector,
-					} as Parameters<typeof formatTableSlice>[3];
-					if (where !== undefined) {
-						sliceOptions.where = where;
-					}
-					return formatTableSlice(
-						romPath,
-						tableDef,
-						reloaded.romBytes,
-						sliceOptions,
-						{ status: "patched", cellsWritten: selector.cellsMatched },
-					);
-				})()
-			: formatTable(romPath, tableDef, reloaded.romBytes, {
-					status: "patched",
-					cellsWritten: fullTable.rows * fullTable.cols,
-				});
-	return result.content;
+	const postPatchTableDef = findTableByName(
+		reloaded.definition.tables,
+		tableDef.name,
+	);
+	const diff = analyzeTablePair(
+		tableDef.name,
+		romPath,
+		romPath,
+		tableDef,
+		postPatchTableDef,
+		romBytes,
+		reloaded.romBytes,
+	);
+	const changedCells = diff.metrics?.cellsChanged ?? 0;
+	const frontmatterData: Record<string, unknown> = {
+		...buildDiffFrontmatterData(diff),
+		rom: romPath,
+		rows: diff.baseSnapshot?.rows ?? tableRows(tableDef),
+		cols: diff.baseSnapshot?.cols ?? tableCols(tableDef),
+		unit: tableDef.z.unit?.symbol ?? "",
+		write_status: "patched",
+		cells_written: changedCells,
+	};
+	if (where !== undefined) {
+		frontmatterData.where = where;
+	}
+	if (
+		selector?.selectorAxes !== undefined &&
+		selector.selectorAxes.length > 0
+	) {
+		frontmatterData.selector_axes = selector.selectorAxes;
+	}
+	const frontmatter = toYamlFrontmatter(frontmatterData);
+
+	if (changedCells === 0) {
+		return `${frontmatter}\nNo cells changed.`;
+	}
+
+	return `${frontmatter}\nChanged cells for ${tableDef.name}.\n\n${renderChangedCellsMarkdown(diff)}`;
 }
 
 /**

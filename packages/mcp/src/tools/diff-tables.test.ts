@@ -153,6 +153,7 @@ describe("handleDiffTables", () => {
 
 		expect(result).toContain("status: changed");
 		expect(result).toContain("cells_changed: 1");
+		expect(result).toContain("portability: safe");
 		expect(result).toContain("Changed cells for Fuel Map.");
 		expect(result).toContain("| 1.2      | 4000");
 		expect(result).toContain("| 20         | 25");
