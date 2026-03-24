@@ -69,7 +69,7 @@ export interface MockRomDocument {
 export function createMockWorkspaceState(): MockWorkspaceState {
 	return {
 		get: vi.fn(),
-		update: vi.fn(),
+		update: vi.fn().mockResolvedValue(undefined),
 		keys: vi.fn().mockReturnValue([]),
 	};
 }
@@ -80,6 +80,7 @@ export function createExtensionContext(
 	return {
 		subscriptions: [],
 		extensionUri: vscode.Uri.file("/test/extension"),
+		workspaceState: createMockWorkspaceState(),
 		...overrides,
 	};
 }

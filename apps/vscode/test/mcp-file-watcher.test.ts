@@ -12,7 +12,6 @@
  *      if the active ROM URI matches
  */
 
-import * as nodePath from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as vscode from "vscode";
 import {
@@ -282,8 +281,15 @@ describe("ROM File Watcher – per-document watchRomDocument logic", () => {
 	) {
 		const uri = romDoc.uri;
 		const uriStr = uri.toString();
-		const dir = vscode.Uri.file(nodePath.dirname(uri.fsPath));
-		const fileName = nodePath.basename(uri.fsPath);
+		const lastSeparator = Math.max(
+			uri.fsPath.lastIndexOf("/"),
+			uri.fsPath.lastIndexOf("\\"),
+		);
+		const dirPath =
+			lastSeparator >= 0 ? uri.fsPath.slice(0, lastSeparator) : uri.fsPath;
+		const fileName =
+			lastSeparator >= 0 ? uri.fsPath.slice(lastSeparator + 1) : uri.fsPath;
+		const dir = vscode.Uri.file(dirPath);
 		const pattern = new vscode.RelativePattern(dir, fileName);
 
 		const watcher = vscode.workspace.createFileSystemWatcher(
