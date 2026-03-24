@@ -20,33 +20,23 @@ stop and explain what is missing.
    - use Python with `csv.DictReader` on macOS/Linux
    - use `awk` for simple scans and summaries
 
-## MAF Scaling
+## References
 
-When the task is MAF scaling or MAF-related fueling analysis, read
-[`references/maf-scaling.md`](references/maf-scaling.md) before proceeding.
+Load the reference that matches the task instead of trying to carry all of them
+at once.
 
-Use that reference to:
-
-- determine whether the log is usable for MAF analysis
-- map source channels into canonical concepts
-- choose the appropriate analysis mode
-- decide whether to refuse or proceed cautiously
-- format findings and proposed changes for review
-
-When the task depends on whether closed-loop, open-loop, or mixed fueling logic
-applies, read [`references/fueling-modes.md`](references/fueling-modes.md).
-
-When making tuning recommendations from incomplete or conflicting evidence, read
-[`references/tuning-safety.md`](references/tuning-safety.md).
-
-When diagnosing boost behavior, wastegate behavior, or boost-control tables,
-read [`references/boost-control.md`](references/boost-control.md).
-
-When troubleshooting a problem from logs and calibration data more broadly, read
-[`references/diagnostic-flow.md`](references/diagnostic-flow.md).
-
-When injector sizing, latency, or low-pulse-width fueling behavior may be part
-of the problem, read [`references/injector-scaling.md`](references/injector-scaling.md).
+- For MAF scaling or MAF-related fueling analysis, read
+  [`references/maf-scaling.md`](references/maf-scaling.md).
+- For deciding whether closed-loop, open-loop, or mixed fueling logic applies,
+  read [`references/fueling-modes.md`](references/fueling-modes.md).
+- For injector sizing, latency, or low-pulse-width fueling issues, read
+  [`references/injector-scaling.md`](references/injector-scaling.md).
+- For boost behavior, wastegate behavior, or boost-control tables, read
+  [`references/boost-control.md`](references/boost-control.md).
+- For broader troubleshooting flow from logs and calibration data, read
+  [`references/diagnostic-flow.md`](references/diagnostic-flow.md).
+- For evidence thresholds and recommendation discipline, read
+  [`references/tuning-safety.md`](references/tuning-safety.md).
 
 ## MCP Resources
 
