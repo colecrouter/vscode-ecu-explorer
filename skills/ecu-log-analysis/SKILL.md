@@ -39,6 +39,9 @@ applies, read [`references/fueling-modes.md`](references/fueling-modes.md).
 When making tuning recommendations from incomplete or conflicting evidence, read
 [`references/tuning-safety.md`](references/tuning-safety.md).
 
+When diagnosing boost behavior, wastegate behavior, or boost-control tables,
+read [`references/boost-control.md`](references/boost-control.md).
+
 ## MCP Resources
 
 If the ECU Explorer MCP server is available, consult:
