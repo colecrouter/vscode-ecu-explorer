@@ -33,6 +33,9 @@ Use that reference to:
 - decide whether to refuse or proceed cautiously
 - format findings and proposed changes for review
 
+When the task depends on whether closed-loop, open-loop, or mixed fueling logic
+applies, read [`references/fueling-modes.md`](references/fueling-modes.md).
+
 ## MCP Resources
 
 If the ECU Explorer MCP server is available, consult:
