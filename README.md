@@ -92,6 +92,9 @@ npm run tools:read-log -- --logs-dir ./logs --file session.csv
 npm run tools:normalize-log -- --input ./EvoScanDataLog.csv --format evoscan
 ```
 
+Companion agent skills are documented in [docs/skills.md](docs/skills.md). The
+initial repo layout for installable skills lives under [skills/](skills/README.md).
+
 ---
 
 ## Contributing
