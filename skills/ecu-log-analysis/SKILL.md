@@ -45,6 +45,9 @@ read [`references/boost-control.md`](references/boost-control.md).
 When troubleshooting a problem from logs and calibration data more broadly, read
 [`references/diagnostic-flow.md`](references/diagnostic-flow.md).
 
+When injector sizing, latency, or low-pulse-width fueling behavior may be part
+of the problem, read [`references/injector-scaling.md`](references/injector-scaling.md).
+
 ## MCP Resources
 
 If the ECU Explorer MCP server is available, consult:
