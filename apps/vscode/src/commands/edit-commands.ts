@@ -154,8 +154,7 @@ async function promptForFormula(
 	return vscode.window.showInputBox({
 		prompt:
 			"Enter a formula using x, row, col, depth, or i (all zero-based except x)",
-		placeHolder:
-			"Examples: 42, x + 5, x + row, x + col * 2, x + depth * 10",
+		placeHolder: "Examples: 42, x + 5, x + row, x + col * 2, x + depth * 10",
 		value: initialValue,
 		validateInput: validateFormulaInput,
 	});

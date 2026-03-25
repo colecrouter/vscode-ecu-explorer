@@ -149,7 +149,12 @@ describe("Math Operations", () => {
 				{ row: 1, col: 0 },
 				{ row: 1, col: 1 },
 			];
-			const result = applyFormula([10, 10, 10, 10], "x + row * 10 + col", undefined, variables);
+			const result = applyFormula(
+				[10, 10, 10, 10],
+				"x + row * 10 + col",
+				undefined,
+				variables,
+			);
 			expect(result.values).toEqual([10, 11, 20, 21]);
 		});
 

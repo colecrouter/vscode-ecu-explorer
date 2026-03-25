@@ -304,9 +304,8 @@ describe("TableView Math Operations", () => {
 			table.selectCell({ row: 1, col: 0 }, "add");
 			table.selectCell({ row: 1, col: 1 }, "add");
 
-			const { result, transaction } = table.applyFormulaOperation(
-				"row * 10 + col",
-			);
+			const { result, transaction } =
+				table.applyFormulaOperation("row * 10 + col");
 
 			expect(result.values).toEqual([0, 1, 10, 11]);
 			expect(transaction).not.toBeNull();
