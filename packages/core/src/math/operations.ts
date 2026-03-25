@@ -1,3 +1,4 @@
+import { Parser } from "expr-eval";
 import type { ScalarType } from "../binary.js";
 
 /**
@@ -41,6 +42,97 @@ export interface MathOpConstraints {
 	dtype?: ScalarType;
 }
 
+const mathFormulaParser = new Parser({
+	allowMemberAccess: false,
+	operators: {
+		add: true,
+		concatenate: false,
+		conditional: false,
+		divide: true,
+		factorial: false,
+		logical: false,
+		multiply: true,
+		power: true,
+		remainder: true,
+		subtract: true,
+		comparison: false,
+		in: false,
+		assignment: false,
+	},
+});
+
+function applyConstraints(
+	value: number,
+	constraints?: MathOpConstraints,
+): { value: number; clamped: boolean } {
+	let constrainedValue = value;
+	let clamped = false;
+
+	if (constraints?.min !== undefined && constrainedValue < constraints.min) {
+		constrainedValue = constraints.min;
+		clamped = true;
+	}
+
+	if (constraints?.max !== undefined && constrainedValue > constraints.max) {
+		constrainedValue = constraints.max;
+		clamped = true;
+	}
+
+	return {
+		value: constrainedValue,
+		clamped,
+	};
+}
+
+/**
+ * Apply a formula to each value in a selection.
+ *
+ * The formula can reference `x` for the current cell value and `i` for the
+ * zero-based index within the selection.
+ *
+ * @param values - Array of values to modify
+ * @param expression - Formula to evaluate for each value
+ * @param constraints - Optional min/max constraints
+ * @returns Result with modified values, warnings, and change count
+ */
+export function applyFormula(
+	values: number[],
+	expression: string,
+	constraints?: MathOpConstraints,
+): MathOpResult {
+	const parsedExpression = mathFormulaParser.parse(expression);
+	const result: number[] = [];
+	const warnings: string[] = [];
+	let changedCount = 0;
+	let clampedCount = 0;
+
+	for (const [index, value] of values.entries()) {
+		const evaluated = parsedExpression.evaluate({ x: value, i: index });
+		if (typeof evaluated !== "number" || !Number.isFinite(evaluated)) {
+			throw new Error(
+				`Formula must evaluate to a finite number for value ${value} at index ${index}`,
+			);
+		}
+
+		const constrained = applyConstraints(evaluated, constraints);
+		result.push(constrained.value);
+		if (constrained.clamped) {
+			clampedCount++;
+		}
+		if (constrained.value !== value) {
+			changedCount++;
+		}
+	}
+
+	if (clampedCount > 0) {
+		warnings.push(
+			`${clampedCount} value${clampedCount > 1 ? "s" : ""} clamped to constraints`,
+		);
+	}
+
+	return { values: result, warnings, changedCount };
+}
+
 /**
  * Add a constant value to all values
  *
@@ -58,37 +150,7 @@ export function addConstant(
 	constant: number,
 	constraints?: MathOpConstraints,
 ): MathOpResult {
-	const result: number[] = [];
-	const warnings: string[] = [];
-	let changedCount = 0;
-	let clampedCount = 0;
-
-	for (const value of values) {
-		let newValue = value + constant;
-
-		// Check constraints
-		if (constraints?.min !== undefined && newValue < constraints.min) {
-			newValue = constraints.min;
-			clampedCount++;
-		}
-
-		if (constraints?.max !== undefined && newValue > constraints.max) {
-			newValue = constraints.max;
-			clampedCount++;
-		}
-
-		result.push(newValue);
-		if (newValue !== value) changedCount++;
-	}
-
-	// Add warning if values were clamped
-	if (clampedCount > 0) {
-		warnings.push(
-			`${clampedCount} value${clampedCount > 1 ? "s" : ""} clamped to constraints`,
-		);
-	}
-
-	return { values: result, warnings, changedCount };
+	return applyFormula(values, `x + (${constant})`, constraints);
 }
 
 /**
@@ -108,37 +170,7 @@ export function multiplyConstant(
 	factor: number,
 	constraints?: MathOpConstraints,
 ): MathOpResult {
-	const result: number[] = [];
-	const warnings: string[] = [];
-	let changedCount = 0;
-	let clampedCount = 0;
-
-	for (const value of values) {
-		let newValue = value * factor;
-
-		// Check constraints
-		if (constraints?.min !== undefined && newValue < constraints.min) {
-			newValue = constraints.min;
-			clampedCount++;
-		}
-
-		if (constraints?.max !== undefined && newValue > constraints.max) {
-			newValue = constraints.max;
-			clampedCount++;
-		}
-
-		result.push(newValue);
-		if (newValue !== value) changedCount++;
-	}
-
-	// Add warning if values were clamped
-	if (clampedCount > 0) {
-		warnings.push(
-			`${clampedCount} value${clampedCount > 1 ? "s" : ""} clamped to constraints`,
-		);
-	}
-
-	return { values: result, warnings, changedCount };
+	return applyFormula(values, `x * (${factor})`, constraints);
 }
 
 /**

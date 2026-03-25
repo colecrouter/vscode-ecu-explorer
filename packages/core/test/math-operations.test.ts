@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	addConstant,
+	applyFormula,
 	clampValues,
 	multiplyConstant,
 	smoothValues,
@@ -117,6 +118,39 @@ describe("Math Operations", () => {
 			expect(result.values[0]).toBeCloseTo(15.15, 2);
 			expect(result.values[1]).toBeCloseTo(30.3, 2);
 			expect(result.values[2]).toBeCloseTo(45.45, 2);
+		});
+	});
+
+	describe("applyFormula", () => {
+		it("applies formulas using x as the current value", () => {
+			const result = applyFormula([10, 20, 30], "x * 1.5 + 5");
+			expect(result.values[0]).toBeCloseTo(20, 5);
+			expect(result.values[1]).toBeCloseTo(35, 5);
+			expect(result.values[2]).toBeCloseTo(50, 5);
+			expect(result.changedCount).toBe(3);
+		});
+
+		it("supports constant formulas for set-style operations", () => {
+			const result = applyFormula([10, 20, 30], "42");
+			expect(result.values).toEqual([42, 42, 42]);
+			expect(result.changedCount).toBe(3);
+		});
+
+		it("supports selection index references", () => {
+			const result = applyFormula([10, 10, 10], "x + i");
+			expect(result.values).toEqual([10, 11, 12]);
+		});
+
+		it("clamps formula results to constraints", () => {
+			const result = applyFormula([10, 20, 30], "x * 10", { max: 100 });
+			expect(result.values).toEqual([100, 100, 100]);
+			expect(result.warnings.length).toBeGreaterThan(0);
+		});
+
+		it("throws when the formula does not evaluate to a finite number", () => {
+			expect(() => applyFormula([10], "x / 0")).toThrow(
+				"Formula must evaluate to a finite number",
+			);
 		});
 	});
 
