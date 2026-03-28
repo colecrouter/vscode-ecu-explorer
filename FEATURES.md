@@ -23,7 +23,7 @@ High-level feature overview across vehicle platforms and implementation status.
 | **Workspace Settings** | Definition paths, provider config | ✅ | Per-workspace configuration |
 | **MCP Integration** | Stdio transport | ✅ | 5 tools for LLM access |
 
-*MUT-III ROM write blocked on unknown write-session key; use Bootloader method instead.
+*MUT-III ROM write flow is now trace-confirmed, but the traced `0x27 0x05/0x06` key algorithm is still unresolved; use Bootloader method instead.
 
 ---
 

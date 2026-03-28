@@ -36,6 +36,14 @@ const SID_DIAGNOSTIC_SESSION_CONTROL = 0x10;
 const SID_SECURITY_ACCESS = 0x27;
 const SID_READ_MEMORY_BY_ADDRESS = 0x23;
 const ADDRESS_AND_LENGTH_FORMAT = 0x14; // 1 byte length, 3 bytes address
+const SID_VENDOR_SERVICE = 0x3b;
+
+// Trace-confirmed MUT-III flash session values for EVO X (`mitsucan`).
+const FLASH_PREPARATION_SESSION = 0x92;
+const FLASH_PROGRAMMING_SESSION = 0x85;
+const FLASH_SECURITY_REQUEST_SEED_SUBFUNCTION = 0x05;
+const FLASH_SECURITY_SEND_KEY_SUBFUNCTION = 0x06;
+const FLASH_PREPARE_DOWNLOAD_SUBFUNCTION = 0x9a;
 
 // MUT-III serial/CAN direct memory commands (K-line / RAX streaming)
 // Reference: EvoScan_Protocol_Analysis.md — commands E0-E6
@@ -484,22 +492,157 @@ export class Mut3Protocol implements EcuProtocol {
 		return rom;
 	}
 
+	/**
+	 * Perform the trace-confirmed MUT-III flash session setup without sending
+	 * any key or download payloads.
+	 *
+	 * This is intentionally limited to the pre-write negotiation that has been
+	 * confirmed by CAN captures:
+	 *   1. `0x10 0x92`
+	 *   2. `0x10 0x85` (may reply with `0x7F 0x10 0x78` before success)
+	 *   3. `0x27 0x05` (4-byte seed)
+	 *
+	 * The method stops after receiving the seed because the `0x27 0x06`
+	 * seed-to-key algorithm is not yet implemented.
+	 */
+	async dryRunWrite(
+		connection: DeviceConnection,
+		rom: Uint8Array,
+		onProgress: (progress: RomProgress) => void,
+		onEvent?: (event: EcuEvent) => void,
+	): Promise<void> {
+		if (rom.length !== ROM_SIZE) {
+			throw new RangeError(
+				`dryRunWrite: expected ${ROM_SIZE}-byte ROM, got ${rom.length} bytes`,
+			);
+		}
+
+		onProgress({
+			phase: "negotiating",
+			bytesProcessed: 0,
+			totalBytes: ROM_SIZE,
+			percentComplete: 0,
+			message: "Entering traced MUT-III flash preparation session",
+		});
+
+		await this.startFlashPreparationSession(connection);
+
+		onProgress({
+			phase: "negotiating",
+			bytesProcessed: 0,
+			totalBytes: ROM_SIZE,
+			percentComplete: 0,
+			message: "Entering traced MUT-III flash programming session",
+		});
+
+		await this.startFlashProgrammingSession(connection);
+
+		onEvent?.({
+			type: "SECURITY_ACCESS_REQUESTED",
+			timestamp: Date.now(),
+		});
+
+		onProgress({
+			phase: "negotiating",
+			bytesProcessed: 0,
+			totalBytes: ROM_SIZE,
+			percentComplete: 0,
+			message: "Requesting traced MUT-III flash seed",
+		});
+
+		const seedResponse = await connection.sendFrame(
+			new Uint8Array([
+				SID_SECURITY_ACCESS,
+				FLASH_SECURITY_REQUEST_SEED_SUBFUNCTION,
+			]),
+		);
+
+		if (
+			seedResponse[0] !== 0x67 ||
+			seedResponse[1] !== FLASH_SECURITY_REQUEST_SEED_SUBFUNCTION
+		) {
+			throw new Error(
+				`Flash seed request failed: ECU returned [${Array.from(seedResponse)
+					.map((b) => `0x${b.toString(16)}`)
+					.join(", ")}]`,
+			);
+		}
+
+		const seed = seedResponse.slice(2);
+		const seedHex = Array.from(seed)
+			.map((b) => b.toString(16).padStart(2, "0").toUpperCase())
+			.join(" ");
+
+		throw new Error(
+			`MUT-III flash-session key algorithm for subfunction 0x${FLASH_SECURITY_SEND_KEY_SUBFUNCTION.toString(16).toUpperCase()} is not implemented yet; captured seed=${seedHex}`,
+		);
+	}
+
 	// TODO: Implement writeRom() for EVO X (`mitsucan`) ROM flash write.
 	//
 	// Write sequence (from EcuFlash 1.44 `mitsucan` analysis):
 	//   1. Extended/Programming diagnostic session — 0x10 0x03 or 0x10 0x02
 	//      (exact session type unconfirmed)
-	//   2. SecurityAccess requestSeed — 0x27 0x03 (write-level subfunction)
-	//   3. SecurityAccess sendKey    — 0x27 0x04 with computed key
-	//   4. RequestDownload           — 0x34, address 0x000000, size 0x100000 (1 MB)
-	//   5. TransferData              — 0x36 × 8192 blocks of 128 bytes each
-	//   6. RequestTransferExit       — 0x37
+	//   2. Diagnostic session        — 0x10 0x92
+	//   3. Programming session       — 0x10 0x85
+	//   4. SecurityAccess requestSeed — 0x27 0x05 (4-byte seed)
+	//   5. SecurityAccess sendKey    — 0x27 0x06 with computed 4-byte key
+	//   6. Vendor service            — 0x3B 0x9A
+	//   7. RequestDownload / TransferData traffic follows
 	//
-	// ⚠️ BLOCKER: The write-session SecurityAccess key algorithm (for subfunction
-	// 0x03/0x04) is currently UNKNOWN. It is embedded in the obfuscated
-	// `ecuflash.exe` binary and cannot be extracted by static analysis alone.
-	// See `security.ts` for details and resolution options.
-	// See also: HANDSHAKE_ANALYSIS.md §7.5 and DEVELOPMENT.md for the blocker entry.
+	// ⚠️ BLOCKER: The traced flash-session SecurityAccess key algorithm (for
+	// subfunction 0x05/0x06) is still unknown, so writeRom() remains unimplemented.
+	// See `security.ts` and HANDSHAKE_ANALYSIS.md §7.5 for the current traced flow.
+
+	private async startFlashPreparationSession(
+		connection: DeviceConnection,
+	): Promise<void> {
+		const response = await connection.sendFrame(
+			new Uint8Array([
+				SID_DIAGNOSTIC_SESSION_CONTROL,
+				FLASH_PREPARATION_SESSION,
+			]),
+		);
+
+		if (response[0] !== 0x50 || response[1] !== FLASH_PREPARATION_SESSION) {
+			throw new Error(
+				`Flash preparation session failed: ECU returned [${Array.from(response)
+					.map((b) => `0x${b.toString(16)}`)
+					.join(", ")}]`,
+			);
+		}
+	}
+
+	private async startFlashProgrammingSession(
+		connection: DeviceConnection,
+	): Promise<void> {
+		for (;;) {
+			const response = await connection.sendFrame(
+				new Uint8Array([
+					SID_DIAGNOSTIC_SESSION_CONTROL,
+					FLASH_PROGRAMMING_SESSION,
+				]),
+			);
+
+			if (response[0] === 0x50 && response[1] === FLASH_PROGRAMMING_SESSION) {
+				return;
+			}
+
+			if (
+				response[0] === 0x7f &&
+				response[1] === SID_DIAGNOSTIC_SESSION_CONTROL &&
+				response[2] === 0x78
+			) {
+				continue;
+			}
+
+			throw new Error(
+				`Flash programming session failed: ECU returned [${Array.from(response)
+					.map((b) => `0x${b.toString(16)}`)
+					.join(", ")}]`,
+			);
+		}
+	}
 }
 
 // Suppress unused-variable warnings for CAN ID constants that are defined
@@ -517,4 +660,10 @@ export {
 	CMD_SET_ADDRESS,
 	CMD_READ_WORD_INC,
 	CMD_READ_BYTE,
+	SID_VENDOR_SERVICE,
+	FLASH_PREPARATION_SESSION,
+	FLASH_PROGRAMMING_SESSION,
+	FLASH_SECURITY_REQUEST_SEED_SUBFUNCTION,
+	FLASH_SECURITY_SEND_KEY_SUBFUNCTION,
+	FLASH_PREPARE_DOWNLOAD_SUBFUNCTION,
 };

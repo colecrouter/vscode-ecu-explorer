@@ -18,7 +18,7 @@ Comprehensive reference for vehicle support, protocol capabilities, and paramete
 | **Any OBD-II Vehicle** | ISO 14229-1 | ❌ | ❌ | ✅ | CAN 500kbps | 8 standard PIDs only |
 
 **Footnotes**:
-- ❌* = Blocked on security key (MUT-III write-session algorithm unknown)
+- ❌* = Blocked on traced write-session key algorithm (`0x27 0x05/0x06`) and upload implementation
 - ❌** = Requires K-line hardware (parameter streaming not yet available over CAN)
 
 ---
@@ -38,8 +38,8 @@ Comprehensive reference for vehicle support, protocol capabilities, and paramete
 | Operation | Status | Details |
 |-----------|--------|---------|
 | **Read ROM** | ✅ Complete | UDS 0x23 (ReadMemoryByAddress) with 0x80-byte blocks |
-| **Write ROM** | ❌ Blocked* | UDS 0x34 (RequestDownload) requires write-session security key (algorithm unknown) |
-| **Security Access** | ✅ Partial | Diagnostic session key: `(seed * 0x4081 + 0x1234) & 0xFFFF` ✅ Write session key: ❌ Unknown |
+| **Write ROM** | ❌ Blocked* | Trace-confirmed flow enters `0x10 0x92` then `0x10 0x85`, uses `0x27 0x05/0x06`, `0x3B 0x9A`, then `0x34`/`0x36`; key algorithm still unresolved |
+| **Security Access** | ✅ Partial | Diagnostic/read session key is implemented; flash/write session uses trace-confirmed `0x27 0x05/0x06` with 4-byte seed/key pairs, but the algorithm is not yet implemented |
 | **Checksum Update** | ✅ Complete | Mitsucan ROM checksum automatically recomputed on save |
 | **Sector Erase** | ✅ Simulated | Diff-based: only changed sectors erased via bootloader alternative |
 
@@ -393,7 +393,7 @@ See **[TRANSPORT_LAYERS.md](TRANSPORT_LAYERS.md)** for detailed hardware specifi
 
 **Blocker**: A dependency that prevents a feature from being implemented. Example: K-line transport is a blocker for MUT-III real-time logging.
 
-**Workaround**: An alternative method to achieve similar functionality when the primary method is blocked. Example: Bootloader method is a workaround for MUT-III ROM write when UDS write-session key is unknown.
+**Workaround**: An alternative method to achieve similar functionality when the primary method is blocked. Example: Bootloader method is a workaround for MUT-III ROM write while the traced MUT-III flash-session key algorithm remains unresolved.
 
 ---
 

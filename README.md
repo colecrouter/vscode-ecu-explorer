@@ -40,7 +40,7 @@ Check out the available apps:
 | **Nissan (older)** | NCS K-line | ❌ | ❌ | ❌ | K-line (future) | Not Started |
 | **OBD-II (any)** | ISO 14229 | ❌ | ❌ | ✅ | CAN (OpenPort 2.0) | Ready |
 
-**Legend**: ✅ = Complete, ⏳ = In Progress, ❌ = Not Started, ❌* = Blocked on security key, ❌** = Requires K-line hardware
+**Legend**: ✅ = Complete, ⏳ = In Progress, ❌ = Not Started, ❌* = Blocked on traced MUT-III flash-session key algorithm, ❌** = Requires K-line hardware
 
 ---
 

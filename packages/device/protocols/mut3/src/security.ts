@@ -7,25 +7,18 @@
  * SecurityAccess service 0x27, subfunctions 0x01 (requestSeed) / 0x02 (sendKey).
  * It is used for ROM readback and live-data diagnostic sessions over CAN.
  *
- * ⚠️ **KNOWN RESEARCH GAP — Write/Programming Session Key (subfunction 0x03/0x04)**
+ * ⚠️ **KNOWN RESEARCH GAP — Flash/Programming Session Key (subfunction 0x05/0x06)**
  *
  * The EVO X `mitsucan` ROM write sequence uses a **different** SecurityAccess level:
- *   - requestSeed subfunction: `0x03` (write-level, not `0x01`)
- *   - sendKey subfunction:     `0x04` (write-level, not `0x02`)
+ *   - requestSeed subfunction: `0x05` (flash-level, not `0x01`)
+ *   - sendKey subfunction:     `0x06` (flash-level, not `0x02`)
  *
- * The write-session key algorithm (for subfunction `0x03`/`0x04`) is **currently
- * unknown**. It is embedded in the obfuscated `ecuflash.exe` (Windows 1.44) binary
- * and cannot be extracted by static analysis alone.
+ * The flash-session key algorithm (for subfunction `0x05`/`0x06`) is **currently
+ * unknown**. Live CAN captures now confirm the session flow and provide multiple
+ * 4-byte seed/key pairs, but the transformation itself is not yet implemented.
  *
- * To discover the write-session key algorithm, one of the following approaches is needed:
- *   1. Dynamic analysis: run `ecuflash.exe` under Wine with a debugger (e.g., x64dbg or
- *      GDB via Wine) and capture the key computation at the SecurityAccess call site.
- *   2. CAN bus capture: perform a live EcuFlash write session on a real EVO X and record
- *      the CAN frames; the seed (0x67 0x03 <seed>) and key (0x27 0x04 <key>) are visible
- *      in plaintext on the bus, allowing the algorithm to be reverse-engineered from
- *      multiple seed/key pairs.
- *   3. Community documentation: check EvoXForums, EvoScan, or OpenECU community for
- *      prior reverse-engineering of the write-level key.
+ * The current next step is to derive the algorithm from captured `0x67 0x05` /
+ * `0x27 0x06` pairs and then validate it against additional traces or live hardware.
  *
  * ## Algorithm Research Summary
  *

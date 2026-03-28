@@ -12,7 +12,7 @@
 | Element | Status | Details |
 |---------|--------|---------|
 | Read-session key (`0x01`/`0x02`) | ✅ SOLVED | S-box algorithm implemented and tested in `security.ts` |
-| Write-session key (`0x03`/`0x04`) | ❌ STILL UNKNOWN | Requires hardware capture or x64dbg memory dump (see [Appendix F](#appendix-f-write-session-research-plan)) |
+| Flash-session key (`0x05`/`0x06`) | ⏳ CAPTURED, ALGORITHM UNKNOWN | CAN traces now confirm the session flow and multiple 4-byte seed/key pairs; algorithm derivation and implementation remain open |
 
 ---
 
@@ -208,9 +208,9 @@ purpose (MUT-III UDS SecurityAccess over CAN for diagnostic sessions), but it is
 |---|---|---|---|
 | EVO 7/8/9 flash programming | Proprietary K-line bootloader | `mitsuecu` (`mitsukernel`) | Not implemented |
 | EVO X flash read | KWP2000/UDS over CAN (`mitsucan`) | `mitsucan` | `index.ts` `readRom()` ✓ |
-| EVO X flash write | KWP2000/UDS over CAN (`mitsucan`) | `mitsucan` | **Not implemented** (blocked: write-session key unknown) |
+| EVO X flash write | KWP2000/UDS over CAN (`mitsucan`) | `mitsucan` | **Not implemented** (blocked: traced flash-session key algorithm unresolved) |
 | MUT-III diagnostic session (read) | UDS SecurityAccess `0x27 0x01/0x02` | Not in EcuFlash | `security.ts` ✓ |
-| MUT-III diagnostic session (write) | UDS SecurityAccess `0x27 0x03/0x04` | `mitsucan` (EcuFlash 1.44) | **Unknown algorithm** |
+| MUT-III flash/programming session | Session `0x10 0x92` → `0x10 0x85`, SecurityAccess `0x27 0x05/0x06`, vendor service `0x3B 0x9A`, then `0x34`/`0x36` | `mitsucan` (trace-confirmed) | **Algorithm unresolved** |
 | Subaru security access | KWP2000 `0x27` | `kwp2000` (Subaru only) | `security.ts` ✓ |
 
 ---
@@ -393,24 +393,27 @@ export function computeSubaruKey(seed: Uint8Array): Uint8Array {
 
 **Reference**: [`packages/device/protocols/subaru/src/security.ts`](packages/device/protocols/subaru/src/security.ts)
 
-### 7.0.2 Write-Session Security (EVO X `mitsucan` — UNKNOWN)
+### 7.0.2 Flash-Session Security (EVO X `mitsucan` — CAPTURED, ALGORITHM UNKNOWN)
 
-**Status**: ❌ **STILL UNKNOWN**
+**Status**: ⏳ **FLOW CAPTURED; KEY ALGORITHM STILL UNKNOWN**
 
-The write-session key algorithm (subfunctions `0x03`/`0x04`) for EVO X is **embedded in obfuscated `ecuflash.exe`** and cannot be extracted via static analysis.
+Live CAN traces from March 27, 2026 confirm the EVO X flash path uses:
+- `0x10 0x92`
+- `0x10 0x85`
+- `0x27 0x05` requestSeed with a 4-byte seed
+- `0x27 0x06` sendKey with a 4-byte key
+- `0x3B 0x9A`
+- `0x34` / `0x36` transfer traffic
 
-**Why It's Blocked**:
-- EcuFlash 1.44 uses proprietary encryption/obfuscation
-- Subaru's S-box algorithm (§4.5) only applies to Subaru models, not Mitsubishi EVO X
-- The Mitsubishi write-key algorithm is unknown and must be reverse-engineered
+The remaining blocker is no longer the session shape. It is the seed-to-key transformation for the traced `0x27 0x05/0x06` exchange.
 
 **Required for Resolution**:
-- [ ] Dynamically analyze `ecuflash.exe` with Wine + x64dbg
-- [ ] Capture CAN traffic during live EcuFlash write session
-- [ ] Memory dump at key computation point
+- [ ] Derive the `0x27 0x05/0x06` key algorithm from captured seed/key pairs
+- [ ] Implement the traced flash-session flow in `mut3`
+- [ ] Validate the derived key algorithm against additional captures or a live ECU
 - See [`MITSUCAN_WRITE_RESEARCH_PLAN.md`](MITSUCAN_WRITE_RESEARCH_PLAN.md) **Appendix F** for detailed research plan
 
-**Impact**: EVO X ROM write capability blocked until key algorithm is found.
+**Impact**: EVO X MUT-III ROM write capability remains blocked until the traced flash-session key algorithm is implemented.
 
 ---
 
@@ -444,8 +447,8 @@ The write-session key algorithm (subfunctions `0x03`/`0x04`) for EVO X is **embe
 | **Flash size** | 1 MB at `0x000000` |
 | **No kernel upload** | Uses ECU's built-in CAN bootloader directly |
 | **Read SecurityAccess** | Subfunction `0x01`/`0x02`; key = `(seed * 0x4081 + 0x1234) & 0xFFFF` |
-| **Write SecurityAccess** | Subfunction `0x03`/`0x04`; **key algorithm UNKNOWN** (embedded in obfuscated `ecuflash.exe`) |
-| **Our `security.ts`** | Correct for read/diagnostic session (`0x01`/`0x02`); write session (`0x03`/`0x04`) not yet implemented |
+| **Write SecurityAccess** | Trace-confirmed as subfunction `0x05`/`0x06` with 4-byte seed/key values; **algorithm unresolved** |
+| **Our `security.ts`** | Correct for read/diagnostic session; flash-session `0x05`/`0x06` algorithm not yet implemented |
 
 ### 7.3 Subaru (WRX/STI/Forester)
 
@@ -468,18 +471,16 @@ The write-session key algorithm (subfunctions `0x03`/`0x04`) for EVO X is **embe
 
 ### 7.5 EVO X (`mitsucan`) ROM Write Flash Sequence
 
-The EVO X write sequence (from EcuFlash 1.44 `mitsucan` analysis):
+The EVO X write sequence is now confirmed from live CAN traces:
 
-1. **Extended/Programming diagnostic session** — `0x10 0x03` (extended) or `0x10 0x02` (programming);
-   exact session type unconfirmed.
-2. **SecurityAccess requestSeed** — subfunction `0x03` (write-level, different from read's `0x01`).
-3. **SecurityAccess sendKey** — subfunction `0x04` with computed key.
-   - ⚠️ **KEY ALGORITHM UNKNOWN** — the write-session key algorithm is embedded in the
-     obfuscated `ecuflash.exe` binary and cannot be extracted statically. Requires dynamic
-     analysis (Wine + debugger) or CAN bus capture during a live EcuFlash write session.
-4. **RequestDownload** (`0x34`) — address `0x000000`, size `0x100000` (1 MB).
-5. **TransferData** (`0x36`) × 8192 blocks of 128 bytes each.
-6. **RequestTransferExit** (`0x37`).
+1. **Vehicle identification / preflight** — EcuFlash reads ECU identifiers before entering the flash path.
+2. **Diagnostic session `0x92`** — `0x10 0x92`.
+3. **Programming session `0x85`** — `0x10 0x85`, including `0x7F 0x10 0x78` response-pending before positive response.
+4. **SecurityAccess requestSeed** — `0x27 0x05`, returning a 4-byte seed in `0x67 0x05`.
+5. **SecurityAccess sendKey** — `0x27 0x06` with a 4-byte key.
+   - ⚠️ **KEY ALGORITHM UNKNOWN** — the session structure is confirmed, but the seed-to-key transformation for `0x05`/`0x06` is still unresolved.
+6. **Vendor service** — `0x3B 0x9A` before download.
+7. **Download / transfer traffic** — `0x34` followed by `0x36` traffic.
 
 ### 7.6 Implications for Future Implementation
 
@@ -495,8 +496,8 @@ The EVO X write sequence (from EcuFlash 1.44 `mitsucan` analysis):
    the `computeSecurityKey()` algorithm already implemented in `security.ts` (subfunction
    `0x01`/`0x02` — read/diagnostic session only).
 
-4. **EVO X ROM write is blocked** by the unknown write-session SecurityAccess key algorithm
-   (subfunction `0x03`/`0x04`). See §7.5 for resolution options.
+4. **EVO X ROM write is blocked** by the unresolved traced flash-session SecurityAccess key
+   algorithm (subfunction `0x05`/`0x06`). See §7.5 for the confirmed flow.
 
 5. **Subaru flash programming** requires:
    - SSM2 protocol for older models (serial)
