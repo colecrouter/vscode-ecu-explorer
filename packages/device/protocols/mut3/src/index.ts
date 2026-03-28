@@ -64,6 +64,9 @@ const FLASH_REQUEST_DOWNLOAD_STAGE1 = new Uint8Array([
 const FLASH_TRANSFER_DATA_STAGE1_BA = new Uint8Array([0x36, 0xba, 0x02]);
 const FLASH_TRANSFER_DATA_STAGE1_D4 = new Uint8Array([0x36, 0xd4, 0xd4]);
 const FLASH_REQUEST_TRANSFER_EXIT = new Uint8Array([0x37]);
+const FLASH_ROUTINE_CONTROL_STAGE1_CONTINUE = new Uint8Array([0x31, 0xe0]);
+const FLASH_ROUTINE_CONTROL_STAGE2 = new Uint8Array([0x31, 0xe1, 0x02]);
+const FLASH_ECU_RESET_HARD = new Uint8Array([0x11, 0x01]);
 const FLASH_REQUEST_DOWNLOAD_STAGE2 = new Uint8Array([
 	0x34, 0x80, 0x85, 0x38, 0x01, 0x00, 0x00, 0xd0,
 ]);
@@ -86,6 +89,7 @@ const FLASH_TRANSFER_DATA_STAGE2_BLOCK_CC = new Uint8Array([
 	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x26, 0xd4, 0xd4, 0xd4, 0xd4, 0xd4,
 	0xd4,
 ]);
+const FLASH_ROUTINE_CONTROL_STAGE1 = new Uint8Array([0x31, 0xe1, 0x01]);
 
 // MUT-III serial/CAN direct memory commands (K-line / RAX streaming)
 // Reference: EvoScan_Protocol_Analysis.md — commands E0-E6
@@ -547,8 +551,9 @@ export class Mut3Protocol implements EcuProtocol {
 	 *   5. `0x3B 0x9A` (traced pre-download request)
 	 *   6. `0x34 0x20 0x00 0x00 0x01 0x00 0x00 0x02`
 	 *
-	 * The method stops after the first traced large `TransferData` block and
-	 * does not attempt to generalize the larger write loop that follows.
+	 * The method stops after the first traced BA-side continuation
+	 * response-pending boundary and does not attempt to generalize the larger
+	 * variant-dependent transfer loop that follows.
 	 */
 	async dryRunWrite(
 		connection: DeviceConnection,
@@ -794,9 +799,196 @@ export class Mut3Protocol implements EcuProtocol {
 					.join(", ")}]`,
 			);
 		}
+
+		onProgress({
+			phase: "negotiating",
+			bytesProcessed: 0,
+			totalBytes: ROM_SIZE,
+			percentComplete: 0,
+			message:
+				"Issuing traced MUT-III RequestTransferExit after first bulk block",
+		});
+
+		const requestTransferExitStage2Response = await connection.sendFrame(
+			FLASH_REQUEST_TRANSFER_EXIT,
+		);
+		if (requestTransferExitStage2Response[0] !== 0x77) {
+			throw new Error(
+				`Flash RequestTransferExit stage 2 failed: ECU returned [${Array.from(
+					requestTransferExitStage2Response,
+				)
+					.map((b) => `0x${b.toString(16)}`)
+					.join(", ")}]`,
+			);
+		}
+
+		onProgress({
+			phase: "negotiating",
+			bytesProcessed: 0,
+			totalBytes: ROM_SIZE,
+			percentComplete: 0,
+			message: "Issuing traced MUT-III RoutineControl after first bulk block",
+		});
+
+		const routineControlStage1Response = await connection.sendFrame(
+			FLASH_ROUTINE_CONTROL_STAGE1,
+		);
+		if (
+			routineControlStage1Response[0] !== 0x71 ||
+			routineControlStage1Response[1] !== 0xe1 ||
+			routineControlStage1Response[2] !== 0x00
+		) {
+			throw new Error(
+				`Flash RoutineControl stage 1 failed: ECU returned [${Array.from(
+					routineControlStage1Response,
+				)
+					.map((b) => `0x${b.toString(16)}`)
+					.join(", ")}]`,
+			);
+		}
+
+		onProgress({
+			phase: "negotiating",
+			bytesProcessed: 0,
+			totalBytes: ROM_SIZE,
+			percentComplete: 0,
+			message: "Issuing traced MUT-III BA continuation RoutineControl",
+		});
+
+		const routineControlStage1ContinueResponse = await connection.sendFrame(
+			FLASH_ROUTINE_CONTROL_STAGE1_CONTINUE,
+		);
+		if (
+			routineControlStage1ContinueResponse[0] !== 0x7f ||
+			routineControlStage1ContinueResponse[1] !== 0x31 ||
+			routineControlStage1ContinueResponse[2] !== 0x78
+		) {
+			throw new Error(
+				`Flash RoutineControl BA continuation failed: ECU returned [${Array.from(
+					routineControlStage1ContinueResponse,
+				)
+					.map((b) => `0x${b.toString(16)}`)
+					.join(", ")}]`,
+			);
+		}
+	}
+
+	/**
+	 * Perform the trace-confirmed MUT-III D4/reset branch without attempting the
+	 * post-reset functional re-entry sequence.
+	 *
+	 * This follows the clean reset-side branch observed in the concrete write
+	 * captures:
+	 *   1. shared flash-session negotiation through `0x34 0x20 ...`
+	 *   2. `0x36 0xD4 0xD4`
+	 *   3. `0x37`
+	 *   4. `0x31 0xE1 0x02` (with `0x7F 0x31 0x78` response-pending)
+	 *   5. `0x11 0x01` (with `0x7F 0x11 0x78` response-pending)
+	 *
+	 * The method intentionally stops after the positive ECU-reset response. The
+	 * subsequent `0x3E 0x02`, `0x10 0x81`, and `0x10 0x92` traffic is sent as
+	 * functional broadcast in the traces and does not fit the current
+	 * request/response `sendFrame()` contract.
+	 */
+	async dryRunWriteResetBranch(
+		connection: DeviceConnection,
+		rom: Uint8Array,
+		onProgress: (progress: RomProgress) => void,
+		onEvent?: (event: EcuEvent) => void,
+	): Promise<void> {
+		if (rom.length !== ROM_SIZE) {
+			throw new RangeError(
+				`dryRunWriteResetBranch: expected ${ROM_SIZE}-byte ROM, got ${rom.length} bytes`,
+			);
+		}
+
+		await this.negotiateFlashSessionThroughStage1(
+			connection,
+			onProgress,
+			onEvent,
+			FLASH_TRANSFER_DATA_STAGE1_D4,
+			"Sending traced MUT-III D4 reset-branch token",
+		);
+
+		onProgress({
+			phase: "negotiating",
+			bytesProcessed: 0,
+			totalBytes: ROM_SIZE,
+			percentComplete: 0,
+			message: "Issuing traced MUT-III reset-branch RoutineControl",
+		});
+
+		let routineControlStage2Response = await connection.sendFrame(
+			FLASH_ROUTINE_CONTROL_STAGE2,
+		);
+		if (
+			routineControlStage2Response[0] === 0x7f &&
+			routineControlStage2Response[1] === 0x31 &&
+			routineControlStage2Response[2] === 0x78
+		) {
+			routineControlStage2Response = await connection.sendFrame(
+				FLASH_ROUTINE_CONTROL_STAGE2,
+			);
+		}
+		if (
+			routineControlStage2Response[0] !== 0x71 ||
+			routineControlStage2Response[1] !== 0xe1 ||
+			routineControlStage2Response[2] !== 0x00
+		) {
+			throw new Error(
+				`Flash RoutineControl stage 2 failed: ECU returned [${Array.from(
+					routineControlStage2Response,
+				)
+					.map((b) => `0x${b.toString(16)}`)
+					.join(", ")}]`,
+			);
+		}
+
+		onEvent?.({
+			type: "ECU_RESET_REQUESTED",
+			timestamp: Date.now(),
+		});
+		onEvent?.({
+			type: "ECU_RESETTING",
+			timestamp: Date.now(),
+		});
+
+		onProgress({
+			phase: "negotiating",
+			bytesProcessed: 0,
+			totalBytes: ROM_SIZE,
+			percentComplete: 0,
+			message: "Issuing traced MUT-III hard reset request",
+		});
+
+		let resetResponse = await connection.sendFrame(FLASH_ECU_RESET_HARD);
+		if (
+			resetResponse[0] === 0x7f &&
+			resetResponse[1] === 0x11 &&
+			resetResponse[2] === 0x78
+		) {
+			resetResponse = await connection.sendFrame(FLASH_ECU_RESET_HARD);
+		}
+		if (resetResponse[0] !== 0x51) {
+			throw new Error(
+				`Flash reset-branch ECUReset failed: ECU returned [${Array.from(
+					resetResponse,
+				)
+					.map((b) => `0x${b.toString(16)}`)
+					.join(", ")}]`,
+			);
+		}
+
+		onEvent?.({
+			type: "ECU_RESET_ACKNOWLEDGED",
+			timestamp: Date.now(),
+		});
 	}
 
 	// TODO: Implement writeRom() for EVO X (`mitsucan`) ROM flash write.
+	// Known gap: the native traced bootstrap is understood through the BA `0x31 E0`
+	// boundary and the D4 reset path, but the observed EcuFlash/OpenECU write flow
+	// then hands off into a RAM-resident OpenECU kernel protocol.
 	//
 	// Write sequence (from EcuFlash 1.44 `mitsucan` analysis):
 	//   1. Extended/Programming diagnostic session — 0x10 0x03 or 0x10 0x02
@@ -826,6 +1018,200 @@ export class Mut3Protocol implements EcuProtocol {
 		if (response[0] !== 0x50 || response[1] !== FLASH_PREPARATION_SESSION) {
 			throw new Error(
 				`Flash preparation session failed: ECU returned [${Array.from(response)
+					.map((b) => `0x${b.toString(16)}`)
+					.join(", ")}]`,
+			);
+		}
+	}
+
+	private async negotiateFlashSessionThroughStage1(
+		connection: DeviceConnection,
+		onProgress: (progress: RomProgress) => void,
+		onEvent: ((event: EcuEvent) => void) | undefined,
+		stage1TransferData: Uint8Array,
+		stage1TransferMessage: string,
+	): Promise<void> {
+		onProgress({
+			phase: "negotiating",
+			bytesProcessed: 0,
+			totalBytes: ROM_SIZE,
+			percentComplete: 0,
+			message: "Entering traced MUT-III flash preparation session",
+		});
+
+		await this.startFlashPreparationSession(connection);
+
+		onProgress({
+			phase: "negotiating",
+			bytesProcessed: 0,
+			totalBytes: ROM_SIZE,
+			percentComplete: 0,
+			message: "Entering traced MUT-III flash programming session",
+		});
+
+		await this.startFlashProgrammingSession(connection);
+
+		onEvent?.({
+			type: "SECURITY_ACCESS_REQUESTED",
+			timestamp: Date.now(),
+		});
+
+		onProgress({
+			phase: "negotiating",
+			bytesProcessed: 0,
+			totalBytes: ROM_SIZE,
+			percentComplete: 0,
+			message: "Requesting traced MUT-III flash seed",
+		});
+
+		const seedResponse = await connection.sendFrame(
+			new Uint8Array([
+				SID_SECURITY_ACCESS,
+				FLASH_SECURITY_REQUEST_SEED_SUBFUNCTION,
+			]),
+		);
+
+		if (
+			seedResponse[0] !== 0x67 ||
+			seedResponse[1] !== FLASH_SECURITY_REQUEST_SEED_SUBFUNCTION
+		) {
+			throw new Error(
+				`Flash seed request failed: ECU returned [${Array.from(seedResponse)
+					.map((b) => `0x${b.toString(16)}`)
+					.join(", ")}]`,
+			);
+		}
+
+		const seed = seedResponse.slice(2);
+		const key = computeFlashSecurityKey(seed);
+
+		onProgress({
+			phase: "negotiating",
+			bytesProcessed: 0,
+			totalBytes: ROM_SIZE,
+			percentComplete: 0,
+			message: "Sending traced MUT-III flash key",
+		});
+
+		const sendKeyResponse = await connection.sendFrame(
+			new Uint8Array([
+				SID_SECURITY_ACCESS,
+				FLASH_SECURITY_SEND_KEY_SUBFUNCTION,
+				...key,
+			]),
+		);
+
+		if (
+			sendKeyResponse[0] !== 0x67 ||
+			sendKeyResponse[1] !== FLASH_SECURITY_SEND_KEY_SUBFUNCTION
+		) {
+			throw new Error(
+				`Flash key request failed: ECU returned [${Array.from(sendKeyResponse)
+					.map((b) => `0x${b.toString(16)}`)
+					.join(", ")}]`,
+			);
+		}
+
+		onEvent?.({
+			type: "SECURITY_ACCESS_GRANTED",
+			timestamp: Date.now(),
+		});
+
+		onProgress({
+			phase: "negotiating",
+			bytesProcessed: 0,
+			totalBytes: ROM_SIZE,
+			percentComplete: 0,
+			message: "Issuing traced MUT-III pre-download vendor request",
+		});
+
+		let prepareDownloadResponse = await connection.sendFrame(
+			FLASH_PREPARE_DOWNLOAD_REQUEST,
+		);
+		if (
+			prepareDownloadResponse[0] === 0x7f &&
+			prepareDownloadResponse[1] === SID_VENDOR_SERVICE &&
+			prepareDownloadResponse[2] === 0x78
+		) {
+			prepareDownloadResponse = await connection.sendFrame(
+				FLASH_PREPARE_DOWNLOAD_REQUEST,
+			);
+		}
+
+		if (
+			prepareDownloadResponse[0] !== SID_VENDOR_SERVICE + 0x40 ||
+			prepareDownloadResponse[1] !== FLASH_PREPARE_DOWNLOAD_SUBFUNCTION
+		) {
+			throw new Error(
+				`Flash vendor pre-download request failed: ECU returned [${Array.from(
+					prepareDownloadResponse,
+				)
+					.map((b) => `0x${b.toString(16)}`)
+					.join(", ")}]`,
+			);
+		}
+
+		onProgress({
+			phase: "negotiating",
+			bytesProcessed: 0,
+			totalBytes: ROM_SIZE,
+			percentComplete: 0,
+			message: "Issuing first traced MUT-III RequestDownload",
+		});
+
+		const requestDownloadStage1Response = await connection.sendFrame(
+			FLASH_REQUEST_DOWNLOAD_STAGE1,
+		);
+		if (
+			requestDownloadStage1Response[0] !== 0x74 ||
+			requestDownloadStage1Response[1] !== 0x01 ||
+			requestDownloadStage1Response[2] !== 0x01
+		) {
+			throw new Error(
+				`Flash RequestDownload stage 1 failed: ECU returned [${Array.from(
+					requestDownloadStage1Response,
+				)
+					.map((b) => `0x${b.toString(16)}`)
+					.join(", ")}]`,
+			);
+		}
+
+		onProgress({
+			phase: "negotiating",
+			bytesProcessed: 0,
+			totalBytes: ROM_SIZE,
+			percentComplete: 0,
+			message: stage1TransferMessage,
+		});
+
+		const transferDataStage1Response =
+			await connection.sendFrame(stage1TransferData);
+		if (transferDataStage1Response[0] !== 0x76) {
+			throw new Error(
+				`Flash TransferData stage 1 failed: ECU returned [${Array.from(
+					transferDataStage1Response,
+				)
+					.map((b) => `0x${b.toString(16)}`)
+					.join(", ")}]`,
+			);
+		}
+
+		onProgress({
+			phase: "negotiating",
+			bytesProcessed: 0,
+			totalBytes: ROM_SIZE,
+			percentComplete: 0,
+			message: "Issuing first traced MUT-III RequestTransferExit",
+		});
+
+		const requestTransferExitResponse = await connection.sendFrame(
+			FLASH_REQUEST_TRANSFER_EXIT,
+		);
+		if (requestTransferExitResponse[0] !== 0x77) {
+			throw new Error(
+				`Flash RequestTransferExit failed: ECU returned [${Array.from(
+					requestTransferExitResponse,
+				)
 					.map((b) => `0x${b.toString(16)}`)
 					.join(", ")}]`,
 			);
@@ -886,10 +1272,14 @@ export {
 	FLASH_SECURITY_REQUEST_SEED_SUBFUNCTION,
 	FLASH_SECURITY_SEND_KEY_SUBFUNCTION,
 	FLASH_PREPARE_DOWNLOAD_SUBFUNCTION,
+	FLASH_ECU_RESET_HARD,
 	FLASH_REQUEST_DOWNLOAD_STAGE1,
 	FLASH_REQUEST_DOWNLOAD_STAGE2,
 	FLASH_TRANSFER_DATA_STAGE1_BA,
 	FLASH_TRANSFER_DATA_STAGE1_D4,
 	FLASH_TRANSFER_DATA_STAGE2_BLOCK_CC,
+	FLASH_ROUTINE_CONTROL_STAGE1,
+	FLASH_ROUTINE_CONTROL_STAGE1_CONTINUE,
+	FLASH_ROUTINE_CONTROL_STAGE2,
 	FLASH_REQUEST_TRANSFER_EXIT,
 };

@@ -12,7 +12,7 @@
 | Element | Status | Details |
 |---------|--------|---------|
 | Read-session key (`0x01`/`0x02`) | ✅ SOLVED | S-box algorithm implemented and tested in `security.ts` |
-| Flash-session key (`0x05`/`0x06`) | ⏳ CAPTURED, ALGORITHM UNKNOWN | CAN traces now confirm the session flow and multiple 4-byte seed/key pairs; algorithm derivation and implementation remain open |
+| Flash-session key (`0x05`/`0x06`) | ✅ SOLVED | Affine 4-byte transform implemented and validated against 157 observed seed/key pairs in `packages/device/protocols/mut3/test/flash-session-trace-fixtures.ts` |
 
 ---
 
@@ -208,9 +208,9 @@ purpose (MUT-III UDS SecurityAccess over CAN for diagnostic sessions), but it is
 |---|---|---|---|
 | EVO 7/8/9 flash programming | Proprietary K-line bootloader | `mitsuecu` (`mitsukernel`) | Not implemented |
 | EVO X flash read | KWP2000/UDS over CAN (`mitsucan`) | `mitsucan` | `index.ts` `readRom()` ✓ |
-| EVO X flash write | KWP2000/UDS over CAN (`mitsucan`) | `mitsucan` | **Not implemented** (blocked: traced flash-session key algorithm unresolved) |
+| EVO X flash write | KWP2000/UDS over CAN (`mitsucan`) | `mitsucan` | Transcript-driven dry runs now cover the traced native bootstrap through the BA `0x31 E0 -> 0x7F 0x31 0x78` boundary and the D4 branch through positive `0x11 0x01`; the primary known gap is the post-BA OpenECU kernel handoff, so full generalized `writeRom()` remains intentionally unimplemented |
 | MUT-III diagnostic session (read) | UDS SecurityAccess `0x27 0x01/0x02` | Not in EcuFlash | `security.ts` ✓ |
-| MUT-III flash/programming session | Session `0x10 0x92` → `0x10 0x85`, SecurityAccess `0x27 0x05/0x06`, vendor service `0x3B 0x9A`, then `0x34`/`0x36` | `mitsucan` (trace-confirmed) | **Algorithm unresolved** |
+| MUT-III flash/programming session | Session `0x10 0x92` → `0x10 0x85`, SecurityAccess `0x27 0x05/0x06`, vendor service `0x3B 0x9A`, staged `0x34`/`0x36` traffic, then either `0x31 E1 01 -> 0x31 E0` (BA) or `0x31 E1 02 -> 0x11 0x01` (D4) | `mitsucan` (trace-confirmed) | Partial dry-run implemented and fixture-backed |
 | Subaru security access | KWP2000 `0x27` | `kwp2000` (Subaru only) | `security.ts` ✓ |
 
 ---
@@ -393,27 +393,36 @@ export function computeSubaruKey(seed: Uint8Array): Uint8Array {
 
 **Reference**: [`packages/device/protocols/subaru/src/security.ts`](packages/device/protocols/subaru/src/security.ts)
 
-### 7.0.2 Flash-Session Security (EVO X `mitsucan` — CAPTURED, ALGORITHM UNKNOWN)
+### 7.0.2 Flash-Session Security (EVO X `mitsucan`)
 
-**Status**: ⏳ **FLOW CAPTURED; KEY ALGORITHM STILL UNKNOWN**
+**Status**: ✅ **SOLVED AND IMPLEMENTED**
 
-Live CAN traces from March 27, 2026 confirm the EVO X flash path uses:
+Live CAN traces from March 27-28, 2026 confirm the EVO X flash path uses:
 - `0x10 0x92`
 - `0x10 0x85`
 - `0x27 0x05` requestSeed with a 4-byte seed
 - `0x27 0x06` sendKey with a 4-byte key
 - `0x3B 0x9A`
-- `0x34` / `0x36` transfer traffic
+- staged `0x34` / `0x36` transfer traffic
+- a traced BA branch that reaches `0x31 E1 01` after the first `0x36 0xCC ...` bulk block
 
-The remaining blocker is no longer the session shape. It is the seed-to-key transformation for the traced `0x27 0x05/0x06` exchange.
+The flash-session key algorithm is now implemented in `packages/device/protocols/mut3/src/security.ts` and validated against 157 observed seed/key pairs.
 
-**Required for Resolution**:
-- [ ] Derive the `0x27 0x05/0x06` key algorithm from captured seed/key pairs
-- [ ] Implement the traced flash-session flow in `mut3`
-- [ ] Validate the derived key algorithm against additional captures or a live ECU
-- See [`MITSUCAN_WRITE_RESEARCH_PLAN.md`](MITSUCAN_WRITE_RESEARCH_PLAN.md) **Appendix F** for detailed research plan
+The solved transform is:
 
-**Impact**: EVO X MUT-III ROM write capability remains blocked until the traced flash-session key algorithm is implemented.
+```text
+affine(x) = (0x89 * x + 0xD2) & 0xFF
+
+key[1] = affine(seed[1])
+key[3] = affine(seed[3])
+key[0] = (affine(seed[0]) + 0x8F + (((0x89 * seed[1] + 0xD0) >>> 8) & 0xFF)) & 0xFF
+key[2] = (affine(seed[2]) + 0x8F + (((0x89 * seed[3] + 0xD1) >>> 8) & 0xFF)) & 0xFF
+```
+
+**Remaining work**:
+- [ ] Extend the traced BA branch beyond `0x31 E1 01`
+- [ ] Follow the D4 branch beyond the positive `0x11 0x01` reset acknowledgement, where the traces switch to functional-broadcast re-entry traffic
+- [ ] Generalize the full `writeRom()` loop once the branch structure is fully understood
 
 ---
 
@@ -447,8 +456,8 @@ The remaining blocker is no longer the session shape. It is the seed-to-key tran
 | **Flash size** | 1 MB at `0x000000` |
 | **No kernel upload** | Uses ECU's built-in CAN bootloader directly |
 | **Read SecurityAccess** | Subfunction `0x01`/`0x02`; key = `(seed * 0x4081 + 0x1234) & 0xFFFF` |
-| **Write SecurityAccess** | Trace-confirmed as subfunction `0x05`/`0x06` with 4-byte seed/key values; **algorithm unresolved** |
-| **Our `security.ts`** | Correct for read/diagnostic session; flash-session `0x05`/`0x06` algorithm not yet implemented |
+| **Write SecurityAccess** | Trace-confirmed as subfunction `0x05`/`0x06` with a solved 4-byte affine transform |
+| **Our `security.ts`** | Implements both read/diagnostic-session and flash-session key derivation |
 
 ### 7.3 Subaru (WRX/STI/Forester)
 
@@ -477,10 +486,18 @@ The EVO X write sequence is now confirmed from live CAN traces:
 2. **Diagnostic session `0x92`** — `0x10 0x92`.
 3. **Programming session `0x85`** — `0x10 0x85`, including `0x7F 0x10 0x78` response-pending before positive response.
 4. **SecurityAccess requestSeed** — `0x27 0x05`, returning a 4-byte seed in `0x67 0x05`.
-5. **SecurityAccess sendKey** — `0x27 0x06` with a 4-byte key.
-   - ⚠️ **KEY ALGORITHM UNKNOWN** — the session structure is confirmed, but the seed-to-key transformation for `0x05`/`0x06` is still unresolved.
+5. **SecurityAccess sendKey** — `0x27 0x06` with a solved 4-byte key transform, validated against 157 observed pairs.
 6. **Vendor service** — `0x3B 0x9A` before download.
-7. **Download / transfer traffic** — `0x34` followed by `0x36` traffic.
+7. **Stage 1 transfer** — `0x34 0x20 00 00 01 00 00 02`, then a tiny `0x36` token (`BA 02` on the traced BA branch; `D4 D4` also observed as a separate branch), then `0x37`.
+8. **Stage 2 transfer** — `0x34 0x80 85 38 01 00 00 D0`, then the first traced bulk `0x36 0xCC ...` block, then `0x37`.
+9. **Post-transfer routine (BA branch)** — the real-write BA branch consistently reaches `0x31 E1 01` after the first bulk block, then `0x31 E0`, with `0x7F 0x31 0x78` observed before the next large transfer stage.
+10. **BA continuation payload family** — after the `0x31 E0 -> 0x7F 0x31 0x78` boundary, the traces consistently move into a 251-byte ISO-TP request starting `0x3E 0x3D 0x1E 0xD6 0x75 0xBA ...`, followed by a large `0x5B ...` ECU response. The exact payload bytes vary across the concrete captures, so this family is observed but not yet generalized into one reusable dry-run step.
+    The first concrete split is not random: `ecu write 2` and `ecu write test 1` track the same BA-side family, while `ecu write 1` uses a different family. This argues against "test write" versus "real write" being the only selector.
+    More precisely, `ecu write 2` and `ecu write test 1` keep the same 251-byte request shape and differ only across one 21-byte window, while the session-test corpus overwhelmingly matches that family and the remaining outliers look reordered or truncated rather than like a third stable family.
+    Direct `.candump` parsing also shows this BA-side phase is a tester-to-ECU upload burst, not a single long request followed by a single long ECU response: after `0x31 E0`, the tester emits many 251-byte ISO-TP transfers while the ECU only sends flow-control frames, and the first stable post-burst ECU payload in the concrete write traces is the kernel banner `OpenECU Mitsubishi M32186 CAN Kernel V1.09`.
+11. **Alternate D4 branch** — the staged `0x36 D4 D4` path consistently reaches `0x31 E1 02`, then `0x7F 0x31 0x78`, then `0x71 E1 00`, then `0x11 0x01` with `0x7F 0x11 0x78` before a positive `0x51` reset acknowledgement in the concrete write captures.
+12. **Likely programming-mode exit (inference)** — EcuFlash logs explicitly describe an "exiting programming mode" stage after write operations, and the traced D4-side `0x31 E1 02 -> 0x11 0x01 -> 0x51` reset path is the strongest protocol-level match for that lifecycle transition. This is a trace-plus-log inference, not vendor-documented proof.
+13. **Post-reset recovery** — after the positive reset acknowledgement, the traces switch to functional-broadcast traffic (`0x3E 0x02`, `0x10 0x81`, `0x10 0x92`) before ECU identification resumes. This is observed but not yet modeled in the request/response dry runs.
 
 ### 7.6 Implications for Future Implementation
 
@@ -496,8 +513,9 @@ The EVO X write sequence is now confirmed from live CAN traces:
    the `computeSecurityKey()` algorithm already implemented in `security.ts` (subfunction
    `0x01`/`0x02` — read/diagnostic session only).
 
-4. **EVO X ROM write is blocked** by the unresolved traced flash-session SecurityAccess key
-   algorithm (subfunction `0x05`/`0x06`). See §7.5 for the confirmed flow.
+4. **EVO X ROM write is no longer blocked on flash-session security**. The remaining work is
+   downstream of the first traced bulk-transfer and routine boundaries. See §7.5 for the
+   confirmed flow.
 
 5. **Subaru flash programming** requires:
    - SSM2 protocol for older models (serial)
