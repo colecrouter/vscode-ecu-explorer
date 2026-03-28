@@ -58,6 +58,12 @@ const FLASH_PREPARE_DOWNLOAD_REQUEST = new Uint8Array([
 	0x00,
 	0x01,
 ]);
+const FLASH_REQUEST_DOWNLOAD_STAGE1 = new Uint8Array([
+	0x34, 0x20, 0x00, 0x00, 0x01, 0x00, 0x00, 0x02,
+]);
+const FLASH_TRANSFER_DATA_STAGE1_BA = new Uint8Array([0x36, 0xba, 0x02]);
+const FLASH_TRANSFER_DATA_STAGE1_D4 = new Uint8Array([0x36, 0xd4, 0xd4]);
+const FLASH_REQUEST_TRANSFER_EXIT = new Uint8Array([0x37]);
 
 // MUT-III serial/CAN direct memory commands (K-line / RAX streaming)
 // Reference: EvoScan_Protocol_Analysis.md — commands E0-E6
@@ -517,9 +523,10 @@ export class Mut3Protocol implements EcuProtocol {
 	 *   3. `0x27 0x05` (4-byte seed)
 	 *   4. `0x27 0x06` (derived from observed seed/key fixtures)
 	 *   5. `0x3B 0x9A` (traced pre-download request)
+	 *   6. `0x34 0x20 0x00 0x00 0x01 0x00 0x00 0x02`
 	 *
-	 * The method stops after the trace-confirmed `0x3B 0x9A` handshake and does
-	 * not enter `0x34` / `0x36` transfer traffic.
+	 * The method stops after the first traced `RequestTransferExit` and does not
+	 * enter the larger multi-frame transfer path that follows in the captures.
 	 */
 	async dryRunWrite(
 		connection: DeviceConnection,
@@ -652,6 +659,73 @@ export class Mut3Protocol implements EcuProtocol {
 					.join(", ")}]`,
 			);
 		}
+
+		onProgress({
+			phase: "negotiating",
+			bytesProcessed: 0,
+			totalBytes: ROM_SIZE,
+			percentComplete: 0,
+			message: "Issuing first traced MUT-III RequestDownload",
+		});
+
+		const requestDownloadStage1Response = await connection.sendFrame(
+			FLASH_REQUEST_DOWNLOAD_STAGE1,
+		);
+		if (
+			requestDownloadStage1Response[0] !== 0x74 ||
+			requestDownloadStage1Response[1] !== 0x01 ||
+			requestDownloadStage1Response[2] !== 0x01
+		) {
+			throw new Error(
+				`Flash RequestDownload stage 1 failed: ECU returned [${Array.from(
+					requestDownloadStage1Response,
+				)
+					.map((b) => `0x${b.toString(16)}`)
+					.join(", ")}]`,
+			);
+		}
+
+		onProgress({
+			phase: "negotiating",
+			bytesProcessed: 0,
+			totalBytes: ROM_SIZE,
+			percentComplete: 0,
+			message: "Sending first traced MUT-III TransferData block",
+		});
+
+		const transferDataStage1Response = await connection.sendFrame(
+			FLASH_TRANSFER_DATA_STAGE1_BA,
+		);
+		if (transferDataStage1Response[0] !== 0x76) {
+			throw new Error(
+				`Flash TransferData stage 1 failed: ECU returned [${Array.from(
+					transferDataStage1Response,
+				)
+					.map((b) => `0x${b.toString(16)}`)
+					.join(", ")}]`,
+			);
+		}
+
+		onProgress({
+			phase: "negotiating",
+			bytesProcessed: 0,
+			totalBytes: ROM_SIZE,
+			percentComplete: 0,
+			message: "Issuing first traced MUT-III RequestTransferExit",
+		});
+
+		const requestTransferExitResponse = await connection.sendFrame(
+			FLASH_REQUEST_TRANSFER_EXIT,
+		);
+		if (requestTransferExitResponse[0] !== 0x77) {
+			throw new Error(
+				`Flash RequestTransferExit failed: ECU returned [${Array.from(
+					requestTransferExitResponse,
+				)
+					.map((b) => `0x${b.toString(16)}`)
+					.join(", ")}]`,
+			);
+		}
 	}
 
 	// TODO: Implement writeRom() for EVO X (`mitsucan`) ROM flash write.
@@ -667,8 +741,8 @@ export class Mut3Protocol implements EcuProtocol {
 	//   7. RequestDownload / TransferData traffic follows
 	//
 	// ⚠️ BLOCKER: The traced flash-session SecurityAccess key is now implemented,
-	// but full write traffic after `0x3B 0x9A` still needs transcript-driven
-	// implementation and verification. See `security.ts` and
+	// but full write traffic after the first `RequestTransferExit` still needs
+	// transcript-driven implementation and verification. See `security.ts` and
 	// HANDSHAKE_ANALYSIS.md §7.5 for the current traced flow.
 
 	private async startFlashPreparationSession(
@@ -744,4 +818,8 @@ export {
 	FLASH_SECURITY_REQUEST_SEED_SUBFUNCTION,
 	FLASH_SECURITY_SEND_KEY_SUBFUNCTION,
 	FLASH_PREPARE_DOWNLOAD_SUBFUNCTION,
+	FLASH_REQUEST_DOWNLOAD_STAGE1,
+	FLASH_TRANSFER_DATA_STAGE1_BA,
+	FLASH_TRANSFER_DATA_STAGE1_D4,
+	FLASH_REQUEST_TRANSFER_EXIT,
 };
