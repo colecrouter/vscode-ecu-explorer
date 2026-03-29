@@ -28,11 +28,17 @@ const VBATT_PIN = 16;
 const ISO15765_PROTOCOL_ID = 6;
 const ISO15765_CHANNEL_CODE = 0x36;
 const ISO15765_DEFAULT_FLAGS = 0;
+const ISO15765_WRITE_FLAGS = 0x40;
 const ISO15765_DEFAULT_BAUD = 500000;
 const ISO15765_PASS_FILTER = 1;
-const CAN_ID_MASK_11BIT = 0x7ff;
+const ISO15765_FLOW_FILTER = 3;
+const DEFAULT_FUNCTIONAL_CAN_ID = 0x7df;
 const DEFAULT_TESTER_CAN_ID = 0x7e0;
 const DEFAULT_ECU_CAN_ID = 0x7e8;
+const EVOSCAN_ISO15765_FILTER_PAYLOAD = new Uint8Array(4);
+const SERIAL_ISO15765_FILTER_MASK = new Uint8Array([0xff, 0xff, 0xff, 0xff]);
+const SERIAL_ISO15765_FILTER_PATTERN = encodeCanId(DEFAULT_ECU_CAN_ID);
+const SERIAL_ISO15765_FILTER_FLOW = encodeCanId(DEFAULT_TESTER_CAN_ID);
 const PACKET_NORMAL = 0x00;
 const PACKET_RX_END = 0x40;
 const PACKET_NORMAL_START = 0x80;
@@ -117,6 +123,33 @@ interface SerialLike {
 	openPort(path: string): Promise<SerialPortLike>;
 	requestPort?(): Promise<SerialPortInfoLike>;
 	forgetPort?(path: string): Promise<void>;
+}
+
+const OPENPORT_DEBUG_IO = (() => {
+	const maybeProcess = (
+		globalThis as typeof globalThis & {
+			process?: { env?: Record<string, string | undefined> };
+		}
+	).process;
+	return maybeProcess?.env?.ECU_EXPLORER_OPENPORT_DEBUG === "1";
+})();
+
+function formatHex(data: Uint8Array): string {
+	return Array.from(data)
+		.map((byte) => byte.toString(16).padStart(2, "0"))
+		.join(" ");
+}
+
+function debugOpenPort(
+	scope: "usb" | "serial",
+	message: string,
+	data?: Uint8Array,
+): void {
+	if (!OPENPORT_DEBUG_IO) {
+		return;
+	}
+	const suffix = data != null && data.length > 0 ? ` ${formatHex(data)}` : "";
+	console.error(`[openport:${scope}] ${message}${suffix}`);
 }
 
 interface NodeLikeUsbEndpoint {
@@ -312,13 +345,18 @@ function decodeCanIdHeader(data: Uint8Array): number | null {
 
 function hasKnownCanHeader(data: Uint8Array): boolean {
 	const canId = decodeCanIdHeader(data);
-	return canId === DEFAULT_TESTER_CAN_ID || canId === DEFAULT_ECU_CAN_ID;
+	return (
+		canId === DEFAULT_FUNCTIONAL_CAN_ID ||
+		canId === DEFAULT_TESTER_CAN_ID ||
+		canId === DEFAULT_ECU_CAN_ID
+	);
 }
 
-function wrapIso15765Payload(data: Uint8Array): Uint8Array {
+function encodeIso15765WritePayload(data: Uint8Array): Uint8Array {
 	if (hasKnownCanHeader(data)) {
 		return data;
 	}
+	// Atlas' native serial OpenPort path writes ISO15765 as CAN ID + raw payload.
 	const header = encodeCanId(DEFAULT_TESTER_CAN_ID);
 	const wrapped = new Uint8Array(header.length + data.length);
 	wrapped.set(header, 0);
@@ -327,10 +365,16 @@ function wrapIso15765Payload(data: Uint8Array): Uint8Array {
 }
 
 function unwrapIso15765Payload(data: Uint8Array): Uint8Array {
-	if (!hasKnownCanHeader(data)) {
-		return data;
+	const payload = hasKnownCanHeader(data) ? data.slice(4) : data;
+	if (payload.length === 0) {
+		return payload;
 	}
-	return data.slice(4);
+	const frameType = (payload[0] ?? 0) >> 4;
+	if (frameType === 0x0) {
+		const singleFrameLength = (payload[0] ?? 0) & 0x0f;
+		return payload.slice(1, 1 + singleFrameLength);
+	}
+	return payload;
 }
 
 function appendBytes(left: Uint8Array, right: Uint8Array): Uint8Array {
@@ -364,6 +408,14 @@ function consumeProtocolBytes(
 		}
 
 		const channelCode = buffer[offset + 2];
+		if (
+			channelCode === 0x6f &&
+			buffer[offset + 3] === 0x0d &&
+			buffer[offset + 4] === 0x0a
+		) {
+			offset += 5;
+			continue;
+		}
 		const packetLength = buffer[offset + 3] ?? 0;
 		const packetType = buffer[offset + 4] ?? 0;
 		const packetTotalLength = packetLength + 4;
@@ -456,7 +508,11 @@ export class OpenPort2Connection implements DeviceConnection {
 	async sendFrame(data: Uint8Array, timeoutMs?: number): Promise<Uint8Array> {
 		const effectiveTimeout = timeoutMs ?? DEFAULT_FRAME_TIMEOUT_MS;
 		const channelId = this.channelId ?? ISO15765_PROTOCOL_ID;
-		await this.writeMessage(channelId, wrapIso15765Payload(data), 0);
+		await this.writeMessage(
+			channelId,
+			encodeIso15765WritePayload(data),
+			ISO15765_WRITE_FLAGS,
+		);
 		const response = await this.readProtocolMessage(effectiveTimeout);
 		return unwrapIso15765Payload(response);
 	}
@@ -632,9 +688,10 @@ export class OpenPort2Connection implements DeviceConnection {
 		await this.startMessageFilter(
 			this.channelId,
 			ISO15765_PASS_FILTER,
-			encodeCanId(CAN_ID_MASK_11BIT),
-			encodeCanId(DEFAULT_ECU_CAN_ID),
-			encodeCanId(DEFAULT_TESTER_CAN_ID),
+			0,
+			EVOSCAN_ISO15765_FILTER_PAYLOAD,
+			EVOSCAN_ISO15765_FILTER_PAYLOAD,
+			EVOSCAN_ISO15765_FILTER_PAYLOAD,
 		);
 		await this.clearTxBuffer();
 		await this.clearRxBuffer();
@@ -662,13 +719,14 @@ export class OpenPort2Connection implements DeviceConnection {
 	async startMessageFilter(
 		channelId: number,
 		filterType: number,
+		filterFlags: number,
 		mask: Uint8Array,
 		pattern: Uint8Array,
 		flowControl: Uint8Array,
 	): Promise<void> {
 		const encoder = new TextEncoder();
 		const header = encoder.encode(
-			`atf${channelId} ${filterType} 0 ${mask.length}\r\n`,
+			`atf${channelId} ${filterType} ${filterFlags} ${mask.length}\r\n`,
 		);
 		const combined = new Uint8Array(
 			header.length + mask.length + pattern.length + flowControl.length,
@@ -723,6 +781,7 @@ export class OpenPort2Connection implements DeviceConnection {
 		const combined = new Uint8Array(header.length + data.length);
 		combined.set(header, 0);
 		combined.set(data, header.length);
+		debugOpenPort("usb", `tx channel=${channelId} flags=${flags}`, combined);
 		await this.device.transferOut(this.endpointOut, combined);
 	}
 
@@ -752,6 +811,7 @@ export class OpenPort2Connection implements DeviceConnection {
 			if (chunk.length === 0) {
 				continue;
 			}
+			debugOpenPort("usb", "rx chunk", chunk);
 			buffered = appendBytes(buffered, chunk);
 		}
 
@@ -853,7 +913,7 @@ class OpenPort2HidConnection implements DeviceConnection {
 		const effectiveTimeout = timeoutMs ?? DEFAULT_FRAME_TIMEOUT_MS;
 		await this.device.sendReport(
 			this.outputReportId,
-			toPlainArrayBuffer(wrapIso15765Payload(data)),
+			toPlainArrayBuffer(encodeIso15765WritePayload(data)),
 		);
 		return withTimeout(
 			this.receiveFrame(64).then((frame) => unwrapIso15765Payload(frame)),
@@ -946,7 +1006,11 @@ class OpenPort2SerialConnection implements DeviceConnection {
 	async sendFrame(data: Uint8Array, timeoutMs?: number): Promise<Uint8Array> {
 		const effectiveTimeout = timeoutMs ?? DEFAULT_FRAME_TIMEOUT_MS;
 		const channelId = this.channelId ?? ISO15765_PROTOCOL_ID;
-		await this.writeMessage(channelId, wrapIso15765Payload(data), 0);
+		await this.writeMessage(
+			channelId,
+			encodeIso15765WritePayload(data),
+			ISO15765_WRITE_FLAGS,
+		);
 		const response = await this.readProtocolMessage(effectiveTimeout);
 		return unwrapIso15765Payload(response);
 	}
@@ -1065,12 +1129,14 @@ class OpenPort2SerialConnection implements DeviceConnection {
 			ISO15765_DEFAULT_FLAGS,
 			ISO15765_DEFAULT_BAUD,
 		);
+		// Atlas' serial/VCOM backend only starts passing ECU replies after a FLOW_FILTER.
 		await this.startMessageFilter(
 			this.channelId,
-			ISO15765_PASS_FILTER,
-			encodeCanId(CAN_ID_MASK_11BIT),
-			encodeCanId(DEFAULT_ECU_CAN_ID),
-			encodeCanId(DEFAULT_TESTER_CAN_ID),
+			ISO15765_FLOW_FILTER,
+			ISO15765_WRITE_FLAGS,
+			SERIAL_ISO15765_FILTER_MASK,
+			SERIAL_ISO15765_FILTER_PATTERN,
+			SERIAL_ISO15765_FILTER_FLOW,
 		);
 		await this.clearTxBuffer();
 		await this.clearRxBuffer();
@@ -1088,13 +1154,14 @@ class OpenPort2SerialConnection implements DeviceConnection {
 	async startMessageFilter(
 		channelId: number,
 		filterType: number,
+		filterFlags: number,
 		mask: Uint8Array,
 		pattern: Uint8Array,
 		flowControl: Uint8Array,
 	): Promise<void> {
 		const encoder = new TextEncoder();
 		const header = encoder.encode(
-			`atf${channelId} ${filterType} 0 ${mask.length}\r\n`,
+			`atf${channelId} ${filterType} ${filterFlags} ${mask.length}\r\n`,
 		);
 		const combined = new Uint8Array(
 			header.length + mask.length + pattern.length + flowControl.length,
@@ -1139,6 +1206,7 @@ class OpenPort2SerialConnection implements DeviceConnection {
 		const combined = new Uint8Array(header.length + data.length);
 		combined.set(header, 0);
 		combined.set(data, header.length);
+		debugOpenPort("serial", `tx channel=${channelId} flags=${flags}`, combined);
 		await this.port.write(combined);
 	}
 
@@ -1164,6 +1232,7 @@ class OpenPort2SerialConnection implements DeviceConnection {
 			if (chunk.length === 0) {
 				continue;
 			}
+			debugOpenPort("serial", "rx chunk", chunk);
 			buffered = appendBytes(buffered, chunk);
 		}
 

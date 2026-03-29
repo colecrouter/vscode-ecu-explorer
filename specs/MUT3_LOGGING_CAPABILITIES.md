@@ -1,11 +1,11 @@
-# 📖 REFERENCE DOCUMENT: MUT3 Real-Time Logging Capabilities Analysis
+# MUT3 Real-Time Logging Capabilities Analysis
 
-**Status:** Detailed technical specification
+**Status:** Reference document with partial historical status
 **Document Date**: February 24, 2026
 **Source**: EvoScan_Protocol_Analysis.md (Extracted from EvoScan V3.1, MMCodingWriter, RAX Fast Logging)
 **Scope**: Mitsubishi MUT-III Protocol real-time data logging parameters and implementation opportunities
 
-> **🔗 For current implementation status, see [`REAL_TIME_LOGGING.md`](REAL_TIME_LOGGING.md) as authoritative parameter source**
+> For current implementation status, see [`REAL_TIME_LOGGING.md`](REAL_TIME_LOGGING.md) and [`openport2-serial-backend.md`](openport2-serial-backend.md).
 
 ---
 
@@ -15,9 +15,9 @@ This document consolidates all real-time logging capabilities discovered in the 
 
 ### Key Findings:
 
-- **Project Status**: Logging infrastructure exists ([`logging-manager.ts`](apps/vscode/src/logging-manager.ts), [`live-data-panel-manager.ts`](apps/vscode/src/live-data-panel-manager.ts)) but is **generic CSV-only**
-- **Gap**: No support for **MUT-III specific real-time parameters** yet
-- **Opportunity**: 8 RAX logging blocks represent **foundation for deep ECU telemetry**
+- **Project Status**: MUT3 Mode 23 logging now exists on the working OpenPort serial path; broader historical notes in this document still describe earlier gaps
+- **Current Source of Truth**: The active OpenPort transport/session behavior lives in [`openport2-serial-backend.md`](openport2-serial-backend.md)
+- **Opportunity**: 8 RAX logging blocks still represent a broader foundation for deep ECU telemetry beyond the currently validated Mode 23 set
 - **Challenge**: EvoScan parameters require **bit-level extraction and custom conversion formulas**
 - **Status**: ✅ 48 RAX parameters identified and implemented (see [`REAL_TIME_LOGGING.md`](REAL_TIME_LOGGING.md) for details)
 
@@ -290,20 +290,68 @@ Over 100 SST-specific parameters provide deep transmission and drivetrain teleme
 - ❌ **Live data session** - NOT IMPLEMENTED
 
 **Note**: MUT-III logging is now transport-specific:
-- `openport2` uses a traced CAN `0x23 0x80 <addr_hi> <addr_lo> <len>` polling backend backed by EvoScan Mode23-style request IDs
+- `openport2` currently uses a traced CAN `0x23 0x80 <addr_hi> <addr_lo> <len>` polling backend backed by EvoScan Mode23-style request IDs
 - `kline` uses the existing EvoScan/RAX `E0/E5/E1` memory-access backend
-- The CAN backend now ships a minimal XML-backed working set promoted from EvoScan's `Mitsubishi EvoX Mode23 USA.xml` exact matches
+- The current CAN backend ships only a minimal XML-backed bring-up set promoted from EvoScan exact matches; it is useful for validation but is not considered a production-stable universal map
 - The built-in working set is also free to normalize presentation where useful; for example, `Speed` is currently emitted as `km/h` in code even though some EvoScan USA profiles express the same concept in `mph`
-- EvoScan's symbolic `CANx-y` "MUTIII CAN" profile appears to be a separate canned-request backend, not the same thing as raw Mode 23 memory reads, and remains intentionally unimplemented until dedicated traces are captured
-- The current UI/protocol contract does not surface an explicit "logging mode" selector yet; if multiple MUT-III logging families ship side-by-side, the UI will likely need a first-class logging-backend abstraction
+- EvoScan's symbolic `CANx-y` "MUTIII CAN" profile appears to be a separate canned-request backend, not the same thing as raw Mode 23 memory reads
+- The current UI/protocol contract does not surface an explicit logging-backend selector yet; if multiple MUT-III logging families ship side-by-side, the UI will need a first-class logging-backend abstraction
 
 **Implementation Update (2026-03-28)**:
 - `Mut3Protocol.streamLiveData()` is now implemented
-- The next architectural step is a profile-driven import model: one normalized Mode23 channel catalog plus per-profile request maps sourced from EvoScan XML
+- The next architectural step is a profile-driven import model: one normalized channel catalog plus per-profile request maps sourced from EvoScan XML
 - The current built-in working set intentionally stays minimal and exact-match only; it includes stable channels like `RPM`, `Load`, `TPS`, `STFT`, `LTFT Idle`, `LTFT Cruise`, `LTFT In Use`, `ECT`, `IAT`, `Battery`, `Front O2`, `Rear O2`, `MAF Volts`, `MAF Airflow`, `WGDC Correction`, and the VVT target/actual channels
-- Ambiguous addresses that collide across EvoScan profiles, such as shared-address fields in the Evo X `2011 USA GSR` profile, are intentionally omitted from the built-in working set until a profile selector or richer formula/dependency system exists
+- Ambiguous addresses that collide across EvoScan profiles, or channels like `Battery` that visibly move between close Evo X profiles, should be treated as profile-bound rather than globally stable until a profile selector or richer formula/dependency system exists
 
-### 3.4 DEVELOPMENT.md Status
+### 3.4 Production Direction: CAN-First MUT-III Logging
+
+**Primary shipping goal**:
+- CAN logging should become the primary MUT-III live-data path
+- the current hardcoded Mode 23 backend should be treated as disabled/internal research code for now, not as a fallback path
+
+**Why**:
+- EvoScan XML shows that request IDs drift across model year / market / application variants, even within closely related Evo X profiles
+- The current hardcoded Mode 23 table is therefore suitable for transport validation and limited known-good setups, but not for broad production assumptions
+- EvoScan's `CANx-y` / "MUTIII CAN" family likely represents a more profile-shaped request model than a single universal address map
+
+**Recommended architecture**:
+1. **Normalized channel catalog**
+   - One canonical set of channel identities such as `RPM`, `Boost`, `ECT`, `Battery`, `TPS`
+   - Decoders, units, aliases, and presentation rules live here
+
+2. **Profile-bound request maps**
+   - Each EvoScan vehicle/profile file maps canonical channels to request definitions
+   - Request definitions may target:
+     - raw Mode 23 reads
+     - symbolic `CANx-y` canned requests
+     - future grouped / composite request families
+
+3. **Backend abstraction**
+   - A MUT-III logging profile selects both:
+     - the channel map
+     - the logging backend (`mode23`, `mutiii-can`, `rax-kline`, etc.)
+   - UI and CLI should ask for or infer a profile, not just "MUT-III"
+
+4. **Confidence / provenance**
+   - Imported channels should carry provenance:
+     - `trace-confirmed`
+     - `xml-derived`
+     - `ambiguous`
+     - `manual override`
+   - Production defaults should prefer channels with stronger provenance
+
+5. **Safe fallback**
+   - If no better profile match is available:
+     - prefer a conservative known-good CAN profile
+     - expose raw Mode 23 as an advanced fallback
+     - do not imply a universal address map exists when it does not
+
+**Immediate implication for this project**:
+- Do not ship the current exact-match Mode 23 table as the long-term primary MUT-III logging abstraction
+- Do use the working CAN transport/session path as the foundation for a profile-driven CAN-first logging system
+- Treat EvoScan XML import and `CANx-y` decoding as the main next research/implementation path for production MUT-III logging
+
+### 3.5 DEVELOPMENT.md Status
 
 **Section**: "Realtime Data Logging" (v1 feature)
 

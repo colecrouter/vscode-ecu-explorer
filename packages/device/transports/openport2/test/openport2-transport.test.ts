@@ -25,14 +25,38 @@ type FakeSerialPortInfo = {
 };
 
 function createIso15765ResponseFrame(payload: Uint8Array): DataView {
-	const frame = new Uint8Array(9 + payload.length);
+	const frame = new Uint8Array(9 + 8);
 	frame[0] = 0x61; // 'a'
 	frame[1] = 0x72; // 'r'
 	frame[2] = 0x36; // ISO15765 channel code
-	frame[3] = payload.length + 5;
+	frame[3] = 13;
 	frame[4] = 0x40; // RX end indication
-	frame.set(payload, 9);
+	frame[9] = payload.length & 0x0f;
+	frame.set(payload, 10);
 	return new DataView(frame.buffer.slice(0));
+}
+
+function createTraceSingleFrameResponse(
+	canId: number,
+	isoPayload: Uint8Array,
+): Uint8Array {
+	const frame = new Uint8Array(9 + 8);
+	frame[0] = 0x61; // 'a'
+	frame[1] = 0x72; // 'r'
+	frame[2] = 0x36; // ISO15765 channel code
+	frame[3] = 13;
+	frame[4] = 0x40; // RX end indication
+	frame[5] = 0x00;
+	frame[6] = 0x00;
+	frame[7] = 0x00;
+	frame[8] = 0x00;
+	frame[9] = (canId >>> 24) & 0xff;
+	frame[10] = (canId >>> 16) & 0xff;
+	frame[11] = (canId >>> 8) & 0xff;
+	frame[12] = canId & 0xff;
+	frame[13] = isoPayload.length & 0x0f;
+	frame.set(isoPayload, 14);
+	return frame;
 }
 
 function createAdapterPacket(
@@ -263,6 +287,110 @@ class FakeSerialRuntime {
 	}
 }
 
+class FakeHidDevice {
+	vendorId: number;
+	productId: number;
+	serialNumber?: string | null;
+	productName?: string | null;
+	opened = false;
+	collections?: readonly {
+		outputReports?: readonly { reportId: number }[];
+	}[];
+	private readonly writes: Array<{
+		reportId: number;
+		data: Uint8Array;
+	}> = [];
+	private forgotten = false;
+	private inputReportListener: ((event: { data: DataView }) => void) | null =
+		null;
+
+	constructor(options: {
+		vendorId: number;
+		productId: number;
+		serialNumber?: string;
+		productName?: string;
+		reportId?: number;
+	}) {
+		this.vendorId = options.vendorId;
+		this.productId = options.productId;
+		this.serialNumber = options.serialNumber ?? null;
+		this.productName = options.productName ?? null;
+		this.collections = [
+			{ outputReports: [{ reportId: options.reportId ?? 1 }] },
+		];
+	}
+
+	async open(): Promise<void> {
+		this.opened = true;
+	}
+
+	async close(): Promise<void> {
+		this.opened = false;
+	}
+
+	async forget(): Promise<void> {
+		this.forgotten = true;
+	}
+
+	async sendReport(
+		reportId: number,
+		data: Uint8Array<ArrayBuffer>,
+	): Promise<void> {
+		this.writes.push({ reportId, data: new Uint8Array(data) });
+	}
+
+	addEventListener(
+		type: "inputreport",
+		listener: (event: { data: DataView }) => void,
+	): void {
+		if (type === "inputreport") {
+			this.inputReportListener = listener;
+		}
+	}
+
+	removeEventListener(
+		type: "inputreport",
+		listener: (event: { data: DataView }) => void,
+	): void {
+		if (type === "inputreport" && this.inputReportListener === listener) {
+			this.inputReportListener = null;
+		}
+	}
+
+	emitInputReport(data: Uint8Array): void {
+		this.inputReportListener?.({
+			data: new DataView(data.buffer.slice(0)),
+		});
+	}
+
+	getWrites(): Array<{ reportId: number; data: Uint8Array }> {
+		return this.writes.map((entry) => ({
+			reportId: entry.reportId,
+			data: new Uint8Array(entry.data),
+		}));
+	}
+
+	wasForgotten(): boolean {
+		return this.forgotten;
+	}
+}
+
+class FakeHid {
+	private readonly devices: FakeHidDevice[];
+
+	constructor(devices: FakeHidDevice[] = []) {
+		this.devices = devices;
+	}
+
+	async getDevices(): Promise<readonly FakeHidDevice[]> {
+		return this.devices;
+	}
+
+	async requestDevice(): Promise<readonly FakeHidDevice[]> {
+		return this.devices;
+	}
+}
+
 describe("OpenPort2Transport", () => {
 	describe("listDevices", () => {
 		it("returns only devices matching VID 0x0403 and PID 0xcc4d", async () => {
@@ -351,6 +479,25 @@ describe("OpenPort2Transport", () => {
 
 			const devices = await transport.listDevices();
 			expect(devices).toEqual([]);
+		});
+
+		it("returns matching HID devices when USB is unavailable", async () => {
+			const fakeHid = new FakeHid([
+				new FakeHidDevice({
+					vendorId: 0x0403,
+					productId: 0xcc4d,
+					serialNumber: "OP2-HID-001",
+					productName: "Tactrix OpenPort 2.0",
+				}),
+			]);
+
+			const transport = new OpenPort2Transport({
+				hid: fakeHid,
+			});
+
+			const devices = await transport.listDevices();
+			expect(devices).toHaveLength(1);
+			expect(devices[0]?.id).toBe("openport2:OP2-HID-001");
 		});
 
 		it("continues to serial discovery when USB enumeration fails", async () => {
@@ -533,6 +680,24 @@ describe("OpenPort2Transport", () => {
 			expect(connection.deviceInfo.id).toBe(`openport2-serial:${path}`);
 			await connection.close();
 		});
+
+		it("connects to a HID-backed device by its ID", async () => {
+			const fakeHidDevice = new FakeHidDevice({
+				vendorId: 0x0403,
+				productId: 0xcc4d,
+				serialNumber: "OP2-HID-002",
+				productName: "Tactrix OpenPort 2.0",
+			});
+			const transport = new OpenPort2Transport({
+				hid: new FakeHid([fakeHidDevice]),
+			});
+
+			const connection = await transport.connect("openport2:OP2-HID-002");
+
+			expect(fakeHidDevice.opened).toBe(true);
+			expect(connection.deviceInfo.id).toBe("openport2:OP2-HID-002");
+			await connection.close();
+		});
 	});
 
 	describe("OpenPort2Connection", () => {
@@ -588,6 +753,17 @@ describe("OpenPort2Transport", () => {
 				data: createIso15765ResponseFrame(testData),
 			}));
 			await expect(connection.sendFrame(testData)).resolves.toEqual(testData);
+			expect(fakeDevice.getWrites()).toEqual([
+				new Uint8Array([
+					...new TextEncoder().encode("att6 6 64\r\n"),
+					0x00,
+					0x00,
+					0x07,
+					0xe0,
+					0x01,
+					0x02,
+				]),
+			]);
 		});
 
 		it("reassembles ISO15765 responses split across multiple adapter reads", async () => {
@@ -785,6 +961,29 @@ describe("OpenPort2Transport", () => {
 			expect(deviceInfo.id).toBe(`openport2-serial:${path}`);
 			expect(deviceInfo.name).toContain("(Serial)");
 		});
+
+		it("falls back to HID selection when USB request fails", async () => {
+			const fakeUsb = new FakeUSB([]);
+			vi.spyOn(fakeUsb, "requestDevice").mockRejectedValue(
+				new Error("USB request failed"),
+			);
+			const fakeHid = new FakeHid([
+				new FakeHidDevice({
+					vendorId: 0x0403,
+					productId: 0xcc4d,
+					serialNumber: "OP2-HID-REQUEST",
+					productName: "Tactrix OpenPort 2.0",
+				}),
+			]);
+
+			const transport = new OpenPort2Transport({
+				usb: fakeUsb,
+				hid: fakeHid,
+			});
+
+			const deviceInfo = await transport.requestDevice();
+			expect(deviceInfo.id).toBe("openport2:OP2-HID-REQUEST");
+		});
 	});
 
 	describe("forgetDevice", () => {
@@ -822,6 +1021,22 @@ describe("OpenPort2Transport", () => {
 			await transport.forgetDevice(`openport2-serial:${path}`);
 
 			expect(serial.getForgottenPath()).toBe(path);
+		});
+
+		it("forgets a matching HID device", async () => {
+			const device = new FakeHidDevice({
+				vendorId: 0x0403,
+				productId: 0xcc4d,
+				serialNumber: "OP2-HID-FORGET",
+				productName: "Tactrix OpenPort 2.0",
+			});
+			const transport = new OpenPort2Transport({
+				hid: new FakeHid([device]),
+			});
+
+			await transport.forgetDevice("openport2:OP2-HID-FORGET");
+
+			expect(device.wasForgotten()).toBe(true);
 		});
 	});
 
@@ -888,7 +1103,7 @@ describe("OpenPort2Transport", () => {
 			await connection.close();
 		});
 
-		it("initialization should use PASS_FILTER instead of the legacy flow-control filter tuple", async () => {
+		it("initialization should use the serial FLOW_FILTER tuple for ISO15765 RX/TX", async () => {
 			const path = "/dev/cu.usbmodemTAgdW56p1";
 			let getOpenedPortWrites = (): Uint8Array[] => [];
 			const serial = new FakeSerialRuntime(
@@ -930,8 +1145,22 @@ describe("OpenPort2Transport", () => {
 			await connection.initialize();
 
 			const writes = getOpenedPortWrites();
-			expect(decodeAsciiPrefix(writes[4] ?? new Uint8Array(0), 12)).toBe(
-				"atf6 1 0 4\r\n",
+			expect(writes[4]).toEqual(
+				new Uint8Array([
+					...new TextEncoder().encode("atf6 3 64 4\r\n"),
+					0xff,
+					0xff,
+					0xff,
+					0xff,
+					0x00,
+					0x00,
+					0x07,
+					0xe8,
+					0x00,
+					0x00,
+					0x07,
+					0xe0,
+				]),
 			);
 			await connection.close();
 		});
@@ -1028,6 +1257,237 @@ describe("OpenPort2Transport", () => {
 			await connection.initialize();
 
 			await expect(connection.sendFrame(payload)).resolves.toEqual(payload);
+			await connection.close();
+		});
+
+		it("ignores plain aro console acknowledgements between serial ISO15765 packets", async () => {
+			const path = "/dev/cu.usbmodemTAgdW56p1";
+			const payload = new Uint8Array([0x50, 0x92]);
+			const txDone = createAdapterPacket(
+				0x36,
+				0x10,
+				new Uint8Array([0x00, 0x00, 0x07, 0xe0]),
+			);
+			const ack = new TextEncoder().encode("aro\r\n");
+			const response = createTraceSingleFrameResponse(0x7e8, payload);
+			const combined = new Uint8Array(
+				txDone.length + ack.length + response.length,
+			);
+			combined.set(txDone, 0);
+			combined.set(ack, txDone.length);
+			combined.set(response, txDone.length + ack.length);
+			const serial = new FakeSerialRuntime(
+				[
+					{
+						path,
+						serialNumber: "TAgdW56p",
+						manufacturer: "Tactrix",
+						friendlyName: "Tactrix OpenPort 2.0",
+						vendorId: "0403",
+						productId: "cc4d",
+					},
+				],
+				new Map([
+					[
+						path,
+						() =>
+							new FakeSerialPort(path, [
+								new TextEncoder().encode(
+									"ari main code version : 1.17.4877\r\n",
+								),
+								new TextEncoder().encode("aro\r\n"),
+								new TextEncoder().encode("arr 16 12234\r\n"),
+								new Uint8Array(0),
+								new TextEncoder().encode("aro\r\n"),
+								new TextEncoder().encode("arf6 0 0\r\n"),
+								new Uint8Array(0),
+								new Uint8Array(0),
+								combined,
+							]),
+					],
+				]),
+			);
+
+			const transport = new OpenPort2Transport({ serial });
+			const connection = (await transport.connect(
+				`openport2-serial:${path}`,
+			)) as TestConnection;
+			await connection.initialize();
+
+			await expect(
+				connection.sendFrame(new Uint8Array([0x10, 0x92])),
+			).resolves.toEqual(payload);
+			await connection.close();
+		});
+
+		it("replays a trace-shaped 10 92 -> 50 92 response over serial", async () => {
+			const path = "/dev/cu.usbmodemTAgdW56p1";
+			let openedPort: FakeSerialPort | null = null;
+			const serial = new FakeSerialRuntime(
+				[
+					{
+						path,
+						serialNumber: "TAgdW56p",
+						manufacturer: "Tactrix",
+						friendlyName: "Tactrix OpenPort 2.0",
+						vendorId: "0403",
+						productId: "cc4d",
+					},
+				],
+				new Map([
+					[
+						path,
+						() => {
+							openedPort = new FakeSerialPort(path, [
+								new TextEncoder().encode(
+									"ari main code version : 1.17.4877\r\n",
+								),
+								new TextEncoder().encode("aro\r\n"),
+								new TextEncoder().encode("arr 16 12234\r\n"),
+								new Uint8Array(0),
+								new TextEncoder().encode("aro\r\n"),
+								new TextEncoder().encode("arf6 0 0\r\n"),
+								new Uint8Array(0),
+								createTraceSingleFrameResponse(
+									0x7e8,
+									new Uint8Array([0x50, 0x92]),
+								),
+							]);
+							return openedPort;
+						},
+					],
+				]),
+			);
+
+			const transport = new OpenPort2Transport({ serial });
+			const connection = (await transport.connect(
+				`openport2-serial:${path}`,
+			)) as TestConnection;
+			await connection.initialize();
+
+			await expect(
+				connection.sendFrame(new Uint8Array([0x10, 0x92])),
+			).resolves.toEqual(new Uint8Array([0x50, 0x92]));
+			expect(openedPort).not.toBeNull();
+			if (openedPort == null) {
+				throw new Error("Expected serial port to be opened");
+			}
+			const writtenPort: FakeSerialPort = openedPort;
+			expect(writtenPort.getWrites().at(-1)).toEqual(
+				new Uint8Array([
+					...new TextEncoder().encode("att6 6 64\r\n"),
+					0x00,
+					0x00,
+					0x07,
+					0xe0,
+					0x10,
+					0x92,
+				]),
+			);
+			await connection.close();
+		});
+
+		it("replays a trace-shaped Mode 23 RPM response over serial", async () => {
+			const path = "/dev/cu.usbmodemTAgdW56p1";
+			let openedPort: FakeSerialPort | null = null;
+			const serial = new FakeSerialRuntime(
+				[
+					{
+						path,
+						serialNumber: "TAgdW56p",
+						manufacturer: "Tactrix",
+						friendlyName: "Tactrix OpenPort 2.0",
+						vendorId: "0403",
+						productId: "cc4d",
+					},
+				],
+				new Map([
+					[
+						path,
+						() => {
+							openedPort = new FakeSerialPort(path, [
+								new TextEncoder().encode(
+									"ari main code version : 1.17.4877\r\n",
+								),
+								new TextEncoder().encode("aro\r\n"),
+								new TextEncoder().encode("arr 16 12234\r\n"),
+								new Uint8Array(0),
+								new TextEncoder().encode("aro\r\n"),
+								new TextEncoder().encode("arf6 0 0\r\n"),
+								new Uint8Array(0),
+								createTraceSingleFrameResponse(
+									0x7e8,
+									new Uint8Array([0x63, 0x00, 0x00]),
+								),
+							]);
+							return openedPort;
+						},
+					],
+				]),
+			);
+
+			const transport = new OpenPort2Transport({ serial });
+			const connection = (await transport.connect(
+				`openport2-serial:${path}`,
+			)) as TestConnection;
+			await connection.initialize();
+
+			await expect(
+				connection.sendFrame(new Uint8Array([0x23, 0x80, 0x87, 0x8c, 0x02])),
+			).resolves.toEqual(new Uint8Array([0x63, 0x00, 0x00]));
+			expect(openedPort).not.toBeNull();
+			if (openedPort == null) {
+				throw new Error("Expected serial port to be opened");
+			}
+			const writtenPort: FakeSerialPort = openedPort;
+			expect(writtenPort.getWrites().at(-1)).toEqual(
+				new Uint8Array([
+					...new TextEncoder().encode("att6 9 64\r\n"),
+					0x00,
+					0x00,
+					0x07,
+					0xe0,
+					0x23,
+					0x80,
+					0x87,
+					0x8c,
+					0x02,
+				]),
+			);
+			await connection.close();
+		});
+	});
+
+	describe("OpenPort2HidConnection", () => {
+		it("uses the shared ISO15765 CAN-ID wrapping on HID writes", async () => {
+			const fakeHidDevice = new FakeHidDevice({
+				vendorId: 0x0403,
+				productId: 0xcc4d,
+				serialNumber: "OP2-HID-TX",
+				productName: "Tactrix OpenPort 2.0",
+				reportId: 7,
+			});
+			const transport = new OpenPort2Transport({
+				hid: new FakeHid([fakeHidDevice]),
+			});
+			const connection = (await transport.connect(
+				"openport2:OP2-HID-TX",
+			)) as TestConnection;
+
+			const pending = connection.sendFrame(new Uint8Array([0x10, 0x92]));
+			await Promise.resolve();
+			fakeHidDevice.emitInputReport(
+				new Uint8Array([0x00, 0x00, 0x07, 0xe8, 0x02, 0x50, 0x92]),
+			);
+
+			await expect(pending).resolves.toEqual(new Uint8Array([0x50, 0x92]));
+			expect(fakeHidDevice.getWrites()).toEqual([
+				{
+					reportId: 7,
+					data: new Uint8Array([0x00, 0x00, 0x07, 0xe0, 0x10, 0x92]),
+				},
+			]);
+
 			await connection.close();
 		});
 	});

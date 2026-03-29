@@ -10,7 +10,6 @@ import {
 	CMD_READ_WORD_INC,
 	CMD_SET_ADDRESS,
 	decodeRaxPid,
-	MODE23_PID_BASE,
 	MODE23_PID_DESCRIPTORS,
 	Mut3Protocol,
 	RAX_PID_BASE,
@@ -54,6 +53,10 @@ function makeMode23Mock(
 	transportName = "openport2",
 ): DeviceConnection {
 	return makeMockConnection(transportName, async (data) => {
+		if (data[0] === 0x10 && data[1] === 0x92) {
+			return new Uint8Array([0x50, 0x92]);
+		}
+
 		if (data[0] !== 0x23 || data[1] !== 0x80) {
 			throw new Error(`Unexpected Mode 23 request: [${Array.from(data)}]`);
 		}
@@ -725,33 +728,11 @@ describe("Mut3Protocol.getSupportedPids()", () => {
 		expect(sendFrame).not.toHaveBeenCalled();
 	});
 
-	it("returns traced Mode 23 descriptors for openport2", async () => {
+	it("returns no active CAN PIDs for openport2 while Mode 23 is disabled", async () => {
 		const protocol = new Mut3Protocol();
 		const connection = makeMockConnection("openport2");
 		const pids = await protocol.getSupportedPids?.(connection);
-		expect(pids).toEqual(MODE23_PID_DESCRIPTORS);
-	});
-
-	it("includes named and scaled Mode 23 descriptors when exact table matches exist", async () => {
-		const protocol = new Mut3Protocol();
-		const connection = makeMockConnection("openport2");
-		const pids = await protocol.getSupportedPids?.(connection);
-		expect(pids.find((pid) => pid.name === "LTFT Idle")?.unit).toBe("%");
-		expect(pids.find((pid) => pid.name === "LTFT Cruise")?.unit).toBe("%");
-		expect(pids.find((pid) => pid.name === "Cruise Light")?.unit).toBe("raw");
-		expect(pids.find((pid) => pid.name === "RPM")?.unit).toBe("rpm");
-		expect(pids.find((pid) => pid.name === "Battery")?.unit).toBe("V");
-		expect(pids.find((pid) => pid.name === "Speed")?.unit).toBe("km/h");
-		expect(pids.find((pid) => pid.name === "WGDC Correction")?.unit).toBe(
-			"unit",
-		);
-	});
-
-	it("does not ship ambiguous raw-placeholder Mode 23 descriptors in the built-in working set", async () => {
-		const protocol = new Mut3Protocol();
-		const connection = makeMockConnection("openport2");
-		const pids = await protocol.getSupportedPids?.(connection);
-		expect(pids.find((pid) => pid.name.startsWith("RAM 0x"))).toBeUndefined();
+		expect(pids).toEqual([]);
 	});
 
 	it("returns RAX descriptors for kline", async () => {
@@ -759,23 +740,29 @@ describe("Mut3Protocol.getSupportedPids()", () => {
 		const connection = makeMockConnection("kline");
 		const pids = await protocol.getSupportedPids?.(connection);
 		expect(pids).toEqual(RAX_PID_DESCRIPTORS);
+		expect(pids.find((pid) => pid.name === "Vehicle Speed")?.unit).toBe(
+			"km/h",
+		);
+		expect(pids.find((pid) => pid.name === "Battery Voltage")?.unit).toBe("V");
+		expect(pids.find((pid) => pid.name === "Coolant Temp (ECT)")?.unit).toBe(
+			"°C",
+		);
 	});
 
-	it("all PID numbers are in the RAX synthetic range (≥ 0x8000)", async () => {
+	it("returns no openport2 MUT-III PIDs while CAN logging is disabled", async () => {
 		const protocol = new Mut3Protocol();
 		const connection = makeMockConnection("openport2");
+		const pids = await protocol.getSupportedPids?.(connection);
+		expect(pids).toHaveLength(0);
+	});
+
+	it("all kline PID numbers are in the RAX synthetic range (≥ 0x8000)", async () => {
+		const protocol = new Mut3Protocol();
+		const connection = makeMockConnection("kline");
 		const pids = await protocol.getSupportedPids?.(connection);
 		for (const p of pids) {
-			expect(p.pid).toBeGreaterThanOrEqual(MODE23_PID_BASE);
+			expect(p.pid).toBeGreaterThanOrEqual(RAX_PID_BASE);
 		}
-	});
-
-	it("contains exactly the same number of PIDs as total RAX parameters", async () => {
-		const protocol = new Mut3Protocol();
-		const connection = makeMockConnection("openport2");
-		const pids = await protocol.getSupportedPids?.(connection);
-		const expectedTotal = MODE23_PID_DESCRIPTORS.length;
-		expect(pids.length).toBe(expectedTotal);
 	});
 });
 
@@ -850,7 +837,7 @@ describe("Mut3Protocol.streamLiveData()", () => {
 
 	it("does not call onFrame when no PIDs are requested", async () => {
 		const protocol = new Mut3Protocol();
-		const connection = makeMockConnection("openport2");
+		const connection = makeRaxStreamMock(new Map());
 		const onFrame = vi.fn();
 		const session = protocol.streamLiveData?.(connection, [], onFrame);
 
@@ -861,138 +848,30 @@ describe("Mut3Protocol.streamLiveData()", () => {
 		expect(onFrame).not.toHaveBeenCalled();
 	});
 
-	it("polls traced Mode 23 addresses for requested openport2 PIDs", async () => {
+	it("throws for openport2 while the hardcoded Mode 23 path is disabled", () => {
 		const protocol = new Mut3Protocol();
-		const requestFrames: number[][] = [];
-		const connection = makeMockConnection("openport2", async (data) => {
-			requestFrames.push(Array.from(data));
-			if (
-				data[0] === 0x23 &&
-				data[1] === 0x80 &&
-				data[2] === 0x87 &&
-				data[3] === 0x8c &&
-				data[4] === 0x02
-			) {
-				return new Uint8Array([0x63, 0x00, 0x00]);
-			}
-			if (
-				data[0] === 0x23 &&
-				data[1] === 0x80 &&
-				data[2] === 0x87 &&
-				data[3] === 0x5e &&
-				data[4] === 0x02
-			) {
-				return new Uint8Array([0x63, 0x01, 0x2c]);
-			}
-			throw new Error(`Unexpected Mode 23 request: [${Array.from(data)}]`);
-		});
-
-		const pid0 = findMode23PidByAddress(0x875e);
-		const pid1 = findMode23PidByAddress(0x878c);
-
-		const session = protocol.streamLiveData?.(
-			connection,
-			[pid0, pid1],
-			vi.fn(),
-		);
-		await new Promise<void>((resolve) => setTimeout(resolve, 60));
-		session.stop();
-
-		expect(requestFrames).toContainEqual([0x23, 0x80, 0x87, 0x5e, 0x02]);
-		expect(requestFrames).toContainEqual([0x23, 0x80, 0x87, 0x8c, 0x02]);
+		const connection = makeMockConnection("openport2");
+		expect(() =>
+			protocol.streamLiveData?.(
+				connection,
+				[findMode23PidByAddress(0x878c)],
+				vi.fn(),
+			),
+		).toThrow(/temporarily disabled/i);
 	});
 
-	it("decodes traced Mode 23 payloads into raw openport2 values", async () => {
-		const protocol = new Mut3Protocol();
+	it("keeps low-level Mode 23 helpers in-tree even though live CAN logging is disabled", async () => {
 		const connection = makeMode23Mock(
 			new Map<number, number[]>([
-				[0x875e, [0x01, 0x2c]],
-				[0x8fc0, [0x00, 0x00, 0x00, 0x00]],
+				[0x4575, [0x80]],
+				[0x878c, [0x01, 0x00]],
+				[0x882f, [0x32]],
 			]),
 		);
 
-		const pid0 = findMode23PidByAddress(0x875e);
-		const pid1 = findMode23PidByAddress(0x878c);
-
-		const frames: LiveDataFrame[] = [];
-		const session = protocol.streamLiveData?.(
-			connection,
-			[pid0, pid1],
-			(frame) => frames.push(frame),
-		);
-
-		await new Promise<void>((resolve) => setTimeout(resolve, 60));
-		session.stop();
-
-		expect(
-			frames.some((frame) => frame.pid === pid0 && frame.value === 0x012c),
-		).toBe(true);
-		expect(
-			frames.some((frame) => frame.pid === pid1 && frame.value === 0),
-		).toBe(true);
-	});
-
-	it("applies known Mode 23 scaling for exact CSV-backed address matches", async () => {
-		const protocol = new Mut3Protocol();
-		const connection = makeMode23Mock(
-			new Map<number, number[]>([[0x4575, [0x80]]]),
-		);
-		const pid = findMode23PidByAddress(0x4575);
-
-		const frames: LiveDataFrame[] = [];
-		const session = protocol.streamLiveData?.(connection, [pid], (frame) =>
-			frames.push(frame),
-		);
-
-		await new Promise<void>((resolve) => setTimeout(resolve, 60));
-		session.stop();
-
-		expect(frames.some((frame) => frame.pid === pid && frame.value === 0)).toBe(
-			true,
-		);
-		expect(frames.every((frame) => frame.unit === "%")).toBe(true);
-	});
-
-	it("applies XML-backed Mode 23 scaling for exact Evo X RPM matches", async () => {
-		const protocol = new Mut3Protocol();
-		const connection = makeMode23Mock(
-			new Map<number, number[]>([[0x878c, [0x01, 0x00]]]),
-		);
-		const pid = findMode23PidByAddress(0x878c);
-
-		const frames: LiveDataFrame[] = [];
-		const session = protocol.streamLiveData?.(connection, [pid], (frame) =>
-			frames.push(frame),
-		);
-
-		await new Promise<void>((resolve) => setTimeout(resolve, 60));
-		session.stop();
-
-		expect(
-			frames.some((frame) => frame.pid === pid && frame.value === 1000),
-		).toBe(true);
-		expect(frames.every((frame) => frame.unit === "rpm")).toBe(true);
-	});
-
-	it("normalizes Mode 23 speed to km/h in the built-in working set", async () => {
-		const protocol = new Mut3Protocol();
-		const connection = makeMode23Mock(
-			new Map<number, number[]>([[0x882f, [0x32]]]),
-		);
-		const pid = findMode23PidByAddress(0x882f);
-
-		const frames: LiveDataFrame[] = [];
-		const session = protocol.streamLiveData?.(connection, [pid], (frame) =>
-			frames.push(frame),
-		);
-
-		await new Promise<void>((resolve) => setTimeout(resolve, 60));
-		session.stop();
-
-		expect(
-			frames.some((frame) => frame.pid === pid && frame.value === 100),
-		).toBe(true);
-		expect(frames.every((frame) => frame.unit === "km/h")).toBe(true);
+		await expect(readMode23Value(connection, 0x4575, 1)).resolves.toBe(0x80);
+		await expect(readMode23Value(connection, 0x878c, 2)).resolves.toBe(0x0100);
+		await expect(readMode23Value(connection, 0x882f, 1)).resolves.toBe(0x32);
 	});
 
 	it("emits LiveDataFrame for each requested PID", async () => {
@@ -1173,18 +1052,12 @@ describe("Mut3Protocol.streamLiveData()", () => {
 		expect(frames.length).toBe(countAfterStop);
 	});
 
-	it("does not throw when PIDs are outside the RAX range", () => {
+	it("throws for openport2 regardless of requested PID list while CAN logging is disabled", () => {
 		const protocol = new Mut3Protocol();
 		const connection = makeMockConnection("openport2");
-		// OBD-II PIDs that have no mapping
-		expect(() => {
-			const session = protocol.streamLiveData?.(
-				connection,
-				[0x0c, 0x0d],
-				vi.fn(),
-			);
-			session.stop();
-		}).not.toThrow();
+		expect(() =>
+			protocol.streamLiveData?.(connection, [0x0c, 0x0d], vi.fn()),
+		).toThrow(/temporarily disabled/i);
 	});
 
 	it("emits decoded RPM value proportional to raw bytes (RAX_C block)", async () => {

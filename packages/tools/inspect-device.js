@@ -6,6 +6,7 @@
  * @module
  */
 
+import { Console } from "node:console";
 import { writeFile } from "node:fs/promises";
 import {
 	createNodeSerialRuntime,
@@ -20,8 +21,8 @@ import {
 } from "../device/dist/index.js";
 import { MitsubishiBootloaderProtocol } from "../device/protocols/mitsubishi-bootloader/dist/index.js";
 import {
+	MODE23_PID_DESCRIPTORS,
 	Mut3Protocol,
-	RAX_PID_DESCRIPTORS,
 } from "../device/protocols/mut3/dist/index.js";
 import { Obd2Protocol } from "../device/protocols/obd2/dist/index.js";
 import { SubaruProtocol } from "../device/protocols/subaru/dist/index.js";
@@ -39,6 +40,8 @@ console.warn = () => {};
  * @typedef {import("../device/dist/index.js").DeviceInfo} DeviceInfo
  * @typedef {import("../device/dist/index.js").DeviceConnection} DeviceConnection
  * @typedef {import("../device/dist/index.js").EcuProtocol} EcuProtocol
+ * @typedef {import("../device/dist/index.js").LiveDataFrame} LiveDataFrame
+ * @typedef {import("../device/dist/index.js").LiveDataHealth} LiveDataHealth
  * @typedef {import("../device/dist/index.js").PidDescriptor} PidDescriptor
  * @typedef {import("../mcp/dist/formatters/diagnostics-formatter.js").DiagnosticEvent} FormattedDiagnosticEvent
  * @typedef {import("../mcp/dist/formatters/diagnostics-formatter.js").DiagnosticResult} FormattedDiagnosticResult
@@ -46,6 +49,16 @@ console.warn = () => {};
 
 /**
  * @typedef {DeviceConnection & { initialize?: () => Promise<void> }} InitializableDeviceConnection
+ */
+
+/**
+ * @typedef {InitializableDeviceConnection & { receiveFrame?: (maxLength: number) => Promise<Uint8Array> }} MonitorableDeviceConnection
+ */
+/**
+ * @typedef {MonitorableDeviceConnection & {
+ *   channelId?: number | null;
+ *   writeMessage?: (channelId: number, data: Uint8Array, flags: number) => Promise<void>;
+ * }} LowLevelOpenPortConnection
  */
 
 /**
@@ -109,6 +122,19 @@ console.warn = () => {};
  */
 
 /**
+ * @typedef {Object} MonitorDeviceOptions
+ * @property {string | undefined} [device]
+ * @property {boolean | undefined} [verbose]
+ * @property {string | undefined} [traceFile]
+ * @property {string | undefined} [transport]
+ * @property {number | string | undefined} [duration]
+ * @property {number | string | undefined} [timeout]
+ * @property {number | string | undefined} [maxLength]
+ * @property {string | undefined} [data]
+ * @property {boolean | undefined} [ascii]
+ */
+
+/**
  * Create a USB runtime for desktop Node environments.
  *
  * @returns {Promise<NonNullable<OpenPortRuntime["usb"]>>}
@@ -163,9 +189,24 @@ const protocolRegistry = [
 const registeredProtocols = protocolRegistry.map((entry) => entry.protocol);
 
 /** @type {PidDescriptor[]} */
-const mut3PidDescriptors = RAX_PID_DESCRIPTORS;
+const mut3PidDescriptors = MODE23_PID_DESCRIPTORS;
+const mut3PidNameById = new Map(
+	mut3PidDescriptors.map((descriptor) => [descriptor.pid, descriptor.name]),
+);
+const stderrConsole = new Console({
+	stdout: process.stderr,
+	stderr: process.stderr,
+});
 
-const DEFAULT_MUT3_PID_NAMES = ["RPM", "Boost Pressure", "Timing Advance"];
+const DEFAULT_MUT3_PID_NAMES = ["RPM", "Boost", "ECT"];
+
+const MUT3_PID_ALIASES = new Map([
+	["boostpressure", "Boost"],
+	["coolanttemp", "ECT"],
+	["coolanttemperature", "ECT"],
+	["enginerpm", "RPM"],
+	["vehiclespeed", "Speed"],
+]);
 
 /**
  * Create a serial runtime for desktop Node environments.
@@ -262,6 +303,14 @@ function normalizePidToken(value) {
 
 /**
  * @param {string} value
+ * @returns {string}
+ */
+function resolveMut3PidAlias(value) {
+	return MUT3_PID_ALIASES.get(normalizePidToken(value)) ?? value;
+}
+
+/**
+ * @param {string} value
  * @returns {number}
  */
 function parseNumericPidValue(value) {
@@ -282,9 +331,11 @@ function parseNumericPidValue(value) {
 function resolveMut3DefaultPids(names) {
 	return names
 		.map((name) => {
+			const resolvedName = resolveMut3PidAlias(name);
 			const match = mut3PidDescriptors.find(
 				(descriptor) =>
-					normalizePidToken(descriptor.name) === normalizePidToken(name),
+					normalizePidToken(descriptor.name) ===
+					normalizePidToken(resolvedName),
 			);
 			return match?.pid ?? null;
 		})
@@ -296,6 +347,7 @@ function resolveMut3DefaultPids(names) {
  * @returns {number}
  */
 function resolveMut3Pid(input) {
+	const resolvedInput = resolveMut3PidAlias(input);
 	const numericPid = /^(0x[a-f0-9]+|\d+)$/i.test(input)
 		? parseNumericPidValue(input)
 		: null;
@@ -311,7 +363,7 @@ function resolveMut3Pid(input) {
 		return exact.pid;
 	}
 
-	const normalized = normalizePidToken(input);
+	const normalized = normalizePidToken(resolvedInput);
 	const exact = mut3PidDescriptors.find(
 		(descriptor) => normalizePidToken(descriptor.name) === normalized,
 	);
@@ -338,7 +390,7 @@ function resolveMut3Pid(input) {
 	}
 
 	throw new Error(
-		`Unknown MUT-III PID name: ${input}. Try names like RPM, Boost Pressure, Timing Advance, or a synthetic PID such as 0x${mut3PidDescriptors[0]?.pid.toString(16)}.`,
+		`Unknown MUT-III PID name: ${input}. Try names like RPM, Boost, ECT, or a synthetic PID such as 0x${mut3PidDescriptors[0]?.pid.toString(16)}.`,
 	);
 }
 
@@ -454,7 +506,16 @@ function formatOperationSummary(summary) {
 									frame
 								)
 							: {};
-					return `  - [${index}] t=${String(record.timestamp)} pid=${String(record.pid)} value=${String(record.value)} unit=${String(record.unit ?? "")}`;
+					const pid =
+						typeof record.pid === "number" ? record.pid : Number.NaN;
+					const pidLabel = Number.isNaN(pid)
+						? String(record.pid)
+						: `0x${pid.toString(16)}${mut3PidNameById.has(pid) ? ` (${mut3PidNameById.get(pid)})` : ""}`;
+					const unitSuffix =
+						record.unit != null && String(record.unit).length > 0
+							? ` ${String(record.unit)}`
+							: "";
+					return `  - [${index}] t=${String(record.timestamp)} pid=${pidLabel} value=${String(record.value)}${unitSuffix}`;
 				});
 				return ["- sampledFrames:", ...lines].join("\n");
 			}
@@ -470,6 +531,114 @@ function formatOperationSummary(summary) {
 	}
 
 	return `\n## Operation Result\n\n${entries}\n`;
+}
+
+/**
+ * @param {unknown} value
+ * @returns {string}
+ */
+function formatLiveValue(value) {
+	if (typeof value === "number") {
+		return Number.isInteger(value) ? String(value) : value.toFixed(2);
+	}
+	return String(value);
+}
+
+/**
+ * @param {number} pid
+ * @returns {string}
+ */
+function formatPidLabel(pid) {
+	return mut3PidNameById.get(pid) ?? `0x${pid.toString(16)}`;
+}
+
+/**
+ * Build a throttled live-table renderer for CLI log sessions.
+ *
+ * @returns {{
+ *   onFrame: (frame: LiveDataFrame) => void;
+ *   onHealth: (health: LiveDataHealth) => void;
+ *   flush: () => void;
+ * }}
+ */
+function createLiveLogRenderer() {
+	/** @type {Map<number, { label: string; value: string; unit: string; timestamp: number | null }>} */
+	const latestFrames = new Map();
+	/** @type {LiveDataHealth | null} */
+	let latestHealth = null;
+	/** @type {Array<Record<string, string>>} */
+	const snapshots = [];
+	let lastSnapshotAt = 0;
+
+	function buildSnapshotRow() {
+		if (latestFrames.size === 0) {
+			return null;
+		}
+		const entries = [...latestFrames.entries()]
+			.sort(([leftPid], [rightPid]) => leftPid - rightPid)
+			.map(([, frame]) => frame);
+		const latestTimestamp = entries.reduce(
+			(max, frame) =>
+				frame.timestamp != null && frame.timestamp > max ? frame.timestamp : max,
+			0,
+		);
+		/** @type {Record<string, string>} */
+		const row = {
+			Timestamp:
+				latestTimestamp > 0
+					? new Date(latestTimestamp).toLocaleTimeString()
+					: "",
+		};
+		for (const frame of entries) {
+			row[frame.label] = `${frame.value}${frame.unit.length > 0 ? ` ${frame.unit}` : ""}`;
+		}
+		return row;
+	}
+
+	function snapshot() {
+		const row = buildSnapshotRow();
+		if (row == null) {
+			return;
+		}
+		snapshots.push(row);
+		lastSnapshotAt = Date.now();
+	}
+
+	function render() {
+		if (snapshots.length === 0) {
+			return;
+		}
+		process.stderr.write("\n");
+		stderrConsole.table(snapshots);
+		if (latestHealth != null) {
+			console.error(`[health] ${JSON.stringify(latestHealth)}`);
+		}
+	}
+
+	return {
+		onFrame(frame) {
+			if (typeof frame.pid !== "number") {
+				return;
+			}
+				latestFrames.set(frame.pid, {
+					label: formatPidLabel(frame.pid),
+					value: formatLiveValue(frame.value),
+					unit: frame.unit == null ? "" : String(frame.unit),
+					timestamp:
+						typeof frame.timestamp === "number" ? frame.timestamp : null,
+				});
+				if (Date.now() - lastSnapshotAt >= 500) {
+					snapshot();
+				}
+			},
+			onHealth(health) {
+				latestHealth = health;
+			},
+			flush() {
+				snapshot();
+				render();
+			},
+		};
 }
 
 /**
@@ -529,6 +698,37 @@ function parseHexInput(input) {
 		return Number.parseInt(cleaned, 16);
 	});
 	return Uint8Array.from(bytes);
+}
+
+/**
+ * Wrap a bare UDS payload as a single-frame ISO15765 CAN packet for OpenPort writeMessage().
+ *
+ * @param {Uint8Array} data
+ * @returns {Uint8Array}
+ */
+function wrapIso15765MonitorPayload(data) {
+	if (
+		data.length === 12 &&
+		data[0] === 0x00 &&
+		data[1] === 0x00 &&
+		data[2] === 0x07 &&
+		(data[3] === 0xdf || data[3] === 0xe0 || data[3] === 0xe8)
+	) {
+		return data;
+	}
+
+	if (data.length > 7) {
+		throw new Error(
+			`Monitor write only supports bare single-frame ISO15765 payloads up to 7 bytes or explicit 12-byte CAN frames, received ${data.length}.`,
+		);
+	}
+
+	const frame = new Uint8Array(12);
+	frame[2] = 0x07;
+	frame[3] = 0xe0;
+	frame[4] = data.length & 0x0f;
+	frame.set(data, 5);
+	return frame;
 }
 
 /**
@@ -661,7 +861,7 @@ function createEventHandler(verbose, onEvent) {
  * @param {ListDeviceOptions | ConnectDeviceOptions | ProbeDeviceOptions | LogDeviceOptions | ReadRomDeviceOptions} opts
  * @param {EcuProtocol[]} protocols
  * @param {"none" | "log" | "read-rom"} operation
- * @param {Partial<DiagnosticOptions>} operationOptions
+ * @param {Partial<DiagnosticOptions> & Record<string, unknown>} operationOptions
  * @returns {DiagnosticOptions}
  */
 function buildDiagnosticOptions(opts, protocols, operation, operationOptions) {
@@ -952,6 +1152,7 @@ async function logDevice(opts) {
 		: undefined;
 
 	const eventHandler = createEventHandler(opts.verbose ?? false);
+	const liveRenderer = opts.verbose ? createLiveLogRenderer() : null;
 
 	try {
 		if (opts.verbose) {
@@ -959,16 +1160,23 @@ async function logDevice(opts) {
 		}
 
 		const protocols = resolveProtocols(opts.protocol);
+		/** @type {Partial<DiagnosticOptions> & Record<string, unknown>} */
+		const logOptions = {
+			logDuration: Number(opts.duration ?? 1000),
+			logPids: resolveLogPids(protocols, opts.pids),
+			onEvent: eventHandler,
+			traceWriter: traceWriter ?? null,
+		};
+		if (liveRenderer != null) {
+			logOptions.logOnFrame = liveRenderer.onFrame;
+			logOptions.logOnHealth = liveRenderer.onHealth;
+		}
 		const result = await runDiagnostic(
 			transport,
-			buildDiagnosticOptions(opts, protocols, "log", {
-				logDuration: Number(opts.duration ?? 1000),
-				logPids: resolveLogPids(protocols, opts.pids),
-				onEvent: eventHandler,
-				traceWriter: traceWriter ?? null,
-			}),
+			buildDiagnosticOptions(opts, protocols, "log", logOptions),
 		);
 		const operationSummary = getLatestOperationSummary(result);
+		liveRenderer?.flush();
 
 		await closeDiagnosticConnection(result);
 
@@ -1246,6 +1454,166 @@ async function rawDevice(opts) {
 	}
 }
 
+/**
+ * Poll raw transport RX bytes for a fixed duration, optionally sending one raw request first.
+ *
+ * @param {MonitorDeviceOptions} opts
+ * @returns {Promise<void>}
+ */
+async function monitorDevice(opts) {
+	const transport = new OpenPort2Transport(
+		await createOpenPortRuntime(opts.transport),
+	);
+
+	const durationMs = Math.max(1, Number(opts.duration ?? 3000));
+	const timeoutMs = Math.max(1, Number(opts.timeout ?? 250));
+	const maxLength = Math.max(1, Number(opts.maxLength ?? 512));
+	const request = opts.data != null ? parseHexInput(opts.data) : null;
+	const deadline = Date.now() + durationMs;
+
+	/** @type {MonitorableDeviceConnection | null} */
+	let connection = null;
+	let selectedDevice = null;
+	const frames = [];
+	let timeoutCount = 0;
+
+	try {
+		if (opts.verbose) {
+			console.error("Enumerating devices for raw RX monitor...");
+		}
+
+		const devices = await transport.listDevices();
+		if (devices.length === 0) {
+			throw new Error("No OpenPort 2.0 devices found.");
+		}
+
+		selectedDevice =
+			opts.device != null
+				? (devices.find((device) => device.id === opts.device) ?? null)
+				: (devices[0] ?? null);
+
+		if (selectedDevice == null) {
+			throw new Error(`Device not found: ${opts.device}`);
+		}
+
+		if (opts.verbose) {
+			console.error(`Connecting to ${selectedDevice.name}...`);
+		}
+		connection = /** @type {MonitorableDeviceConnection} */ (
+			await transport.connect(selectedDevice.id)
+		);
+
+		if (typeof connection.initialize === "function") {
+			if (opts.verbose) {
+				console.error("Initializing connection...");
+			}
+			await connection.initialize();
+		}
+
+		if (typeof connection.receiveFrame !== "function") {
+			throw new Error("Connected transport does not expose receiveFrame().");
+		}
+
+		if (request != null) {
+			if (opts.verbose) {
+				console.error(`[monitor] tx ${formatHexBytes(request)}`);
+			}
+			const lowLevelConnection = /** @type {LowLevelOpenPortConnection} */ (
+				connection
+			);
+			if (
+				typeof lowLevelConnection.writeMessage === "function"
+			) {
+				const channelId = lowLevelConnection.channelId ?? 6;
+				await lowLevelConnection.writeMessage(
+					channelId,
+					wrapIso15765MonitorPayload(request),
+					0,
+				);
+			} else {
+				throw new Error(
+					"Connected transport does not expose low-level writeMessage() for monitor --data.",
+				);
+			}
+		}
+
+		while (Date.now() < deadline) {
+			try {
+				const frame = await connection.receiveFrame(maxLength);
+				if (frame.length === 0) {
+					continue;
+				}
+				frames.push({
+					timestamp: new Date().toISOString(),
+					rx: formatHexBytes(frame),
+					rxAscii: formatAsciiBytes(frame),
+					rxLength: frame.length,
+				});
+				if (opts.verbose) {
+					console.error(
+						`[monitor] rx ${frames.at(-1)?.rx ?? formatHexBytes(frame)}`,
+					);
+				}
+			} catch (error) {
+				const message =
+					error instanceof Error ? error.message : String(error);
+				if (/timed out/i.test(message)) {
+					timeoutCount += 1;
+					continue;
+				}
+				throw error;
+			}
+		}
+
+		console.log("---");
+		console.log("tool: device-inspect");
+		console.log("command: monitor");
+		console.log(`device: ${selectedDevice.id}`);
+		console.log(`transport: ${selectedDevice.name}`);
+		console.log("status: success");
+		console.log("---");
+		console.log("## Raw Monitor");
+		console.log("");
+		console.log(`- duration_ms: ${durationMs}`);
+		console.log(`- timeout_ms: ${timeoutMs}`);
+		console.log(`- max_length: ${maxLength}`);
+		console.log(`- request: ${request != null ? formatHexBytes(request) : "none"}`);
+		console.log(`- frames: ${frames.length}`);
+		console.log(`- timeouts: ${timeoutCount}`);
+		console.log("");
+		for (const frame of frames) {
+			console.log(`- timestamp: ${frame.timestamp}`);
+			console.log(`- rx: ${frame.rx}`);
+			if (opts.ascii) {
+				console.log(`- rx_ascii: ${frame.rxAscii}`);
+			}
+			console.log(`- rx_length: ${frame.rxLength}`);
+			console.log("");
+		}
+	} catch (error) {
+		const err = error instanceof Error ? error : new Error(String(error));
+		console.log("---");
+		console.log("tool: device-inspect");
+		console.log("command: monitor");
+		console.log(`device: ${selectedDevice?.id ?? "none"}`);
+		console.log(`transport: ${selectedDevice?.name ?? "none"}`);
+		console.log("status: failure");
+		console.log("---");
+		console.log("## Raw Monitor");
+		console.log("");
+		console.log(`- error: ${err.message}`);
+		throw error;
+	} finally {
+		if (connection != null) {
+			try {
+				await connection.close();
+			} catch {
+				// Ignore close errors in CLI mode.
+			}
+		}
+	}
+}
+
 // Create CLI with Sade
 const prog = sade("inspect-device");
 
@@ -1258,7 +1626,8 @@ prog
 	.example("inspect-device log --duration 5000 --protocol mut3")
 	.example("inspect-device read-rom --protocol bootloader --out ./dump.bin")
 	.example("inspect-device read-rom --protocol mut3 --dry-run")
-	.example('inspect-device raw --data "01 0c" --ascii');
+	.example('inspect-device raw --data "01 0c" --ascii')
+	.example('inspect-device monitor --transport serial --duration 3000 --data "10 92"');
 
 // Global options
 prog
@@ -1388,6 +1757,35 @@ prog
 			repeat: opts.repeat,
 			delay: opts.delay,
 			timeout: opts.timeout,
+			ascii: opts.ascii,
+			transport: opts.transport,
+		}).catch((err) => {
+			console.error(err instanceof Error ? err.message : String(err));
+			process.exit(1);
+		});
+	});
+
+// Monitor subcommand
+prog
+	.command("monitor")
+	.describe("Initialize the transport and print raw RX bytes for a fixed duration")
+	.option("--duration", "How long to monitor in milliseconds", 3000)
+	.option("--timeout", "Per-poll timeout in milliseconds", 250)
+	.option("--max-length", "Maximum bytes to read per poll", 512)
+	.option(
+		"--data",
+		'Optional raw request to send once before monitoring, for example "10 92" or "23 80 87 8c 02"',
+	)
+	.option("--ascii", "Also render received bytes as ASCII when printable", false)
+	.action((opts) => {
+		monitorDevice({
+			device: opts.device,
+			verbose: opts.verbose,
+			traceFile: opts.traceFile,
+			duration: opts.duration,
+			timeout: opts.timeout,
+			maxLength: opts.maxLength,
+			data: opts.data,
 			ascii: opts.ascii,
 			transport: opts.transport,
 		}).catch((err) => {

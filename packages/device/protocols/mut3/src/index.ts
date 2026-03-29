@@ -42,6 +42,9 @@ const SID_SECURITY_ACCESS = 0x27;
 const SID_READ_MEMORY_BY_ADDRESS = 0x23;
 const ADDRESS_AND_LENGTH_FORMAT = 0x14; // 1 byte length, 3 bytes address
 const SID_VENDOR_SERVICE = 0x3b;
+// const MODE23_LOGGING_SESSION = 0x92;
+// const POSITIVE_RESPONSE_DIAGNOSTIC_SESSION_CONTROL =
+// 	SID_DIAGNOSTIC_SESSION_CONTROL + 0x40;
 
 // Trace-confirmed MUT-III flash session values for EVO X (`mitsucan`).
 const FLASH_PREPARATION_SESSION = 0x92;
@@ -106,7 +109,7 @@ const CMD_READ_BYTE = 0xe1; // E1: Read 1 byte at current address (for odd-size 
 // RAX blocks refresh at ~10-20 Hz on CAN, ~10 Hz on K-line.
 // A 20 ms cycle gives headroom for multiple block reads per cycle.
 const RAX_POLL_INTERVAL_MS = 20;
-const MODE23_POLL_INTERVAL_MS = 20;
+// const MODE23_POLL_INTERVAL_MS = 20;
 
 // Base PID number for synthetic MUT-III RAX PIDs.
 // OBD-II Mode 01 uses PIDs 0x00–0xFF. We use 0x8000–0x8FFF as a proprietary
@@ -269,6 +272,27 @@ async function readMode23Value(
 	return decodeMode23Value(payload.slice(0, size));
 }
 
+/*
+async function enterMode23LoggingSession(
+	connection: DeviceConnection,
+): Promise<void> {
+	const response = await connection.sendFrame(
+		new Uint8Array([SID_DIAGNOSTIC_SESSION_CONTROL, MODE23_LOGGING_SESSION]),
+	);
+
+	if (
+		response[0] !== POSITIVE_RESPONSE_DIAGNOSTIC_SESSION_CONTROL ||
+		response[1] !== MODE23_LOGGING_SESSION
+	) {
+		throw new Error(
+			`Mode 23 logging session failed: ECU returned [${Array.from(response)
+				.map((byte) => `0x${byte.toString(16)}`)
+				.join(", ")}]`,
+		);
+	}
+}
+*/
+
 /**
  * MUT-III ECU protocol implementation for Mitsubishi 4B11T ECUs (EVO X).
  *
@@ -326,7 +350,14 @@ export class Mut3Protocol implements EcuProtocol {
 		connection: DeviceConnection,
 	): Promise<PidDescriptor[]> {
 		if (connection.deviceInfo.transportName === "openport2") {
-			return MODE23_PID_DESCRIPTORS;
+			// NOTE:
+			// The current hardcoded Mode 23 map was useful for transport bring-up,
+			// but it is not stable enough to ship as the production MUT-III CAN
+			// logging abstraction. Keep the low-level Mode 23 helpers in-tree for
+			// future research, but do not expose this as a live PID catalog until
+			// the CAN/RAX profile path is implemented.
+			// return MODE23_PID_DESCRIPTORS;
+			return [];
 		}
 		if (connection.deviceInfo.transportName === "kline") {
 			return RAX_PID_DESCRIPTORS;
@@ -362,7 +393,10 @@ export class Mut3Protocol implements EcuProtocol {
 		onHealth?: (health: LiveDataHealth) => void,
 	): LiveDataSession {
 		if (connection.deviceInfo.transportName === "openport2") {
-			return this.streamMode23LiveData(connection, pids, onFrame, onHealth);
+			throw new Error(
+				"MUT-III CAN live logging is temporarily disabled while the production CAN/RAX path is implemented. The current hardcoded Mode 23 map remains in code for research only.",
+			);
+			// return this.streamMode23LiveData(connection, pids, onFrame, onHealth);
 		}
 
 		let running = true;
@@ -494,113 +528,18 @@ export class Mut3Protocol implements EcuProtocol {
 		};
 	}
 
+	/*
 	private streamMode23LiveData(
 		connection: DeviceConnection,
 		pids: number[],
 		onFrame: (frame: LiveDataFrame) => void,
 		onHealth?: (health: LiveDataHealth) => void,
 	): LiveDataSession {
-		let running = true;
-		const startTime = Date.now();
-		const requestedParameters = pids
-			.map((pid) => decodeMode23Pid(pid))
-			.filter((parameter) => parameter !== null);
-
-		let frameCount = 0;
-		let droppedFrames = 0;
-		let lastHealthReportTime = startTime;
-		let totalLatencyMs = 0;
-		let latencySamples = 0;
-
-		const poll = async () => {
-			while (running) {
-				const cycleStart = Date.now();
-
-				for (const parameter of requestedParameters) {
-					if (!running) break;
-
-					try {
-						const requestStart = Date.now();
-						const value = await readMode23Value(
-							connection,
-							parameter.address,
-							parameter.size,
-						);
-						const scaledValue = parameter.decodeRaw
-							? parameter.decodeRaw(value)
-							: value;
-						const latency = Date.now() - requestStart;
-						totalLatencyMs += latency;
-						latencySamples++;
-
-						onFrame({
-							timestamp: Date.now() - startTime,
-							pid: parameter.pid,
-							value: scaledValue,
-							unit: parameter.unit,
-						});
-						frameCount++;
-					} catch (error) {
-						droppedFrames++;
-						console.error(
-							`[MUT-III] Failed Mode 23 read for 0x80${parameter.address
-								.toString(16)
-								.padStart(4, "0")}:`,
-							error,
-						);
-					}
-				}
-
-				const now = Date.now();
-				const elapsed = now - lastHealthReportTime;
-				if (onHealth && elapsed >= 1000) {
-					const samplesPerSecond = frameCount / (elapsed / 1000);
-					const avgLatencyMs =
-						latencySamples > 0
-							? Math.round(totalLatencyMs / latencySamples)
-							: 0;
-					const status =
-						samplesPerSecond === 0
-							? "stalled"
-							: samplesPerSecond < 5
-								? "degraded"
-								: "healthy";
-
-					onHealth({
-						samplesPerSecond: Math.round(samplesPerSecond),
-						droppedFrames,
-						latencyMs: avgLatencyMs,
-						status,
-					});
-
-					frameCount = 0;
-					droppedFrames = 0;
-					totalLatencyMs = 0;
-					latencySamples = 0;
-					lastHealthReportTime = now;
-				}
-
-				const cycleElapsed = Date.now() - cycleStart;
-				const waitMs = Math.max(0, MODE23_POLL_INTERVAL_MS - cycleElapsed);
-				if (waitMs > 0) {
-					await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
-				}
-			}
-		};
-
-		poll().catch((error) => {
-			console.error(
-				"[MUT-III] Mode 23 streaming poll loop exited with error:",
-				error,
-			);
-		});
-
-		return {
-			stop: () => {
-				running = false;
-			},
-		};
+		// Intentionally disabled.
+		// The old hardcoded Mode 23 map remains here only as research scaffolding
+		// and should not be re-exposed without the planned CAN/RAX profile work.
 	}
+	*/
 
 	/**
 	 * Read the full ROM binary from the ECU using the MUT-III UDS sequence.

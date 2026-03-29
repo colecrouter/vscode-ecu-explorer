@@ -58,6 +58,10 @@ export interface DiagnosticOptions {
 	logPids?: number[];
 	/** Duration in ms for log probe */
 	logDuration?: number;
+	/** Optional callback for individual live-data frames during log operations */
+	logOnFrame?: (frame: LiveDataFrame) => void;
+	/** Optional callback for live-data health updates during log operations */
+	logOnHealth?: (health: LiveDataHealth) => void;
 	/** Read-ROM dry-run mode */
 	readRomDryRun?: boolean;
 	/** Optional note for where ROM output was written */
@@ -461,12 +465,14 @@ export async function runDiagnostic(
 				pids,
 				(frame) => {
 					frames += 1;
+					effectiveOptions.logOnFrame?.(frame);
 					if (sampledFrames.length < LOG_FRAME_SAMPLE_LIMIT) {
 						sampledFrames.push(frame);
 					}
 				},
 				(health) => {
 					lastHealth = health;
+					effectiveOptions.logOnHealth?.(health);
 				},
 			);
 
