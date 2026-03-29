@@ -8,6 +8,11 @@ import type {
 	PidDescriptor,
 	RomProgress,
 } from "@ecu-explorer/device";
+import {
+	decodeMode23Pid,
+	MODE23_PID_BASE,
+	MODE23_PID_DESCRIPTORS,
+} from "./mode23-parameters.js";
 import { extractAllRaxParameters, RAX_BLOCKS } from "./rax-decoder.js";
 import { computeFlashSecurityKey, computeSecurityKey } from "./security.js";
 
@@ -101,6 +106,7 @@ const CMD_READ_BYTE = 0xe1; // E1: Read 1 byte at current address (for odd-size 
 // RAX blocks refresh at ~10-20 Hz on CAN, ~10 Hz on K-line.
 // A 20 ms cycle gives headroom for multiple block reads per cycle.
 const RAX_POLL_INTERVAL_MS = 20;
+const MODE23_POLL_INTERVAL_MS = 20;
 
 // Base PID number for synthetic MUT-III RAX PIDs.
 // OBD-II Mode 01 uses PIDs 0x00–0xFF. We use 0x8000–0x8FFF as a proprietary
@@ -220,6 +226,49 @@ async function readRaxBlock(
 	return result;
 }
 
+function decodeMode23Value(data: Uint8Array): number {
+	let value = 0;
+	for (const byte of data) {
+		value = (value << 8) | byte;
+	}
+	return value >>> 0;
+}
+
+async function readMode23Value(
+	connection: DeviceConnection,
+	address: number,
+	size: 1 | 2 | 4,
+): Promise<number> {
+	const response = await connection.sendFrame(
+		new Uint8Array([
+			SID_READ_MEMORY_BY_ADDRESS,
+			0x80,
+			(address >>> 8) & 0xff,
+			address & 0xff,
+			size,
+		]),
+	);
+
+	if (response[0] !== 0x63) {
+		throw new Error(
+			`Mode 23 read failed for 0x80${address.toString(16).padStart(4, "0")}: ECU returned [${Array.from(
+				response,
+			)
+				.map((b) => `0x${b.toString(16)}`)
+				.join(", ")}]`,
+		);
+	}
+
+	const payload = response.slice(1);
+	if (payload.length < size) {
+		throw new Error(
+			`Mode 23 read for 0x80${address.toString(16).padStart(4, "0")} returned ${payload.length} bytes, expected ${size}`,
+		);
+	}
+
+	return decodeMode23Value(payload.slice(0, size));
+}
+
 /**
  * MUT-III ECU protocol implementation for Mitsubishi 4B11T ECUs (EVO X).
  *
@@ -274,9 +323,15 @@ export class Mut3Protocol implements EcuProtocol {
 	 * @returns All 48 RAX PidDescriptors
 	 */
 	async getSupportedPids(
-		_connection: DeviceConnection,
+		connection: DeviceConnection,
 	): Promise<PidDescriptor[]> {
-		return RAX_PID_DESCRIPTORS;
+		if (connection.deviceInfo.transportName === "openport2") {
+			return MODE23_PID_DESCRIPTORS;
+		}
+		if (connection.deviceInfo.transportName === "kline") {
+			return RAX_PID_DESCRIPTORS;
+		}
+		return [];
 	}
 
 	/**
@@ -306,6 +361,10 @@ export class Mut3Protocol implements EcuProtocol {
 		onFrame: (frame: LiveDataFrame) => void,
 		onHealth?: (health: LiveDataHealth) => void,
 	): LiveDataSession {
+		if (connection.deviceInfo.transportName === "openport2") {
+			return this.streamMode23LiveData(connection, pids, onFrame, onHealth);
+		}
+
 		let running = true;
 		const startTime = Date.now();
 
@@ -426,6 +485,114 @@ export class Mut3Protocol implements EcuProtocol {
 		// Start the polling loop (fire and forget; errors are caught within poll)
 		poll().catch((error) => {
 			console.error("[MUT-III] Streaming poll loop exited with error:", error);
+		});
+
+		return {
+			stop: () => {
+				running = false;
+			},
+		};
+	}
+
+	private streamMode23LiveData(
+		connection: DeviceConnection,
+		pids: number[],
+		onFrame: (frame: LiveDataFrame) => void,
+		onHealth?: (health: LiveDataHealth) => void,
+	): LiveDataSession {
+		let running = true;
+		const startTime = Date.now();
+		const requestedParameters = pids
+			.map((pid) => decodeMode23Pid(pid))
+			.filter((parameter) => parameter !== null);
+
+		let frameCount = 0;
+		let droppedFrames = 0;
+		let lastHealthReportTime = startTime;
+		let totalLatencyMs = 0;
+		let latencySamples = 0;
+
+		const poll = async () => {
+			while (running) {
+				const cycleStart = Date.now();
+
+				for (const parameter of requestedParameters) {
+					if (!running) break;
+
+					try {
+						const requestStart = Date.now();
+						const value = await readMode23Value(
+							connection,
+							parameter.address,
+							parameter.size,
+						);
+						const scaledValue = parameter.decodeRaw
+							? parameter.decodeRaw(value)
+							: value;
+						const latency = Date.now() - requestStart;
+						totalLatencyMs += latency;
+						latencySamples++;
+
+						onFrame({
+							timestamp: Date.now() - startTime,
+							pid: parameter.pid,
+							value: scaledValue,
+							unit: parameter.unit,
+						});
+						frameCount++;
+					} catch (error) {
+						droppedFrames++;
+						console.error(
+							`[MUT-III] Failed Mode 23 read for 0x80${parameter.address
+								.toString(16)
+								.padStart(4, "0")}:`,
+							error,
+						);
+					}
+				}
+
+				const now = Date.now();
+				const elapsed = now - lastHealthReportTime;
+				if (onHealth && elapsed >= 1000) {
+					const samplesPerSecond = frameCount / (elapsed / 1000);
+					const avgLatencyMs =
+						latencySamples > 0
+							? Math.round(totalLatencyMs / latencySamples)
+							: 0;
+					const status =
+						samplesPerSecond === 0
+							? "stalled"
+							: samplesPerSecond < 5
+								? "degraded"
+								: "healthy";
+
+					onHealth({
+						samplesPerSecond: Math.round(samplesPerSecond),
+						droppedFrames,
+						latencyMs: avgLatencyMs,
+						status,
+					});
+
+					frameCount = 0;
+					droppedFrames = 0;
+					totalLatencyMs = 0;
+					latencySamples = 0;
+					lastHealthReportTime = now;
+				}
+
+				const cycleElapsed = Date.now() - cycleStart;
+				const waitMs = Math.max(0, MODE23_POLL_INTERVAL_MS - cycleElapsed);
+				if (waitMs > 0) {
+					await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
+				}
+			}
+		};
+
+		poll().catch((error) => {
+			console.error(
+				"[MUT-III] Mode 23 streaming poll loop exited with error:",
+				error,
+			);
 		});
 
 		return {
@@ -1257,10 +1424,14 @@ void ECU_CAN_ID;
 
 // Export constants and helpers for testing
 export {
+	MODE23_PID_BASE,
+	MODE23_PID_DESCRIPTORS,
 	RAX_PID_BASE,
 	RAX_PID_DESCRIPTORS,
 	buildRaxPidDescriptors,
+	decodeMode23Pid,
 	decodeRaxPid,
+	readMode23Value,
 	readRaxBlock,
 	CMD_SET_ADDRESS,
 	CMD_READ_WORD_INC,

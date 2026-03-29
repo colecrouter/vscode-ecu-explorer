@@ -289,7 +289,19 @@ Over 100 SST-specific parameters provide deep transmission and drivetrain teleme
 - ❌ **Real-time data streaming** - NOT IMPLEMENTED
 - ❌ **Live data session** - NOT IMPLEMENTED
 
-**Note**: MUT-III protocol has **E0-E6 commands for memory access** but `streamLiveData()` method is not implemented.
+**Note**: MUT-III logging is now transport-specific:
+- `openport2` uses a traced CAN `0x23 0x80 <addr_hi> <addr_lo> <len>` polling backend backed by EvoScan Mode23-style request IDs
+- `kline` uses the existing EvoScan/RAX `E0/E5/E1` memory-access backend
+- The CAN backend now ships a minimal XML-backed working set promoted from EvoScan's `Mitsubishi EvoX Mode23 USA.xml` exact matches
+- The built-in working set is also free to normalize presentation where useful; for example, `Speed` is currently emitted as `km/h` in code even though some EvoScan USA profiles express the same concept in `mph`
+- EvoScan's symbolic `CANx-y` "MUTIII CAN" profile appears to be a separate canned-request backend, not the same thing as raw Mode 23 memory reads, and remains intentionally unimplemented until dedicated traces are captured
+- The current UI/protocol contract does not surface an explicit "logging mode" selector yet; if multiple MUT-III logging families ship side-by-side, the UI will likely need a first-class logging-backend abstraction
+
+**Implementation Update (2026-03-28)**:
+- `Mut3Protocol.streamLiveData()` is now implemented
+- The next architectural step is a profile-driven import model: one normalized Mode23 channel catalog plus per-profile request maps sourced from EvoScan XML
+- The current built-in working set intentionally stays minimal and exact-match only; it includes stable channels like `RPM`, `Load`, `TPS`, `STFT`, `LTFT Idle`, `LTFT Cruise`, `LTFT In Use`, `ECT`, `IAT`, `Battery`, `Front O2`, `Rear O2`, `MAF Volts`, `MAF Airflow`, `WGDC Correction`, and the VVT target/actual channels
+- Ambiguous addresses that collide across EvoScan profiles, such as shared-address fields in the Evo X `2011 USA GSR` profile, are intentionally omitted from the built-in working set until a profile selector or richer formula/dependency system exists
 
 ### 3.4 DEVELOPMENT.md Status
 

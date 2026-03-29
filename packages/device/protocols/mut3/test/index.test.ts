@@ -10,9 +10,12 @@ import {
 	CMD_READ_WORD_INC,
 	CMD_SET_ADDRESS,
 	decodeRaxPid,
+	MODE23_PID_BASE,
+	MODE23_PID_DESCRIPTORS,
 	Mut3Protocol,
 	RAX_PID_BASE,
 	RAX_PID_DESCRIPTORS,
+	readMode23Value,
 	readRaxBlock,
 } from "../src/index.js";
 import { RAX_A_BLOCK, RAX_BLOCKS, RAX_C_BLOCK } from "../src/rax-decoder.js";
@@ -44,6 +47,34 @@ function makeMockConnection(
 		stopStream: vi.fn(),
 		close: vi.fn().mockResolvedValue(undefined),
 	};
+}
+
+function makeMode23Mock(
+	values: Map<number, number[]>,
+	transportName = "openport2",
+): DeviceConnection {
+	return makeMockConnection(transportName, async (data) => {
+		if (data[0] !== 0x23 || data[1] !== 0x80) {
+			throw new Error(`Unexpected Mode 23 request: [${Array.from(data)}]`);
+		}
+
+		const address = ((data[2] ?? 0) << 8) | (data[3] ?? 0);
+		const size = data[4] ?? 0;
+		const payload = values.get(address) ?? new Array(size).fill(0);
+		return new Uint8Array([0x63, ...payload.slice(0, size)]);
+	});
+}
+
+function findMode23PidByAddress(address: number): number {
+	const descriptor = MODE23_PID_DESCRIPTORS.find(
+		(pid) => pid.address === address,
+	);
+	if (descriptor === undefined) {
+		throw new Error(
+			`Expected Mode 23 descriptor for address 0x${address.toString(16)}`,
+		);
+	}
+	return descriptor.pid;
 }
 
 /**
@@ -649,12 +680,38 @@ describe("readRaxBlock()", () => {
 	});
 });
 
+describe("readMode23Value()", () => {
+	it("sends a Mode 23 single-frame CAN read with 0x80 address prefix", async () => {
+		const sendFrame = vi
+			.fn()
+			.mockResolvedValue(new Uint8Array([0x63, 0x01, 0x2c]));
+		const connection = makeMockConnection("openport2", sendFrame);
+
+		await readMode23Value(connection, 0x875e, 2);
+
+		expect(sendFrame).toHaveBeenCalledWith(
+			new Uint8Array([0x23, 0x80, 0x87, 0x5e, 0x02]),
+		);
+	});
+
+	it("decodes big-endian unsigned values from the Mode 23 response payload", async () => {
+		const connection = makeMockConnection(
+			"openport2",
+			vi.fn().mockResolvedValue(new Uint8Array([0x63, 0x00, 0x01, 0x02, 0x03])),
+		);
+
+		await expect(readMode23Value(connection, 0x8fc0, 4)).resolves.toBe(
+			0x00010203,
+		);
+	});
+});
+
 // ── getSupportedPids ──────────────────────────────────────────────────────────
 
 describe("Mut3Protocol.getSupportedPids()", () => {
 	it("resolves to an array of PidDescriptors", async () => {
 		const protocol = new Mut3Protocol();
-		const connection = makeMockConnection("openport2");
+		const connection = makeMockConnection("kline");
 		const pids = await protocol.getSupportedPids?.(connection);
 		expect(Array.isArray(pids)).toBe(true);
 		expect(pids.length).toBeGreaterThan(0);
@@ -668,13 +725,40 @@ describe("Mut3Protocol.getSupportedPids()", () => {
 		expect(sendFrame).not.toHaveBeenCalled();
 	});
 
-	it("includes a descriptor for RPM with unit 'RPM'", async () => {
+	it("returns traced Mode 23 descriptors for openport2", async () => {
 		const protocol = new Mut3Protocol();
 		const connection = makeMockConnection("openport2");
 		const pids = await protocol.getSupportedPids?.(connection);
-		const rpm = pids.find((p) => p.name === "RPM");
-		expect(rpm).toBeDefined();
-		expect(rpm?.unit).toBe("RPM");
+		expect(pids).toEqual(MODE23_PID_DESCRIPTORS);
+	});
+
+	it("includes named and scaled Mode 23 descriptors when exact table matches exist", async () => {
+		const protocol = new Mut3Protocol();
+		const connection = makeMockConnection("openport2");
+		const pids = await protocol.getSupportedPids?.(connection);
+		expect(pids.find((pid) => pid.name === "LTFT Idle")?.unit).toBe("%");
+		expect(pids.find((pid) => pid.name === "LTFT Cruise")?.unit).toBe("%");
+		expect(pids.find((pid) => pid.name === "Cruise Light")?.unit).toBe("raw");
+		expect(pids.find((pid) => pid.name === "RPM")?.unit).toBe("rpm");
+		expect(pids.find((pid) => pid.name === "Battery")?.unit).toBe("V");
+		expect(pids.find((pid) => pid.name === "Speed")?.unit).toBe("km/h");
+		expect(pids.find((pid) => pid.name === "WGDC Correction")?.unit).toBe(
+			"unit",
+		);
+	});
+
+	it("does not ship ambiguous raw-placeholder Mode 23 descriptors in the built-in working set", async () => {
+		const protocol = new Mut3Protocol();
+		const connection = makeMockConnection("openport2");
+		const pids = await protocol.getSupportedPids?.(connection);
+		expect(pids.find((pid) => pid.name.startsWith("RAM 0x"))).toBeUndefined();
+	});
+
+	it("returns RAX descriptors for kline", async () => {
+		const protocol = new Mut3Protocol();
+		const connection = makeMockConnection("kline");
+		const pids = await protocol.getSupportedPids?.(connection);
+		expect(pids).toEqual(RAX_PID_DESCRIPTORS);
 	});
 
 	it("all PID numbers are in the RAX synthetic range (≥ 0x8000)", async () => {
@@ -682,7 +766,7 @@ describe("Mut3Protocol.getSupportedPids()", () => {
 		const connection = makeMockConnection("openport2");
 		const pids = await protocol.getSupportedPids?.(connection);
 		for (const p of pids) {
-			expect(p.pid).toBeGreaterThanOrEqual(0x8000);
+			expect(p.pid).toBeGreaterThanOrEqual(MODE23_PID_BASE);
 		}
 	});
 
@@ -690,10 +774,7 @@ describe("Mut3Protocol.getSupportedPids()", () => {
 		const protocol = new Mut3Protocol();
 		const connection = makeMockConnection("openport2");
 		const pids = await protocol.getSupportedPids?.(connection);
-		const expectedTotal = RAX_BLOCKS.reduce(
-			(acc, b) => acc + b.parameters.length,
-			0,
-		);
+		const expectedTotal = MODE23_PID_DESCRIPTORS.length;
 		expect(pids.length).toBe(expectedTotal);
 	});
 });
@@ -720,7 +801,7 @@ describe("Mut3Protocol.streamLiveData()", () => {
 		const deviceInfo: DeviceInfo = {
 			id: "streaming-test",
 			name: "Streaming Test Device",
-			transportName: "openport2",
+			transportName: "kline",
 			connected: true,
 		};
 
@@ -778,6 +859,140 @@ describe("Mut3Protocol.streamLiveData()", () => {
 		session.stop();
 
 		expect(onFrame).not.toHaveBeenCalled();
+	});
+
+	it("polls traced Mode 23 addresses for requested openport2 PIDs", async () => {
+		const protocol = new Mut3Protocol();
+		const requestFrames: number[][] = [];
+		const connection = makeMockConnection("openport2", async (data) => {
+			requestFrames.push(Array.from(data));
+			if (
+				data[0] === 0x23 &&
+				data[1] === 0x80 &&
+				data[2] === 0x87 &&
+				data[3] === 0x8c &&
+				data[4] === 0x02
+			) {
+				return new Uint8Array([0x63, 0x00, 0x00]);
+			}
+			if (
+				data[0] === 0x23 &&
+				data[1] === 0x80 &&
+				data[2] === 0x87 &&
+				data[3] === 0x5e &&
+				data[4] === 0x02
+			) {
+				return new Uint8Array([0x63, 0x01, 0x2c]);
+			}
+			throw new Error(`Unexpected Mode 23 request: [${Array.from(data)}]`);
+		});
+
+		const pid0 = findMode23PidByAddress(0x875e);
+		const pid1 = findMode23PidByAddress(0x878c);
+
+		const session = protocol.streamLiveData?.(
+			connection,
+			[pid0, pid1],
+			vi.fn(),
+		);
+		await new Promise<void>((resolve) => setTimeout(resolve, 60));
+		session.stop();
+
+		expect(requestFrames).toContainEqual([0x23, 0x80, 0x87, 0x5e, 0x02]);
+		expect(requestFrames).toContainEqual([0x23, 0x80, 0x87, 0x8c, 0x02]);
+	});
+
+	it("decodes traced Mode 23 payloads into raw openport2 values", async () => {
+		const protocol = new Mut3Protocol();
+		const connection = makeMode23Mock(
+			new Map<number, number[]>([
+				[0x875e, [0x01, 0x2c]],
+				[0x8fc0, [0x00, 0x00, 0x00, 0x00]],
+			]),
+		);
+
+		const pid0 = findMode23PidByAddress(0x875e);
+		const pid1 = findMode23PidByAddress(0x878c);
+
+		const frames: LiveDataFrame[] = [];
+		const session = protocol.streamLiveData?.(
+			connection,
+			[pid0, pid1],
+			(frame) => frames.push(frame),
+		);
+
+		await new Promise<void>((resolve) => setTimeout(resolve, 60));
+		session.stop();
+
+		expect(
+			frames.some((frame) => frame.pid === pid0 && frame.value === 0x012c),
+		).toBe(true);
+		expect(
+			frames.some((frame) => frame.pid === pid1 && frame.value === 0),
+		).toBe(true);
+	});
+
+	it("applies known Mode 23 scaling for exact CSV-backed address matches", async () => {
+		const protocol = new Mut3Protocol();
+		const connection = makeMode23Mock(
+			new Map<number, number[]>([[0x4575, [0x80]]]),
+		);
+		const pid = findMode23PidByAddress(0x4575);
+
+		const frames: LiveDataFrame[] = [];
+		const session = protocol.streamLiveData?.(connection, [pid], (frame) =>
+			frames.push(frame),
+		);
+
+		await new Promise<void>((resolve) => setTimeout(resolve, 60));
+		session.stop();
+
+		expect(frames.some((frame) => frame.pid === pid && frame.value === 0)).toBe(
+			true,
+		);
+		expect(frames.every((frame) => frame.unit === "%")).toBe(true);
+	});
+
+	it("applies XML-backed Mode 23 scaling for exact Evo X RPM matches", async () => {
+		const protocol = new Mut3Protocol();
+		const connection = makeMode23Mock(
+			new Map<number, number[]>([[0x878c, [0x01, 0x00]]]),
+		);
+		const pid = findMode23PidByAddress(0x878c);
+
+		const frames: LiveDataFrame[] = [];
+		const session = protocol.streamLiveData?.(connection, [pid], (frame) =>
+			frames.push(frame),
+		);
+
+		await new Promise<void>((resolve) => setTimeout(resolve, 60));
+		session.stop();
+
+		expect(
+			frames.some((frame) => frame.pid === pid && frame.value === 1000),
+		).toBe(true);
+		expect(frames.every((frame) => frame.unit === "rpm")).toBe(true);
+	});
+
+	it("normalizes Mode 23 speed to km/h in the built-in working set", async () => {
+		const protocol = new Mut3Protocol();
+		const connection = makeMode23Mock(
+			new Map<number, number[]>([[0x882f, [0x32]]]),
+		);
+		const pid = findMode23PidByAddress(0x882f);
+
+		const frames: LiveDataFrame[] = [];
+		const session = protocol.streamLiveData?.(connection, [pid], (frame) =>
+			frames.push(frame),
+		);
+
+		await new Promise<void>((resolve) => setTimeout(resolve, 60));
+		session.stop();
+
+		expect(
+			frames.some((frame) => frame.pid === pid && frame.value === 100),
+		).toBe(true);
+		expect(frames.every((frame) => frame.unit === "km/h")).toBe(true);
 	});
 
 	it("emits LiveDataFrame for each requested PID", async () => {
