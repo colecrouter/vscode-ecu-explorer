@@ -162,6 +162,7 @@ const RAX_POLL_INTERVAL_MS = 20;
 // range: pid = RAX_PID_BASE + (blockIndex * 100) + paramIndex
 const RAX_PID_BASE = 0x8000;
 const RAX_KLINE_PROFILE_ID = "mitsubishi-evox-rax-kline";
+const RAX_MODE23_PATCH_PROFILE_ID = "mitsubishi-evox-mode23-rax-patch";
 
 // ---------------------------------------------------------------------------
 // PID ↔ RAX parameter mapping helpers
@@ -213,6 +214,19 @@ const RAX_KLINE_LIVE_DATA_PROFILE: LiveDataProfileDescriptor = {
 	decodeFamily: "rax-bitfield-calc",
 	status: "ready",
 	statusDetail: "Streaming runtime is implemented for this profile family.",
+	pids: RAX_PID_DESCRIPTORS,
+};
+const RAX_MODE23_PATCH_LIVE_DATA_PROFILE: LiveDataProfileDescriptor = {
+	id: RAX_MODE23_PATCH_PROFILE_ID,
+	name: "Evo X Mode23 RAX Patch",
+	description:
+		"Extends the CAN logging catalog with Mode23-backed RAX engine blocks and CALC-derived channels from the EvoScan RAX Fast Logging profile.",
+	transportFamily: "can-iso15765",
+	requestFamily: "mode23",
+	decodeFamily: "rax-bitfield-calc",
+	status: "unavailable",
+	statusDetail:
+		"Profile catalog is reused from the existing RAX channel definitions, but the openport2 runtime does not yet execute the Mode23 RAX patch path.",
 	pids: RAX_PID_DESCRIPTORS,
 };
 
@@ -437,7 +451,7 @@ export class Mut3Protocol implements EcuProtocol {
 		if (connection.deviceInfo.transportName === "openport2") {
 			return [
 				BUILTIN_EVOX_CAN_MUTIII_LIVE_DATA_PROFILE,
-				MODE23_RESEARCH_LIVE_DATA_PROFILE,
+				RAX_MODE23_PATCH_LIVE_DATA_PROFILE,
 			];
 		}
 		if (connection.deviceInfo.transportName === "kline") {
@@ -477,6 +491,11 @@ export class Mut3Protocol implements EcuProtocol {
 		const profileId = getRequestedProfileId(pidsOrSelection);
 
 		if (connection.deviceInfo.transportName === "openport2") {
+			if (profileId === RAX_MODE23_PATCH_PROFILE_ID) {
+				throw new Error(
+					`${RAX_MODE23_PATCH_LIVE_DATA_PROFILE.name} is intentionally unavailable: ${RAX_MODE23_PATCH_LIVE_DATA_PROFILE.statusDetail}`,
+				);
+			}
 			if (profileId === MODE23_RESEARCH_PROFILE_ID) {
 				throw new Error(
 					`${MODE23_RESEARCH_LIVE_DATA_PROFILE.name} is intentionally unavailable: ${MODE23_RESEARCH_LIVE_DATA_PROFILE.statusDetail}`,
@@ -1484,6 +1503,8 @@ export {
 	RAX_PID_DESCRIPTORS,
 	RAX_KLINE_LIVE_DATA_PROFILE,
 	RAX_KLINE_PROFILE_ID,
+	RAX_MODE23_PATCH_LIVE_DATA_PROFILE,
+	RAX_MODE23_PATCH_PROFILE_ID,
 	MUTIII_CAN_PID_DESCRIPTORS,
 	buildRaxPidDescriptors,
 	decodeMode23Pid,

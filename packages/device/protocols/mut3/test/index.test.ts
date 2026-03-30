@@ -19,6 +19,8 @@ import {
 	Mut3Protocol,
 	RAX_KLINE_LIVE_DATA_PROFILE,
 	RAX_KLINE_PROFILE_ID,
+	RAX_MODE23_PATCH_LIVE_DATA_PROFILE,
+	RAX_MODE23_PATCH_PROFILE_ID,
 	RAX_PID_BASE,
 	RAX_PID_DESCRIPTORS,
 	readMode23Value,
@@ -805,7 +807,7 @@ describe("Mut3Protocol.getLiveDataProfiles()", () => {
 
 		expect(profiles).toEqual([
 			BUILTIN_EVOX_CAN_MUTIII_LIVE_DATA_PROFILE,
-			MODE23_RESEARCH_LIVE_DATA_PROFILE,
+			RAX_MODE23_PATCH_LIVE_DATA_PROFILE,
 		]);
 	});
 
@@ -920,6 +922,19 @@ describe("Mut3Protocol.streamLiveData()", () => {
 				vi.fn(),
 			),
 		).toThrow(/intentionally unavailable/i);
+	});
+
+	it("rejects the Mode23 RAX patch profile explicitly on openport2", () => {
+		const protocol = new Mut3Protocol();
+		const connection = makeMockConnection("openport2");
+
+		expect(() =>
+			protocol.streamLiveData?.(
+				connection,
+				{ pids: [RAX_PID_BASE], profileId: RAX_MODE23_PATCH_PROFILE_ID },
+				vi.fn(),
+			),
+		).toThrow(/mode23 rax patch is intentionally unavailable/i);
 	});
 
 	it("accepts an explicit K-line profile selection", () => {
