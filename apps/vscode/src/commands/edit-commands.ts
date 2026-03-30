@@ -148,6 +148,19 @@ async function postScalarFormula(
 	});
 }
 
+async function postPasteSpecialFormula(
+	expression: string,
+	sourceTsv: string,
+	panel: vscode.WebviewPanel,
+): Promise<void> {
+	await panel.webview.postMessage({
+		type: "mathOp",
+		operation: "pasteSpecial",
+		expression,
+		sourceTsv,
+	});
+}
+
 async function promptForFormula(
 	initialValue = "x",
 ): Promise<string | undefined> {
@@ -155,6 +168,18 @@ async function promptForFormula(
 		prompt:
 			"Enter a formula using x, row, col, depth, or i (all zero-based except x)",
 		placeHolder: "Examples: 42, x + 5, x + row, x + col * 2, x + depth * 10",
+		value: initialValue,
+		validateInput: validateFormulaInput,
+	});
+}
+
+async function promptForPasteSpecialFormula(
+	initialValue = "src",
+): Promise<string | undefined> {
+	return vscode.window.showInputBox({
+		prompt: "Enter a paste-special formula using src, x, row, col, depth, or i",
+		placeHolder:
+			"Examples: src, src * 0.8, x + src * 0.1, (x + src) / 2, src + row",
 		value: initialValue,
 		validateInput: validateFormulaInput,
 	});
@@ -263,6 +288,33 @@ export async function handleMathOpFormula(initialFormula = "x"): Promise<void> {
 	}
 
 	await postScalarFormula(expression, panel);
+}
+
+/**
+ * Handle paste special: apply a formula using copied source values.
+ */
+export async function handlePasteSpecialFormula(): Promise<void> {
+	const { panel } = resolveActiveTableContext();
+
+	if (!panel) {
+		vscode.window.showErrorMessage("No active table editor");
+		return;
+	}
+
+	const sourceTsv = await vscode.env.clipboard.readText();
+	if (sourceTsv.trim().length === 0) {
+		vscode.window.showErrorMessage(
+			"Clipboard is empty. Copy table values before using Paste Special.",
+		);
+		return;
+	}
+
+	const expression = await promptForPasteSpecialFormula();
+	if (expression === undefined) {
+		return;
+	}
+
+	await postPasteSpecialFormula(expression, sourceTsv, panel);
 }
 
 /**

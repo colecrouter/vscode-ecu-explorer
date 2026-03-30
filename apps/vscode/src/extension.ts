@@ -31,6 +31,7 @@ import {
 	handleMathOpFormula,
 	handleMathOpMultiply,
 	handleMathOpSmooth,
+	handlePasteSpecialFormula,
 	handleRedo,
 	handleUndo,
 	setEditCommandsContext,
@@ -1328,6 +1329,9 @@ export async function activate(
 		),
 		vscode.commands.registerCommand("rom.mathOpFormula", () =>
 			handleMathOpFormula(),
+		),
+		vscode.commands.registerCommand("rom.pasteSpecialFormula", () =>
+			handlePasteSpecialFormula(),
 		),
 		vscode.commands.registerCommand("rom.mathOpClamp", () =>
 			handleMathOpClamp(),

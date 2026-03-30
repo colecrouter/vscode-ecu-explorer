@@ -10,6 +10,7 @@ export {
 	handleMathOpFormula,
 	handleMathOpMultiply,
 	handleMathOpSmooth,
+	handlePasteSpecialFormula,
 	handleRedo,
 	handleUndo,
 	setEditCommandsContext,

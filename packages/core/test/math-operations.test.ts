@@ -158,6 +158,21 @@ describe("Math Operations", () => {
 			expect(result.values).toEqual([10, 11, 20, 21]);
 		});
 
+		it("supports source value references when provided", () => {
+			const variables: MathFormulaVariables[] = [
+				{ src: 20 },
+				{ src: 30 },
+				{ src: 40 },
+			];
+			const result = applyFormula(
+				[5, 5, 5],
+				"src * 0.5 + x",
+				undefined,
+				variables,
+			);
+			expect(result.values).toEqual([15, 20, 25]);
+		});
+
 		it("clamps formula results to constraints", () => {
 			const result = applyFormula([10, 20, 30], "x * 10", { max: 100 });
 			expect(result.values).toEqual([100, 100, 100]);

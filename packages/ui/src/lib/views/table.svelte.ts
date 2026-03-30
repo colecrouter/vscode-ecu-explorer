@@ -891,6 +891,110 @@ export class TableView<T extends TableDefinition> {
 		);
 	}
 
+	public applySourceFormulaOperation(
+		tsv: string,
+		expression: string,
+		labelTemplate = `Paste special "${expression}" to {count} cells`,
+	): {
+		result: MathOpResult;
+		transaction: Transaction | null;
+	} {
+		const selected = this.getSelectedCells();
+		if (selected.length === 0) {
+			return {
+				result: {
+					values: [],
+					warnings: ["No cells selected"],
+					changedCount: 0,
+				},
+				transaction: null,
+			};
+		}
+
+		const anchorRow = Math.min(...selected.map((coord) => coord.row));
+		const anchorCol = Math.min(...selected.map((coord) => coord.col ?? 0));
+		const anchorDepth = selected[0]?.depth ?? 0;
+		const targetCells: CellCoordinate[] = [];
+		const values: number[] = [];
+		const variables: MathFormulaVariables[] = [];
+		const def = this.def;
+		const maxRow = def.rows - 1;
+		const maxCol =
+			def.kind === "table1d"
+				? def.rows - 1
+				: (def as Table2DDefinition | Table3DDefinition).cols - 1;
+
+		for (const [sourceRowIndex, tsvRow] of tsv.split("\n").entries()) {
+			const sourceColumns = tsvRow?.split("\t") ?? [];
+			for (const [sourceColIndex, sourceValue] of sourceColumns.entries()) {
+				const targetRow = anchorRow + sourceRowIndex;
+				const targetCol = anchorCol + sourceColIndex;
+				if (targetRow < 0 || targetCol < 0) {
+					continue;
+				}
+				if (targetRow > maxRow || targetCol > maxCol) {
+					continue;
+				}
+
+				const parsedSource = Number.parseFloat(sourceValue.trim());
+				if (!Number.isFinite(parsedSource)) {
+					continue;
+				}
+
+				const coord = {
+					row: targetRow,
+					col: targetCol,
+					depth: anchorDepth,
+				} satisfies CellCoordinate;
+				const bytes = this.readBytes(this.addressForCoord(coord));
+				values.push(this.decodeScalarValue(bytes));
+				variables.push({
+					i: variables.length,
+					src: parsedSource,
+					row: coord.row,
+					col: coord.col,
+					depth: coord.depth ?? 0,
+				});
+				targetCells.push(coord);
+			}
+		}
+
+		if (targetCells.length === 0) {
+			return {
+				result: {
+					values: [],
+					warnings: ["No valid source cells found in clipboard data"],
+					changedCount: 0,
+				},
+				transaction: null,
+			};
+		}
+
+		const constraints = this.getConstraints();
+		const result = applyFormula(values, expression, constraints, variables);
+
+		for (let i = 0; i < targetCells.length; i++) {
+			const coord = targetCells[i];
+			if (!coord) {
+				throw new Error(`Missing target coordinate for index ${i}`);
+			}
+
+			const newScaled = result.values[i];
+			if (newScaled === undefined) {
+				throw new Error(`Missing result value for index ${i}`);
+			}
+
+			const bytes = this.encodeScalarValue(newScaled);
+			this.stageCell(this.stageLocation(coord), bytes);
+		}
+
+		const transaction = this.commit(
+			labelTemplate.replace("{count}", String(targetCells.length)),
+		);
+
+		return { result, transaction };
+	}
+
 	/**
 	 * Apply multiply operation to selected cells
 	 *

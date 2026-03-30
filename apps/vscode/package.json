@@ -67,6 +67,11 @@
 				"enablement": "activeCustomEditorId == 'romViewer.tableEditor'"
 			},
 			{
+				"command": "rom.pasteSpecialFormula",
+				"title": "ECU Explorer: Paste Special with Formula",
+				"enablement": "activeCustomEditorId == 'romViewer.tableEditor'"
+			},
+			{
 				"command": "rom.mathOpClamp",
 				"title": "ECU Explorer: Clamp Selection to Range",
 				"enablement": "activeCustomEditorId == 'romViewer.tableEditor'"
@@ -219,6 +224,10 @@
 				},
 				{
 					"command": "rom.mathOpFormula",
+					"when": "activeCustomEditorId == 'romViewer.tableEditor'"
+				},
+				{
+					"command": "rom.pasteSpecialFormula",
 					"when": "activeCustomEditorId == 'romViewer.tableEditor'"
 				},
 				{

@@ -214,7 +214,14 @@
 
 	function handleMathOp(msg: {
 		type: "mathOp";
-		operation: "add" | "multiply" | "clamp" | "smooth" | "set" | "formula";
+		operation:
+			| "add"
+			| "multiply"
+			| "clamp"
+			| "smooth"
+			| "set"
+			| "formula"
+			| "pasteSpecial";
 		constant?: number;
 		factor?: number;
 		min?: number;
@@ -224,6 +231,7 @@
 		boundaryMode?: "pad" | "repeat" | "mirror";
 		value?: number;
 		expression?: string;
+		sourceTsv?: string;
 	}) {
 		if (!tableView) {
 			console.error("No table view available for math operation");
@@ -277,6 +285,21 @@
 						throw new Error("Formula is required for formula operation");
 					}
 					({ result, transaction } = tableView.applyFormulaOperation(
+						msg.expression,
+					));
+					break;
+
+				case "pasteSpecial":
+					if (!msg.expression) {
+						throw new Error("Formula is required for paste special");
+					}
+					if (!msg.sourceTsv) {
+						throw new Error(
+							"Clipboard table data is required for paste special",
+						);
+					}
+					({ result, transaction } = tableView.applySourceFormulaOperation(
+						msg.sourceTsv,
 						msg.expression,
 					));
 					break;

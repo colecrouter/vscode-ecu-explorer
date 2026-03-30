@@ -320,5 +320,31 @@ describe("TableView Math Operations", () => {
 				expect(data2d[1]?.[1]?.[0]).toBe(11);
 			}
 		});
+
+		it("should apply paste special formulas using copied source values", () => {
+			const rom = createROM(0x2000);
+			const def = create2DTableDef(2, 2);
+			const table = new TableView(rom, def);
+
+			table.selectCell({ row: 0, col: 0 }, "replace");
+
+			const { result, transaction } = table.applySourceFormulaOperation(
+				"10\t20\n30\t40",
+				"src * 0.5",
+			);
+
+			expect(result.values).toEqual([5, 10, 15, 20]);
+			expect(transaction).not.toBeNull();
+			expect(transaction?.edits.length).toBe(4);
+
+			const data = table.data;
+			if (Array.isArray(data) && Array.isArray(data[0])) {
+				const data2d = data as Uint8Array[][];
+				expect(data2d[0]?.[0]?.[0]).toBe(5);
+				expect(data2d[0]?.[1]?.[0]).toBe(10);
+				expect(data2d[1]?.[0]?.[0]).toBe(15);
+				expect(data2d[1]?.[1]?.[0]).toBe(20);
+			}
+		});
 	});
 });

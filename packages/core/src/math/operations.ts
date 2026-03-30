@@ -48,6 +48,8 @@ export interface MathOpConstraints {
 export interface MathFormulaVariables {
 	/** Zero-based index within the selected cells */
 	i?: number;
+	/** Copied source value aligned to the current target cell */
+	src?: number;
 	/** Zero-based row index for the current cell */
 	row?: number;
 	/** Zero-based column index for the current cell */
@@ -103,7 +105,7 @@ function applyConstraints(
  *
  * The formula can reference `x` for the current cell value and `i` for the
  * zero-based index within the selection. Additional position variables may be
- * provided such as `row`, `col`, and `depth`.
+ * provided such as `src`, `row`, `col`, and `depth`.
  *
  * @param values - Array of values to modify
  * @param expression - Formula to evaluate for each value
