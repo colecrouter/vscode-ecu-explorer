@@ -214,7 +214,14 @@
 
 	function handleMathOp(msg: {
 		type: "mathOp";
-		operation: "add" | "multiply" | "clamp" | "smooth" | "set";
+		operation:
+			| "add"
+			| "multiply"
+			| "clamp"
+			| "smooth"
+			| "set"
+			| "formula"
+			| "pasteSpecial";
 		constant?: number;
 		factor?: number;
 		min?: number;
@@ -223,6 +230,8 @@
 		iterations?: number;
 		boundaryMode?: "pad" | "repeat" | "mirror";
 		value?: number;
+		expression?: string;
+		sourceTsv?: string;
 	}) {
 		if (!tableView) {
 			console.error("No table view available for math operation");
@@ -271,6 +280,30 @@
 					));
 					break;
 
+				case "formula":
+					if (!msg.expression) {
+						throw new Error("Formula is required for formula operation");
+					}
+					({ result, transaction } = tableView.applyFormulaOperation(
+						msg.expression,
+					));
+					break;
+
+				case "pasteSpecial":
+					if (!msg.expression) {
+						throw new Error("Formula is required for paste special");
+					}
+					if (!msg.sourceTsv) {
+						throw new Error(
+							"Clipboard table data is required for paste special",
+						);
+					}
+					({ result, transaction } = tableView.applySourceFormulaOperation(
+						msg.sourceTsv,
+						msg.expression,
+					));
+					break;
+
 				case "clamp":
 					if (msg.min === undefined || msg.max === undefined) {
 						throw new Error(
@@ -311,10 +344,12 @@
 					operation: msg.operation,
 					changedCount: result.changedCount,
 					warnings: result.warnings,
-					edits: transaction.edits.map((edit) => ({
-						address: edit.address,
-						after: Array.from(edit.after),
-					})),
+					edits: transaction.edits.map(
+						(edit: { address: number; after: Uint8Array }) => ({
+							address: edit.address,
+							after: Array.from(edit.after),
+						}),
+					),
 				});
 
 				requestAnimationFrame(() => {

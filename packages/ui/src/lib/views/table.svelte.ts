@@ -1,4 +1,5 @@
 import type {
+	MathFormulaVariables,
 	MathOpConstraints,
 	MathOpResult,
 	Table2DDefinition,
@@ -7,6 +8,7 @@ import type {
 } from "@ecu-explorer/core";
 import {
 	addConstant,
+	applyFormula,
 	clampValues,
 	multiplyConstant,
 	smoothValues,
@@ -851,52 +853,10 @@ export class TableView<T extends TableDefinition> {
 		result: MathOpResult;
 		transaction: Transaction | null;
 	} {
-		const selected = this.getSelectedCells();
-		if (selected.length === 0) {
-			return {
-				result: {
-					values: [],
-					warnings: ["No cells selected"],
-					changedCount: 0,
-				},
-				transaction: null,
-			};
-		}
-
-		// Get current values (scaled)
-		const values: number[] = [];
-		for (const coord of selected) {
-			const address = this.addressForCoord(coord);
-			const bytes = this.readBytes(address);
-			const raw = this.decodeScalarValue(bytes);
-			values.push(raw);
-		}
-
-		// Get constraints
-		const constraints = this.getConstraints();
-
-		// Apply operation
-		const result = addConstant(values, constant, constraints);
-
-		// Stage changes
-		for (let i = 0; i < selected.length; i++) {
-			const coord = selected[i];
-			if (!coord) throw new Error(`Missing coordinate for index ${i}`);
-			const newScaled = result.values[i];
-			if (newScaled === undefined)
-				throw new Error(`Missing result value for index ${i}`);
-			// Unscale before encoding
-			const newRaw = newScaled;
-			const bytes = this.encodeScalarValue(newRaw);
-			this.stageCell(this.stageLocation(coord), bytes);
-		}
-
-		// Commit
-		const transaction = this.commit(
-			`Add ${constant} to ${selected.length} cells`,
+		return this.applyScalarSelectionOperation(
+			(values, constraints) => addConstant(values, constant, constraints),
+			`Add ${constant} to {count} cells`,
 		);
-
-		return { result, transaction };
 	}
 
 	/**
@@ -908,6 +868,34 @@ export class TableView<T extends TableDefinition> {
 	 * @returns Result with warnings and transaction if successful
 	 */
 	public applySetValueOperation(value: number): {
+		result: MathOpResult;
+		transaction: Transaction | null;
+	} {
+		return this.applyFormulaOperation(
+			`${value}`,
+			`Set {count} cells to ${value}`,
+		);
+	}
+
+	public applyFormulaOperation(
+		expression: string,
+		labelTemplate = `Apply formula "${expression}" to {count} cells`,
+	): {
+		result: MathOpResult;
+		transaction: Transaction | null;
+	} {
+		return this.applyScalarSelectionOperation(
+			(values, constraints, variables) =>
+				applyFormula(values, expression, constraints, variables),
+			labelTemplate,
+		);
+	}
+
+	public applySourceFormulaOperation(
+		tsv: string,
+		expression: string,
+		labelTemplate = `Paste special "${expression}" to {count} cells`,
+	): {
 		result: MathOpResult;
 		transaction: Transaction | null;
 	} {
@@ -923,63 +911,86 @@ export class TableView<T extends TableDefinition> {
 			};
 		}
 
-		// Get current values (scaled)
-		const currentValues: number[] = [];
-		for (const coord of selected) {
-			const address = this.addressForCoord(coord);
-			const bytes = this.readBytes(address);
-			const raw = this.decodeScalarValue(bytes);
-			currentValues.push(raw);
-		}
+		const anchorRow = Math.min(...selected.map((coord) => coord.row));
+		const anchorCol = Math.min(...selected.map((coord) => coord.col ?? 0));
+		const anchorDepth = selected[0]?.depth ?? 0;
+		const targetCells: CellCoordinate[] = [];
+		const values: number[] = [];
+		const variables: MathFormulaVariables[] = [];
+		const def = this.def;
+		const maxRow = def.rows - 1;
+		const maxCol =
+			def.kind === "table1d"
+				? def.rows - 1
+				: (def as Table2DDefinition | Table3DDefinition).cols - 1;
 
-		// Get constraints
-		const constraints = this.getConstraints();
+		for (const [sourceRowIndex, tsvRow] of tsv.split("\n").entries()) {
+			const sourceColumns = tsvRow?.split("\t") ?? [];
+			for (const [sourceColIndex, sourceValue] of sourceColumns.entries()) {
+				const targetRow = anchorRow + sourceRowIndex;
+				const targetCol = anchorCol + sourceColIndex;
+				if (targetRow < 0 || targetCol < 0) {
+					continue;
+				}
+				if (targetRow > maxRow || targetCol > maxCol) {
+					continue;
+				}
 
-		// Apply constraints to the new value
-		let constrainedValue = value;
-		const warnings: string[] = [];
+				const parsedSource = Number.parseFloat(sourceValue.trim());
+				if (!Number.isFinite(parsedSource)) {
+					continue;
+				}
 
-		if (constraints.min !== undefined && constrainedValue < constraints.min) {
-			constrainedValue = constraints.min;
-			warnings.push(`Value clamped to minimum ${constraints.min}`);
-		}
-
-		if (constraints.max !== undefined && constrainedValue > constraints.max) {
-			constrainedValue = constraints.max;
-			warnings.push(`Value clamped to maximum ${constraints.max}`);
-		}
-
-		// Create result with all cells set to the same value
-		const resultValues = selected.map(() => constrainedValue);
-
-		// Count changes
-		let changedCount = 0;
-		for (let i = 0; i < currentValues.length; i++) {
-			const currentValue = currentValues[i];
-			if (
-				currentValue !== undefined &&
-				Math.abs(currentValue - constrainedValue) > 0.001
-			) {
-				changedCount++;
+				const coord = {
+					row: targetRow,
+					col: targetCol,
+					depth: anchorDepth,
+				} satisfies CellCoordinate;
+				const bytes = this.readBytes(this.addressForCoord(coord));
+				values.push(this.decodeScalarValue(bytes));
+				variables.push({
+					i: variables.length,
+					src: parsedSource,
+					row: coord.row,
+					col: coord.col,
+					depth: coord.depth ?? 0,
+				});
+				targetCells.push(coord);
 			}
 		}
 
-		const result: MathOpResult = {
-			values: resultValues,
-			warnings,
-			changedCount,
-		};
+		if (targetCells.length === 0) {
+			return {
+				result: {
+					values: [],
+					warnings: ["No valid source cells found in clipboard data"],
+					changedCount: 0,
+				},
+				transaction: null,
+			};
+		}
 
-		// Stage changes
-		for (const coord of selected) {
-			// Unscale before encoding
-			const newRaw = constrainedValue;
-			const bytes = this.encodeScalarValue(newRaw);
+		const constraints = this.getConstraints();
+		const result = applyFormula(values, expression, constraints, variables);
+
+		for (let i = 0; i < targetCells.length; i++) {
+			const coord = targetCells[i];
+			if (!coord) {
+				throw new Error(`Missing target coordinate for index ${i}`);
+			}
+
+			const newScaled = result.values[i];
+			if (newScaled === undefined) {
+				throw new Error(`Missing result value for index ${i}`);
+			}
+
+			const bytes = this.encodeScalarValue(newScaled);
 			this.stageCell(this.stageLocation(coord), bytes);
 		}
 
-		// Commit
-		const transaction = this.commit(`Set ${selected.length} cells to ${value}`);
+		const transaction = this.commit(
+			labelTemplate.replace("{count}", String(targetCells.length)),
+		);
 
 		return { result, transaction };
 	}
@@ -996,53 +1007,10 @@ export class TableView<T extends TableDefinition> {
 		result: MathOpResult;
 		transaction: Transaction | null;
 	} {
-		const selected = this.getSelectedCells();
-		if (selected.length === 0) {
-			return {
-				result: {
-					values: [],
-					warnings: ["No cells selected"],
-					changedCount: 0,
-				},
-				transaction: null,
-			};
-		}
-
-		// Get current values (scaled)
-		const values: number[] = [];
-		for (const coord of selected) {
-			const address = this.addressForCoord(coord);
-			const bytes = this.readBytes(address);
-			const raw = this.decodeScalarValue(bytes);
-			values.push(raw);
-		}
-
-		// Get constraints
-		const constraints = this.getConstraints();
-
-		// Apply operation
-		const result = multiplyConstant(values, factor, constraints);
-
-		// Stage changes
-		for (let i = 0; i < selected.length; i++) {
-			const coord = selected[i];
-			if (!coord) throw new Error(`Missing coordinate for index ${i}`);
-
-			const newScaled = result.values[i];
-			if (newScaled === undefined)
-				throw new Error(`Missing result value for index ${i}`);
-			// Unscale before encoding
-			const newRaw = newScaled;
-			const bytes = this.encodeScalarValue(newRaw);
-			this.stageCell(this.stageLocation(coord), bytes);
-		}
-
-		// Commit
-		const transaction = this.commit(
-			`Multiply by ${factor} for ${selected.length} cells`,
+		return this.applyScalarSelectionOperation(
+			(values, constraints) => multiplyConstant(values, factor, constraints),
+			`Multiply by ${factor} for {count} cells`,
 		);
-
-		return { result, transaction };
 	}
 
 	/**
@@ -1217,6 +1185,69 @@ export class TableView<T extends TableDefinition> {
 			max: range.max * scale + offset,
 			dtype,
 		};
+	}
+
+	private applyScalarSelectionOperation(
+		operation: (
+			values: number[],
+			constraints: MathOpConstraints,
+			variables: MathFormulaVariables[],
+		) => MathOpResult,
+		labelTemplate: string,
+	): {
+		result: MathOpResult;
+		transaction: Transaction | null;
+	} {
+		const selected = this.getSelectedCells();
+		if (selected.length === 0) {
+			return {
+				result: {
+					values: [],
+					warnings: ["No cells selected"],
+					changedCount: 0,
+				},
+				transaction: null,
+			};
+		}
+
+		const values: number[] = [];
+		const variables: MathFormulaVariables[] = [];
+		for (const coord of selected) {
+			const address = this.addressForCoord(coord);
+			const bytes = this.readBytes(address);
+			const raw = this.decodeScalarValue(bytes);
+			values.push(raw);
+			variables.push({
+				i: variables.length,
+				row: coord.row,
+				col: coord.col,
+				depth: coord.depth ?? 0,
+			});
+		}
+
+		const constraints = this.getConstraints();
+		const result = operation(values, constraints, variables);
+
+		for (let i = 0; i < selected.length; i++) {
+			const coord = selected[i];
+			if (!coord) {
+				throw new Error(`Missing coordinate for index ${i}`);
+			}
+
+			const newScaled = result.values[i];
+			if (newScaled === undefined) {
+				throw new Error(`Missing result value for index ${i}`);
+			}
+
+			const bytes = this.encodeScalarValue(newScaled);
+			this.stageCell(this.stageLocation(coord), bytes);
+		}
+
+		const transaction = this.commit(
+			labelTemplate.replace("{count}", String(selected.length)),
+		);
+
+		return { result, transaction };
 	}
 
 	/**

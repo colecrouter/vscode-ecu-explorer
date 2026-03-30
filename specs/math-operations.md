@@ -157,8 +157,22 @@ Math operations are triggered via VSCode commands that prompt the user for param
 **Available Commands**:
 - `rom.mathOpAdd` - Add constant to selection
 - `rom.mathOpMultiply` - Multiply selection by factor
+- `rom.mathOpFormula` - Apply formula to selection
+- `rom.pasteSpecialFormula` - Paste copied values through a formula
 - `rom.mathOpClamp` - Clamp selection to range
 - `rom.mathOpSmooth` - Smooth selection (2D/3D only)
+
+`Add`, `Multiply`, and keyboard scalar shortcuts are convenience wrappers over the
+same formula-based execution path. For example:
+- Add `5` → `x + 5`
+- Multiply `1.5` → `x * 1.5`
+- Set via `=` shortcut → direct formula input (e.g. `42`)
+
+Formula variables:
+- `x` - Current target cell value
+- `src` - Copied source value when using Paste Special
+- `row`, `col`, `depth` - Zero-based target coordinates
+- `i` - Zero-based operation index
 
 ### Parameter Input
 
@@ -728,7 +742,7 @@ export function validateMathOp(
 
 ## Future Enhancements
 
-- [ ] Custom formula support (e.g., `x * 1.5 + 10`)
+- [x] Custom scalar formula support (e.g., `x * 1.5 + 10`)
 - [ ] Conditional operations (apply only if value > threshold)
 - [ ] Interpolation between two tables
 - [ ] Curve fitting

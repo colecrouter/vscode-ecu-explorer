@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
 	addConstant,
+	applyFormula,
 	clampValues,
+	type MathFormulaVariables,
 	multiplyConstant,
 	smoothValues,
 } from "../src/math/operations.js";
@@ -117,6 +119,70 @@ describe("Math Operations", () => {
 			expect(result.values[0]).toBeCloseTo(15.15, 2);
 			expect(result.values[1]).toBeCloseTo(30.3, 2);
 			expect(result.values[2]).toBeCloseTo(45.45, 2);
+		});
+	});
+
+	describe("applyFormula", () => {
+		it("applies formulas using x as the current value", () => {
+			const result = applyFormula([10, 20, 30], "x * 1.5 + 5");
+			expect(result.values[0]).toBeCloseTo(20, 5);
+			expect(result.values[1]).toBeCloseTo(35, 5);
+			expect(result.values[2]).toBeCloseTo(50, 5);
+			expect(result.changedCount).toBe(3);
+		});
+
+		it("supports constant formulas for set-style operations", () => {
+			const result = applyFormula([10, 20, 30], "42");
+			expect(result.values).toEqual([42, 42, 42]);
+			expect(result.changedCount).toBe(3);
+		});
+
+		it("supports selection index references", () => {
+			const result = applyFormula([10, 10, 10], "x + i");
+			expect(result.values).toEqual([10, 11, 12]);
+		});
+
+		it("supports row and column references when provided", () => {
+			const variables: MathFormulaVariables[] = [
+				{ row: 0, col: 0 },
+				{ row: 0, col: 1 },
+				{ row: 1, col: 0 },
+				{ row: 1, col: 1 },
+			];
+			const result = applyFormula(
+				[10, 10, 10, 10],
+				"x + row * 10 + col",
+				undefined,
+				variables,
+			);
+			expect(result.values).toEqual([10, 11, 20, 21]);
+		});
+
+		it("supports source value references when provided", () => {
+			const variables: MathFormulaVariables[] = [
+				{ src: 20 },
+				{ src: 30 },
+				{ src: 40 },
+			];
+			const result = applyFormula(
+				[5, 5, 5],
+				"src * 0.5 + x",
+				undefined,
+				variables,
+			);
+			expect(result.values).toEqual([15, 20, 25]);
+		});
+
+		it("clamps formula results to constraints", () => {
+			const result = applyFormula([10, 20, 30], "x * 10", { max: 100 });
+			expect(result.values).toEqual([100, 100, 100]);
+			expect(result.warnings.length).toBeGreaterThan(0);
+		});
+
+		it("throws when the formula does not evaluate to a finite number", () => {
+			expect(() => applyFormula([10], "x / 0")).toThrow(
+				"Formula must evaluate to a finite number",
+			);
 		});
 	});
 

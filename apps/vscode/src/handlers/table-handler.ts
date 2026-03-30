@@ -555,9 +555,8 @@ export async function handleTableOpen(
 
 				switch (key) {
 					case "=":
-						promptText = "Enter value to set selected cells to";
-						placeHolder = "e.g., 0 or 255";
-						break;
+						await vscode.commands.executeCommand("rom.mathOpFormula");
+						return;
 					case "+":
 						promptText = "Enter value to add to selected cells";
 						placeHolder = "e.g., 5 or -10";
@@ -605,26 +604,19 @@ export async function handleTableOpen(
 				}
 
 				// Send the math operation to the webview
+				const expression =
+					key === "+"
+						? `x + (${value})`
+						: key === "-"
+							? `x - (${value})`
+							: key === "*"
+								? `x * (${value})`
+								: `x / (${value})`;
+
 				await panel.webview.postMessage({
 					type: "mathOp",
-					operation:
-						key === "="
-							? "set"
-							: key === "+"
-								? "add"
-								: key === "-"
-									? "add"
-									: key === "*"
-										? "multiply"
-										: "multiply",
-					constant: key === "-" ? -value : key === "/" ? 1 / value : value,
-					factor:
-						key === "*" || key === "/"
-							? key === "/"
-								? 1 / value
-								: value
-							: undefined,
-					value: key === "=" ? value : undefined,
+					operation: "formula",
+					expression,
 				});
 				return;
 			}
