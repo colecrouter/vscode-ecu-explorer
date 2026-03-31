@@ -101,6 +101,13 @@ So a better interpretation is:
 - request family: `mutiii-can-bank`
 - decode family: mostly `direct-scalar`
 
+Evidence update from paired EvoScan CSV + CAN capture:
+
+- the observed wire traffic for a real `Mitsubishi EvoX CAN MUTIII` logging session used short `0x21xx` requests rather than `mode23` `0x23 0x80 ...` memory reads
+- only 14 unique requests were observed while EvoScan logged 31 visible channels
+- this is strong evidence that the request family is genuinely banked/grouped and that several visible channels are decoded from the same reply
+- however, the same capture also showed several implausible channel equalities in the exported CSV, which means the currently modeled labels/slots should still be treated as provisional research data rather than confirmed semantics
+
 ### Evo X Mode23 USA
 
 - transport/session: `can-iso15765`

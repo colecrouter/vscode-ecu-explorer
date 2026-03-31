@@ -178,6 +178,44 @@ Remaining blocker:
 - but the bank lookup arrays inside EvoScan are still obfuscated, so we do not yet know the concrete bank request strings for every `CANx-y` family
 - until that bank table is recovered from decompilation, interception, or runtime evidence, the runtime should fail explicitly rather than pretending the XML is executable by itself
 
+Runtime evidence update from paired EvoScan CSV + raw CAN capture (`2026-03-30`):
+
+- a real EvoScan `Mitsubishi EvoX CAN MUTIII` session was captured with both:
+  - a CAN dump containing request/response traffic
+  - the paired EvoScan CSV export from the same session
+- the CSV channel set matches the built-in CAN catalog exactly enough to treat the session as strong `mutiii-can` evidence
+- the wire requests are short `0x21xx` requests, not `0x23 0x80 ...` `mode23` memory reads
+- only 14 unique request payloads were observed for 31 logged channels
+- this strongly supports the banked/grouped request model:
+  - one request feeds several visible channels
+  - `CANx-y` should still be treated as a bank-plus-slot family rather than one-request-per-channel
+
+What the capture does and does not prove:
+
+- high confidence:
+  - `CANx-y` is backed by grouped `0x21xx` request families
+  - several stable request groups can now be discussed concretely:
+    - `0x2108` appears to carry the current `CAN11`-style timing/knock family
+    - `0x2107` appears to carry the trim family
+    - `0x2105` appears to carry the injector pulse width family
+    - `0x2103` appears to carry the boost/MAP family
+    - `0x210A`, `0x2112`, `0x2118`, and `0x2114` also show useful channel-group structure
+- lower confidence:
+  - the current per-channel labels and slot assignments in the built-in profile are globally correct
+  - the captured session produced several physically implausible channel equivalences, such as:
+    - `Battery = TargetIdleRPM`
+    - `TPS = RPM`
+    - `AirTemp = CoolantTemp`
+    - `VVTIntake = VVTExhaust`
+    - `ISCLearnACon = AirFlow`
+  - that strongly suggests the current built-in label/slot table is still provisional even though the grouped-request model is likely correct
+
+Current interpretation:
+
+- trust the grouped request family evidence more than the current human-readable labels
+- treat the existing `mutiii-can-profile.ts` channel naming as a research scaffold, not as a confirmed production mapping
+- future captures should be designed to break ambiguous pairs apart by intentionally selecting channels whose physical behavior diverges under simple state changes
+
 Proposed executor shape:
 
 1. Group selected channels by `mutiii-can` bank.
