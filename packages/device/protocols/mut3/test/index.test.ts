@@ -13,7 +13,6 @@ import {
 	CMD_SET_ADDRESS,
 	decodeMutiiiCanPid,
 	decodeRaxPid,
-	MODE23_RESEARCH_LIVE_DATA_PROFILE,
 	MODE23_RESEARCH_PROFILE_ID,
 	MUTIII_CAN_PID_DESCRIPTORS,
 	Mut3Protocol,
@@ -61,20 +60,23 @@ function makeMode23Mock(
 	values: Map<number, number[]>,
 	transportName = "openport2",
 ): DeviceConnection {
-	return makeMockConnection(transportName, async (data) => {
-		if (data[0] === 0x10 && data[1] === 0x92) {
-			return new Uint8Array([0x50, 0x92]);
-		}
+	return makeMockConnection(
+		transportName,
+		vi.fn(async (data) => {
+			if (data[0] === 0x10 && data[1] === 0x92) {
+				return new Uint8Array([0x50, 0x92]);
+			}
 
-		if (data[0] !== 0x23 || data[1] !== 0x80) {
-			throw new Error(`Unexpected Mode 23 request: [${Array.from(data)}]`);
-		}
+			if (data[0] !== 0x23 || data[1] !== 0x80) {
+				throw new Error(`Unexpected Mode 23 request: [${Array.from(data)}]`);
+			}
 
-		const address = ((data[2] ?? 0) << 8) | (data[3] ?? 0);
-		const size = data[4] ?? 0;
-		const payload = values.get(address) ?? new Array(size).fill(0);
-		return new Uint8Array([0x63, ...payload.slice(0, size)]);
-	});
+			const address = ((data[2] ?? 0) << 8) | (data[3] ?? 0);
+			const size = data[4] ?? 0;
+			const payload = values.get(address) ?? new Array(size).fill(0);
+			return new Uint8Array([0x63, ...payload.slice(0, size)]);
+		}),
+	);
 }
 
 /**
@@ -924,17 +926,63 @@ describe("Mut3Protocol.streamLiveData()", () => {
 		).toThrow(/intentionally unavailable/i);
 	});
 
-	it("rejects the Mode23 RAX patch profile explicitly on openport2", () => {
+	it("accepts the Mode23 RAX patch profile explicitly on openport2", () => {
+		const protocol = new Mut3Protocol();
+		const connection = makeMode23Mock(new Map());
+
+		const session = protocol.streamLiveData?.(
+			connection,
+			{ pids: [RAX_PID_BASE], profileId: RAX_MODE23_PATCH_PROFILE_ID },
+			vi.fn(),
+		);
+
+		expect(typeof session.stop).toBe("function");
+		session.stop();
+	});
+
+	it("streams RAX frames over Mode23 on openport2 for the explicit profile", async () => {
+		const protocol = new Mut3Protocol();
+		const aBlockIdx = RAX_BLOCKS.findIndex((b) => b.blockId === "A");
+		const pid = RAX_PID_BASE + aBlockIdx * 100 + 0;
+		const connection = makeMode23Mock(
+			new Map<number, number[]>([
+				[RAX_A_BLOCK.requestId & 0xffff, [0x80, 0x80, 0x80, 0x80]],
+			]),
+		);
+
+		const frames: LiveDataFrame[] = [];
+		const session = protocol.streamLiveData?.(
+			connection,
+			{ pids: [pid], profileId: RAX_MODE23_PATCH_PROFILE_ID },
+			(frame) => frames.push(frame),
+		);
+
+		await new Promise<void>((resolve) => setTimeout(resolve, 80));
+		session.stop();
+
+		expect(frames.length).toBeGreaterThan(0);
+		for (const frame of frames) {
+			expect(frame.pid).toBe(pid);
+			expect(frame.value).toBe(0);
+			expect(frame.unit).toBe("%");
+		}
+
+		expect(connection.sendFrame).toHaveBeenCalledWith(
+			new Uint8Array([0x23, 0x80, 0x51, 0xac, 0x04]),
+		);
+	});
+
+	it("rejects unsupported openport2 live data profile ids", () => {
 		const protocol = new Mut3Protocol();
 		const connection = makeMockConnection("openport2");
 
 		expect(() =>
 			protocol.streamLiveData?.(
 				connection,
-				{ pids: [RAX_PID_BASE], profileId: RAX_MODE23_PATCH_PROFILE_ID },
+				{ pids: [RAX_PID_BASE], profileId: "bogus-profile" },
 				vi.fn(),
 			),
-		).toThrow(/mode23 rax patch is intentionally unavailable/i);
+		).toThrow(/unsupported mut-iii can live data profile/i);
 	});
 
 	it("accepts an explicit K-line profile selection", () => {
